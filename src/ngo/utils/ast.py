@@ -2,7 +2,10 @@
 from dataclasses import dataclass
 from itertools import product
 
-from clingo.ast import ASTType, ComparisonOperator, Guard, Sign, Transformer
+from clingo.ast import ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer
+
+LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
+SIGNS = {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}
 
 
 def negate_comparison(cmp):

@@ -10,10 +10,11 @@ if "GITHUB_ACTIONS" in os.environ:
     PYTHON_VERSIONS = ["3.7", "3.11"]
     EDITABLE_TESTS = False
 
+EXTRA_INSTALL = ["--extra-index-url", "https://test.pypi.org/simple/"]
 
 @nox.session
 def format(session):
-    session.install("-e", ".[format]")
+    session.install(*EXTRA_INSTALL, "-e", ".[format]")
     check = "check" in session.posargs
 
     isort_args = ["--profile", "black", "src", "tests"]
@@ -37,26 +38,26 @@ def doc(session):
         target = session.posargs[0]
         options = session.posargs[1:]
 
-    session.install("-e", ".[doc]")
+    session.install(*EXTRA_INSTALL, "-e", ".[doc]")
     session.cd("doc")
     session.run("sphinx-build", "-M", target, ".", "_build", *options)
 
 
 @nox.session
 def lint_ruff(session):
-    session.install("-e", ".[lint_ruff]")
+    session.install(*EXTRA_INSTALL, "-e", ".[lint_ruff]")
     session.run("ruff", "check", "src", "tests")
 
 
 @nox.session
 def lint_pylint(session):
-    session.install("-e", ".[lint_pylint]")
+    session.install(*EXTRA_INSTALL, "-e", ".[lint_pylint]")
     session.run("pylint", "ngo", "tests")
 
 
 @nox.session
 def typecheck(session):
-    session.install("-e", ".[typecheck]")
+    session.install(*EXTRA_INSTALL, "-e", ".[typecheck]")
     session.run("mypy", "-p", "ngo", "-p", "tests")
 
 
@@ -65,11 +66,12 @@ def test(session):
     args = [".[test]"]
     if EDITABLE_TESTS:
         args.insert(0, "-e")
-    session.install(*args)
-    session.run("coverage", "run", "-m", "pytest")
+    
+    session.install(*EXTRA_INSTALL, *args)
+    session.run("coverage", "run", "-m", "pytest", *session.posargs)
     session.run("coverage", "report", "-m", "--fail-under=100")
 
 
 @nox.session
 def dev(session):
-    session.install("-e", ".[dev]")
+    session.install(*EXTRA_INSTALL, "-e", ".[dev]")
