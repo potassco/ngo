@@ -130,7 +130,7 @@ class DomainPredicates:
             if stm.ast_type == ASTType.Rule:
                 ### remove head choice predicates
                 head = stm.head
-                if head.ast_type == ASTType.Disjunction:
+                if head.ast_type in (ASTType.Disjunction, ASTType.Aggregate):
                     for cond in head.elements:
                         assert cond.ast_type == ASTType.ConditionalLiteral
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
@@ -142,11 +142,6 @@ class DomainPredicates:
                             assert cond.ast_type == ASTType.ConditionalLiteral
                             lit = list(literal_predicate(cond.literal, SIGNS))[0]
                             self._not_static.add((lit[1], lit[2]))
-                elif head.ast_type == ASTType.Aggregate:
-                    for cond in head.elements:
-                        assert cond.ast_type == ASTType.ConditionalLiteral
-                        lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                        self._not_static.add((lit[1], lit[2]))
 
         graph = _create_graph_from_prg(prg, SIGNS)
         cycle_free_pdg = graph.copy()
@@ -163,10 +158,8 @@ class DomainPredicates:
 
         ### remove predicates derived by using not_static predicates
         for node in nx.topological_sort(cycle_free_pdg):
-            for pre in graph.predecessors(node):
-                if pre in self._not_static:
-                    self._not_static.add(node)
-                    continue
+            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):
+                self._not_static.add(node)
 
     def is_static(self, pred):
         """pred = (name, arity)
