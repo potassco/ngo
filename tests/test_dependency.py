@@ -260,12 +260,21 @@ def test_domain_predicates(prg, static, notstatic, hasdomain):
         ),
         (
             """
+            a(X,Y) :- a(Y,X).
+            b(A,B) :- a(A,B).
+            """,
+            [
+                ("a", 2),
+            ],
+        ),
+        (
+            """
             1 = { at((X+A),(Y+B),S): field((X+A),(Y+B)), diff(A,B), not wall(X,Y,(X+A),(Y+B)) } :-
                  step(S); at(X,Y,(S-1)); goal(X1,Y1); not at(X1,Y1,(S-1)).
             at(X,Y,0) :- start(X,Y).
             """,
             [
-                ("a", 3),
+                ("at", 3),
             ],
         ),
     ],

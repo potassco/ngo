@@ -251,6 +251,31 @@ def head_predicates(rule, signs):
         yield from disjunction_predicate(head, signs)
 
 
+def __get_preds_from_literal_in_conditional(condition, signs):
+    assert condition.ast_type == ASTType.ConditionalLiteral
+    yield from literal_predicate(condition.literal, signs)
+
+def headderivable_predicates(rule):
+    """
+    yields all predicates used in the rule head that are derivable as (name, arity) 
+    """
+
+    positive = {Sign.NoSign}
+    if rule.ast_type == ASTType.Rule:
+        head = rule.head
+        yield from literal_predicate(head, positive)
+        if head.ast_type == ASTType.Aggregate:
+            for elem in head.elements:
+                yield from __get_preds_from_literal_in_conditional(elem, positive)
+        if head.ast_type == ASTType.HeadAggregate:
+            for elem in head.elements:
+                if elem.ast_type == ASTType.HeadAggregateElement:
+                    yield from __get_preds_from_literal_in_conditional(elem.condition, positive)
+        if head.ast_type == ASTType.Disjunction:
+            for lit in head.elements:
+                yield from __get_preds_from_literal_in_conditional(lit, positive)
+
+
 def predicates(ast, signs):
     """
     yields all predicates in ast that have a sign in the set signs

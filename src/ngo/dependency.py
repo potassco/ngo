@@ -30,6 +30,7 @@ from ngo.utils.ast import (
     collect_ast,
     collect_bound_variables,
     head_predicates,
+    headderivable_predicates,
     literal_predicate,
     transform_ast,
 )
@@ -97,17 +98,17 @@ class DomainPredicates:
     """
 
     def __init__(self, prg):
-        self._no_domain = set()  # set of predicates that is not already a domain predicate
+        self._not_static = set()  # set of predicates that is not already a domain predicate
 
         prg = list(prg)
         self.domains = {}  # key = ("p",3) -> ("dom",3)
         self.domain_rules = defaultdict(list)  # atom -> [conditions, ...]
         self._too_complex = set()  # set of predicates that is too complex to provide a domain computation
         self.created_domain = set()  # set of predicates where I have already created the domain
-        self.__compute_domain_predicates(prg)
+        self.__compute_nonstatic_predicates(prg)
         self.__compute_domains(prg)
 
-    def __compute_domain_predicates(self, prg):
+    def __compute_nonstatic_predicates(self, prg):
         graph = nx.DiGraph()
         for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
             if stm.ast_type == ASTType.Rule:
@@ -119,7 +120,7 @@ class DomainPredicates:
                         ),
                         map(
                             lambda triple: (triple[1], triple[2]),
-                            head_predicates(stm, SIGNS),
+                            headderivable_predicates(stm),
                         ),
                     )
                 )
@@ -130,43 +131,43 @@ class DomainPredicates:
                     for cond in head.elements:
                         assert cond.ast_type == ASTType.ConditionalLiteral
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                        self._no_domain.add((lit[1], lit[2]))
+                        self._not_static.add((lit[1], lit[2]))
                 elif head.ast_type == ASTType.HeadAggregate:
                     for elem in head.elements:
                         if elem.ast_type == ASTType.HeadAggregateElement:
                             cond = elem.condition
                             assert cond.ast_type == ASTType.ConditionalLiteral
                             lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                            self._no_domain.add((lit[1], lit[2]))
+                            self._not_static.add((lit[1], lit[2]))
                 elif head.ast_type == ASTType.Aggregate:
                     for cond in head.elements:
                         assert cond.ast_type == ASTType.ConditionalLiteral
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                        self._no_domain.add((lit[1], lit[2]))
+                        self._not_static.add((lit[1], lit[2]))
         cycle_free_pdg = graph.copy()
         ### remove predicates in cycles
         for scc in nx.strongly_connected_components(graph):
             if len(scc) > 1:
-                self._no_domain.update(scc)
+                self._not_static.update(scc)
                 cycle_free_pdg.remove_nodes_from(scc)
                 self._too_complex.update(scc)
         for scc in nx.selfloop_edges(graph):
-            self._no_domain.add(scc[0])
+            self._not_static.add(scc[0])
             cycle_free_pdg.remove_nodes_from([scc[0]])
             self._too_complex.update([scc[0]])
 
-        ### remove predicates derived by using non_domain predicates
+        ### remove predicates derived by using not_static predicates
         for node in nx.topological_sort(cycle_free_pdg):
             for pre in graph.predecessors(node):
-                if pre in self._no_domain:
-                    self._no_domain.add(node)
+                if pre in self._not_static:
+                    self._not_static.add(node)
                     continue
 
     def is_static(self, pred):
         """pred = (name, arity)
         returns true if predicate can be computed statically
         """
-        return pred not in self._no_domain
+        return pred not in self._not_static
 
     def has_domain(self, pred):
         """pred = (name, arity)
@@ -396,7 +397,7 @@ class DomainPredicates:
         also mark the head as not static
         """
         if atom.ast_type == ASTType.SymbolicAtom:
-            self._no_domain.update([(atom.symbol.name, len(atom.symbol.arguments))])
+            self._not_static.update([(atom.symbol.name, len(atom.symbol.arguments))])
         # TODO: refactor, no intermediate map needed anymore, could work on self.domain_rules
         # refactoring then only needs to take new domain rules into account
         domain_rules = defaultdict(list)
