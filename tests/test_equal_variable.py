@@ -11,7 +11,8 @@ from ngo.dependency import PositivePredicateDependency
 
 
 class RunBoundComputer(Transformer):
-    """ simple wrapper for BoundComputer """
+    """simple wrapper for BoundComputer"""
+
     def __init__(self):
         self.cbounds = set()
         self.crest = set()
@@ -51,7 +52,7 @@ class RunBoundComputer(Transformer):
     ],
 )
 def test_bound_computation(rule, bounds, rest):
-    """ check if variable bounds in a body are computed correctly """
+    """check if variable bounds in a body are computed correctly"""
     t = RunBoundComputer()
     parse_string(rule, t)
     assert set(bounds) == t.cbounds
@@ -129,7 +130,7 @@ def test_toocomplicated_bounds(rule):
     ],
 )
 def test_equal_variable(rule, result):
-    """ test if equality variable replacement works """
+    """test if equality variable replacement works"""
     prg = []
     parse_string(rule, prg.append)
     pdg = PositivePredicateDependency(prg)
@@ -161,7 +162,7 @@ def test_equal_variable(rule, result):
     ],
 )
 def test_equal_variable_reject(rule, result):
-    """ test cases where I do not want to use the equal variable optimization """
+    """test cases where I do not want to use the equal variable optimization"""
     prg = []
     parse_string(rule, prg.append)
     pdg = PositivePredicateDependency(prg)

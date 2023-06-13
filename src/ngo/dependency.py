@@ -58,8 +58,24 @@ class RuleDependency:
         """return all bodies of head predicate"""
         return self.deps[head]
 
+# TODO: refactor all graphs
+def _create_graph_from_prg(prg, signs):
+    """ create a dependency graph from all body predicates (wrt signs) to 
+        all derivable head predicates
+    """
+    graph = nx.DiGraph()
+    for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
+        if stm.ast_type == ASTType.Rule:
+            heads = headderivable_predicates(stm)
+            bodies = body_predicates(stm, signs)
+            graph.add_edges_from(
+                product(
+                    map(lambda triple: (triple[1], triple[2]), bodies),
+                    map(lambda triple: (triple[1], triple[2]), heads),
+                )
+            )
+    return graph
 
-# TODO: create predicates as NamedTuple
 class PositivePredicateDependency:
     """
     positive dependency graph of the predicate in a program
@@ -68,18 +84,18 @@ class PositivePredicateDependency:
 
     def __init__(self, prg):
         self.sccs = []
-        g = nx.DiGraph()
-        for stm in prg:
+        self.graph = _create_graph_from_prg(prg, {Sign.NoSign})
+        for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
             if stm.ast_type == ASTType.Rule:
-                heads = head_predicates(stm, {Sign.NoSign})
+                heads = headderivable_predicates(stm)
                 bodies = body_predicates(stm, {Sign.NoSign})
-                g.add_edges_from(
+                self.graph.add_edges_from(
                     product(
                         map(lambda triple: (triple[1], triple[2]), bodies),
                         map(lambda triple: (triple[1], triple[2]), heads),
                     )
                 )
-        self.sccs = list(nx.strongly_connected_components(g))
+        self.sccs = list(nx.strongly_connected_components(self.graph))
 
     def are_dependent(self, predlist):
         """returns true if all of the predicates in predlist have a positive dependency with each other"""
@@ -109,22 +125,9 @@ class DomainPredicates:
         self.__compute_domains(prg)
 
     def __compute_nonstatic_predicates(self, prg):
-        graph = nx.DiGraph()
+        """ compate _not_static for all predicates that aren't static """
         for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
             if stm.ast_type == ASTType.Rule:
-                graph.add_edges_from(
-                    product(
-                        map(
-                            lambda triple: (triple[1], triple[2]),
-                            body_predicates(stm, SIGNS),
-                        ),
-                        map(
-                            lambda triple: (triple[1], triple[2]),
-                            headderivable_predicates(stm),
-                        ),
-                    )
-                )
-
                 ### remove head choice predicates
                 head = stm.head
                 if head.ast_type == ASTType.Disjunction:
@@ -144,6 +147,8 @@ class DomainPredicates:
                         assert cond.ast_type == ASTType.ConditionalLiteral
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
                         self._not_static.add((lit[1], lit[2]))
+
+        graph = _create_graph_from_prg(prg, SIGNS)
         cycle_free_pdg = graph.copy()
         ### remove predicates in cycles
         for scc in nx.strongly_connected_components(graph):
@@ -202,18 +207,15 @@ class DomainPredicates:
         """
         return (f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
 
-    def _domain_condition_as_string(self, pred):
-        """
-        function only for unit testing
-        """
-        if self.is_static(pred):
-            return {frozenset([pred])}
-        ret = set()
-        for atom in self.domain_rules.keys():
-            if atom.symbol.name == pred[0] and len(atom.symbol.arguments) == pred[1]:
-                for conditions in self.domain_rules[atom]:
-                    ret.add(frozenset([str(x) for x in conditions]))
-        return ret
+    def __create_domain_for_condition(self, node):
+        """yield all domain rules for all symbolic atoms in node"""
+        for symbol in collect_ast(node, "SymbolicAtom"):
+            symbol = symbol.symbol
+            dom_pred = (symbol.name, len(symbol.arguments))
+            if symbol.ast_type == ASTType.Function:
+                orig_pred = [key for key, value in self.domains.items() if value == dom_pred]
+                if orig_pred:
+                    yield from self.create_domain(orig_pred[0])
 
     def create_domain(self, pred):
         """
@@ -229,26 +231,21 @@ class DomainPredicates:
         if self.is_static(pred):
             return
 
-        for atom in self.domain_rules.keys():
-            if atom.symbol.name == pred[0] and len(atom.symbol.arguments) == pred[1]:
-                for conditions in self.domain_rules[atom]:
-                    newatom = ast.SymbolicAtom(
-                        ast.Function(
-                            LOC,
-                            self.domain_predicate(pred)[0],
-                            atom.symbol.arguments,
-                            False,
-                        )
+        for atom, bodies in self.domain_rules.items():
+            if atom.symbol.name != pred[0] or len(atom.symbol.arguments) != pred[1]:
+                continue
+            for conditions in bodies:
+                newatom = ast.SymbolicAtom(
+                    ast.Function(
+                        LOC,
+                        self.domain_predicate(pred)[0],
+                        atom.symbol.arguments,
+                        False,
                     )
-                    for cond in conditions:
-                        for symbol in collect_ast(cond, "SymbolicAtom"):
-                            symbol = symbol.symbol
-                            dom_pred = (symbol.name, len(symbol.arguments))
-                            if symbol.ast_type == ASTType.Function:
-                                orig_pred = [key for key, value in self.domains.items() if value == dom_pred]
-                                if orig_pred:
-                                    yield from self.create_domain(orig_pred[0])
-                    yield ast.Rule(LOC, newatom, conditions)
+                )
+                for cond in conditions:
+                    yield from self.__create_domain_for_condition(cond)
+                yield ast.Rule(LOC, newatom, conditions)
 
     def _create_nextpred_for_domain(self, pred, position):
         """
@@ -289,28 +286,28 @@ class DomainPredicates:
         next_pred = self.next_predicate(pred, position)
         dom_pred = self.domain_predicate(pred)
 
-        var_X = Variable(LOC, "X")
-        var_L = Variable(LOC, "L")
-        var_P = Variable(LOC, "P")
-        var_N = Variable(LOC, "N")
-        var_B = Variable(LOC, "B")
-        dom_lit_L = _create_projected_lit(dom_pred, {position: var_L})
+        var_x = Variable(LOC, "X")
+        var_l = Variable(LOC, "L")
+        var_p = Variable(LOC, "P")
+        var_n = Variable(LOC, "N")
+        var_b = Variable(LOC, "B")
+        dom_lit_l = _create_projected_lit(dom_pred, {position: var_l})
 
         min_body = Literal(
             LOC,
             Sign.NoSign,
             BodyAggregate(
                 LOC,
-                Guard(ComparisonOperator.Equal, var_X),
+                Guard(ComparisonOperator.Equal, var_x),
                 AggregateFunction.Min,
-                [BodyAggregateElement([var_L], [dom_lit_L])],
+                [BodyAggregateElement([var_l], [dom_lit_l])],
                 None,
             ),
         )
         ### __min_0__dom_c(X) :- X = #min { L: __dom_c(X) }.
         yield ast.Rule(
             LOC,
-            _create_projected_lit(min_pred, {0: var_X}),
+            _create_projected_lit(min_pred, {0: var_x}),
             [min_body],
         )
         max_body = Literal(
@@ -318,41 +315,41 @@ class DomainPredicates:
             Sign.NoSign,
             BodyAggregate(
                 LOC,
-                Guard(ComparisonOperator.Equal, var_X),
+                Guard(ComparisonOperator.Equal, var_x),
                 AggregateFunction.Max,
-                [BodyAggregateElement([var_L], [dom_lit_L])],
+                [BodyAggregateElement([var_l], [dom_lit_l])],
                 None,
             ),
         )
         ### __max_0__dom_c(X) :- X = #max { L: __dom_c(X) }.
         yield ast.Rule(
             LOC,
-            _create_projected_lit(max_pred, {0: var_X}),
+            _create_projected_lit(max_pred, {0: var_x}),
             [max_body],
         )
 
         ### __next_0__dom_c(P,N) :- __min_0__dom_c(P); __dom_c(N); N > P; not __dom_c(N): __dom_c(N), P < N < N.
         yield ast.Rule(
             LOC,
-            _create_projected_lit(next_pred, {0: var_P, 1: var_N}),
+            _create_projected_lit(next_pred, {0: var_p, 1: var_n}),
             [
-                _create_projected_lit(min_pred, {0: var_P}),
-                _create_projected_lit(dom_pred, {position: var_N}),
+                _create_projected_lit(min_pred, {0: var_p}),
+                _create_projected_lit(dom_pred, {position: var_n}),
                 Literal(
                     LOC,
                     Sign.NoSign,
-                    Comparison(var_N, [Guard(ComparisonOperator.GreaterThan, var_P)]),
+                    Comparison(var_n, [Guard(ComparisonOperator.GreaterThan, var_p)]),
                 ),
                 ConditionalLiteral(
                     LOC,
-                    _create_projected_lit(dom_pred, {position: var_B}, Sign.Negation),
+                    _create_projected_lit(dom_pred, {position: var_b}, Sign.Negation),
                     [
-                        _create_projected_lit(dom_pred, {position: var_B}),
+                        _create_projected_lit(dom_pred, {position: var_b}),
                         Comparison(
-                            var_P,
+                            var_p,
                             [
-                                Guard(ComparisonOperator.LessThan, var_B),
-                                Guard(ComparisonOperator.LessThan, var_N),
+                                Guard(ComparisonOperator.LessThan, var_b),
+                                Guard(ComparisonOperator.LessThan, var_n),
                             ],
                         ),
                     ],
@@ -363,25 +360,25 @@ class DomainPredicates:
         ### __next_0__dom_c(P,N) :- __next_0__dom_c(_,P); __dom_c(N); N > P; not __dom_c(N): __dom_c(N), P < N < N.
         yield ast.Rule(
             LOC,
-            _create_projected_lit(next_pred, {0: var_P, 1: var_N}),
+            _create_projected_lit(next_pred, {0: var_p, 1: var_n}),
             [
-                _create_projected_lit(next_pred, {1: var_P}),
-                _create_projected_lit(dom_pred, {position: var_N}),
+                _create_projected_lit(next_pred, {1: var_p}),
+                _create_projected_lit(dom_pred, {position: var_n}),
                 Literal(
                     LOC,
                     Sign.NoSign,
-                    Comparison(var_N, [Guard(ComparisonOperator.GreaterThan, var_P)]),
+                    Comparison(var_n, [Guard(ComparisonOperator.GreaterThan, var_p)]),
                 ),
                 ConditionalLiteral(
                     LOC,
-                    _create_projected_lit(dom_pred, {position: var_B}, Sign.Negation),
+                    _create_projected_lit(dom_pred, {position: var_b}, Sign.Negation),
                     [
-                        _create_projected_lit(dom_pred, {position: var_B}),
+                        _create_projected_lit(dom_pred, {position: var_b}),
                         Comparison(
-                            var_P,
+                            var_p,
                             [
-                                Guard(ComparisonOperator.LessThan, var_B),
-                                Guard(ComparisonOperator.LessThan, var_N),
+                                Guard(ComparisonOperator.LessThan, var_b),
+                                Guard(ComparisonOperator.LessThan, var_n),
                             ],
                         ),
                     ],

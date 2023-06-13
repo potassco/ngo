@@ -255,9 +255,10 @@ def __get_preds_from_literal_in_conditional(condition, signs):
     assert condition.ast_type == ASTType.ConditionalLiteral
     yield from literal_predicate(condition.literal, signs)
 
+
 def headderivable_predicates(rule):
     """
-    yields all predicates used in the rule head that are derivable as (name, arity) 
+    yields all predicates used in the rule head that are derivable as (name, arity)
     """
 
     positive = {Sign.NoSign}

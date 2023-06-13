@@ -289,36 +289,6 @@ def test_nodomain_predicates(prg, hasnodomain):
 
 
 @pytest.mark.parametrize(
-    "prg, domain_condition",
-    [
-        (
-            """
-            a(X) :- b(X,Y), c(Y).
-            {d(X)} :- b(X,Y), c(Y).
-            e(X) :- a(X).
-            {f(X)} :- d(X), a(X).
-            {g(X)} :- d(X), a(Y), X <= Y.
-            """,
-            {
-                ("a", 1): {frozenset([("a", 1)])},
-                ("d", 1): {frozenset(["b(X,Y)", "c(Y)"])},
-                ("e", 1): {frozenset([("e", 1)])},
-                ("f", 1): {frozenset(["__dom_d(X)", "a(X)"])},
-                ("g", 1): {frozenset(["__dom_d(X)", "a(Y)", "X <= Y"])},
-            },
-        ),
-    ],
-)
-def test_domain_predicates_condition_as_string(prg, domain_condition):
-    """test domain computation"""
-    ast = []
-    parse_string(prg, ast.append)
-    dp = DomainPredicates(ast)
-    for pred, domain in domain_condition.items():
-        assert dp._domain_condition_as_string(pred) == domain
-
-
-@pytest.mark.parametrize(
     "prg, predicates, domain_program",
     [
         (
