@@ -109,10 +109,6 @@ class EqualVariable(Transformer):
     def __init__(self, dependency):
         self.dependency = dependency
 
-    def execute(self, prg):
-        """visit all rules in the program"""
-        return self.visit_sequence(prg)
-
     def _create_analytics_from_body(self, body):
         analytics = {}
         for i, blit in enumerate(body):

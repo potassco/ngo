@@ -23,9 +23,7 @@ class RunBoundComputer(Transformer):
         bc = BoundComputer("X")
         for node in rule.body:
             bc.compute_bounds(node)
-            print(f"Also original {bc.bounds}")
             self.cbounds.update([str(b) for b in bc.bounds])
-            print(f"und fake {self.cbounds}")
             self.crest.update([str(b) for b in bc.rest])
             self.too_complicated = True if bc.too_complicated else self.too_complicated
         return rule
@@ -67,6 +65,7 @@ def test_bound_computation(rule, bounds, rest):
         ":- 1 < X+1 < 2.",
         ":- f(X).",
         ":- X = 1..7.",
+        ":- 1 < f(X).",
     ],
 )
 def test_toocomplicated_bounds(rule):
@@ -127,9 +126,25 @@ def test_toocomplicated_bounds(rule):
             "#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not Y < X.",
             "#false :- Y >= #count { J: perm(J,_) }; Y = #count { J: job(J) }.",
         ),
+        (
+            "#false :- X = #count { J: perm(J,_) }; #count { J: job(J) } > Y; Y = X.",
+            "#false :- Y = #count { J: perm(J,_) }; Y < #count { J: job(J) }.",
+        ),
+        (
+            "#false :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.",
+            "#false :- Y = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y.",
+        ),
+        (
+            "head(X) :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.",
+            "head(X) :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.",
+        ),
+                (
+            "a :- X = #count { J: perm(J,_), a }; Z = #count { J: job(J) } = Y; Y = X.",
+            "a :- X = #count { J: perm(J,_), a }; Z = #count { J: job(J) } = Y; Y = X.",
+        ),
     ],
 )
-def test_equal_variable(rule, result):
+def test_equal_variable_replacement(rule, result):
     """test if equality variable replacement works"""
     prg = []
     parse_string(rule, prg.append)

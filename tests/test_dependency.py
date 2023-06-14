@@ -102,7 +102,7 @@ def test_positive_head(rule, result):
             c :- b.
             d :- c.
             a :- d.
-            e :- d.
+            1 = #sum {1,a : e} :- d.
             """,
             [{("e", 0)}, {("a", 0), ("b", 0), ("c", 0), ("d", 0)}],
         ),
@@ -229,6 +229,18 @@ def test_positive_dependencies(prg, result):
                 ("a", 2),
             ],
             [],
+        ),
+        (
+            """
+            1 = #sum {1,a : a(X)} :- b(X).
+            """,
+            ["b", 1],
+            [
+                ("a", 1),
+            ],
+            [
+                ("a", 1),
+            ],
         ),
     ],
 )

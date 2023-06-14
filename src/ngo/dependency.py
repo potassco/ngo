@@ -510,7 +510,7 @@ class DomainPredicates:
                 elif head.ast_type == ASTType.HeadAggregate:
                     for elem in head.elements:
                         assert elem.condition.literal.sign == Sign.NoSign
-                        domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition, body)))
+                        domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition.condition, body)))
                 elif head.ast_type == ASTType.Aggregate:
                     for elem in head.elements:
                         assert elem.literal.sign == Sign.NoSign

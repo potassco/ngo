@@ -103,246 +103,241 @@ class MinMaxAggregator:
                     and agg is None
                 ):
                     agg = blit
-        if agg is not None:
-            inside_variables = set(
-                map(
-                    lambda x: x.name,
-                    chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)),
-                )
+        if agg is None:
+            return [rule]
+        inside_variables = set(
+            map(
+                lambda x: x.name,
+                chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)),
             )
-            ### currently only support one element, but this is simply due to laziness of implementation
-            elem = agg.atom.elements[0]  # TODO: also number of which element needs to go into the chain name
-            # collect all literals outside that aggregate that use the same variables
-            lits_with_vars = []
-            lits_without_vars = []
-            in_and_outside_variables = set()  # variables that are used inside but also outside of the aggregate
-            for blit in rule.body:
-                if blit == agg:
-                    continue
-                blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))
-                if len(blit_vars) > 0 and blit_vars <= inside_variables:
-                    in_and_outside_variables.update(inside_variables.intersection(blit_vars))
-                    lits_with_vars.append(blit)
-                else:
-                    lits_without_vars.append(blit)
+        )
+        ### currently only support one element, but this is simply due to laziness of implementation
+        elem = agg.atom.elements[0]  # TODO: also number of which element needs to go into the chain name
+        # collect all literals outside that aggregate that use the same variables
+        lits_with_vars = []
+        lits_without_vars = []
+        in_and_outside_variables = set()  # variables that are used inside but also outside of the aggregate
+        for blit in rule.body:
+            if blit == agg:
+                continue
+            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))
+            if len(blit_vars) > 0 and blit_vars <= inside_variables:
+                in_and_outside_variables.update(inside_variables.intersection(blit_vars))
+                lits_with_vars.append(blit)
+            else:
+                lits_without_vars.append(blit)
 
-            if (
-                len(elem.condition) > 1
-            ):  # TODO: create a new domain if several conditions are used, also create next_ for this domain
-                return [rule]
-            if (
-                elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom
-            ):  # TODO: lift restrictions, currently only needed to get some domain
-                return [rule]
+        # TODO: create a new domain if several conditions are used, also create next_ for this domain
+        if len(elem.condition) > 1:
+            return [rule]
+        # TODO: lift restrictions, currently only needed to get some domain
+        if elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom:
+            return [rule]
 
-            condition_pred = (
-                elem.condition[0].atom.symbol.name,
-                len(elem.condition[0].atom.symbol.arguments),
-            )
-            if not self.domain_predicates.has_domain(condition_pred) or self.domain_predicates.is_static(
-                condition_pred
-            ):
-                return [rule]
+        condition_pred = (
+            elem.condition[0].atom.symbol.name,
+            len(elem.condition[0].atom.symbol.arguments),
+        )
+        if not self.domain_predicates.has_domain(condition_pred) or self.domain_predicates.is_static(condition_pred):
+            return [rule]
 
-            number_of_aggregate = 0
-            number_of_element = 0
-            weight = elem.terms[0]
+        number_of_aggregate = 0
+        number_of_element = 0
+        weight = elem.terms[0]
 
-            # 1. create a new domain for the complete elem.condition + lits_with_vars
+        # 1. create a new domain for the complete elem.condition + lits_with_vars
 
-            direction = "min"
-            if agg.atom.function == AggregateFunction.Max:
-                direction = "max"
-            new_name = f"__{direction}_{number_of_aggregate}_{number_of_element}_{str(rule.location.begin.line)}"
-            new_predicate = (new_name, 1)
+        direction = "min"
+        if agg.atom.function == AggregateFunction.Max:
+            direction = "max"
+        new_name = f"__{direction}_{number_of_aggregate}_{number_of_element}_{str(rule.location.begin.line)}"
+        new_predicate = (new_name, 1)
 
-            head = SymbolicAtom(Function(LOC, new_name, [weight], False))
-            self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
-            if not self.domain_predicates.has_domain(new_predicate):
-                return [rule]
+        head = SymbolicAtom(Function(LOC, new_name, [weight], False))
+        self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
+        if not self.domain_predicates.has_domain(new_predicate):
+            return [rule]
 
-            # 2. create dom and next_ predicates for it, and then use it to
-            # create chain with elem.condition + lits_with_vars
-            ret = list(self.domain_predicates.create_domain(new_predicate))
-            ret.extend(self.domain_predicates._create_nextpred_for_domain(new_predicate, 0))
+        # 2. create dom and next_ predicates for it, and then use it to
+        # create chain with elem.condition + lits_with_vars
+        #ret = _create_dom_and_next_for_pred(agg, new_predicate, )
+        ret = list(self.domain_predicates.create_domain(new_predicate))
+        ret.extend(self.domain_predicates._create_nextpred_for_domain(new_predicate, 0))
 
-            minmax_pred = self.domain_predicates.max_predicate(new_predicate, 0)
-            if agg.atom.function == AggregateFunction.Max:
-                minmax_pred = self.domain_predicates.min_predicate(new_predicate, 0)
+        minmax_pred = self.domain_predicates.max_predicate(new_predicate, 0)
+        if agg.atom.function == AggregateFunction.Max:
+            minmax_pred = self.domain_predicates.min_predicate(new_predicate, 0)
 
-            chain_name = f"{CHAIN_STR}{new_name}"
-            next_pred = self.domain_predicates.next_predicate(new_predicate, 0)
+        chain_name = f"{CHAIN_STR}{new_predicate[0]}"
+        next_pred = self.domain_predicates.next_predicate(new_predicate, 0)
 
-            rest_vars = sorted([Variable(LOC, name) for name in in_and_outside_variables])
-            aux_head = Literal(
+        rest_vars = sorted([Variable(LOC, name) for name in in_and_outside_variables])
+        aux_head = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(Function(LOC, chain_name, rest_vars + [weight], False)),
+        )
+        ret.append(Rule(LOC, aux_head, list(chain(elem.condition, lits_with_vars))))
+
+
+        prev_agg = NEXT
+        next_agg = PREV
+        if agg.atom.function == AggregateFunction.Max:
+            prev_agg = PREV
+            next_agg = NEXT
+
+        head = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(Function(LOC, chain_name, rest_vars + [prev_agg], False)),
+        )
+
+        body = []
+        body.append(
+            Literal(
                 LOC,
                 Sign.NoSign,
-                SymbolicAtom(Function(LOC, chain_name, rest_vars + [weight], False)),
+                SymbolicAtom(Function(LOC, chain_name, rest_vars + [next_agg], False)),
             )
-            ret.append(Rule(LOC, aux_head, list(chain(elem.condition, lits_with_vars))))
+        )
+        body.append(
+            Literal(
+                LOC,
+                Sign.NoSign,
+                SymbolicAtom(Function(LOC, next_pred[0], [PREV, NEXT], False)),
+            )
+        )
+        ret.append(Rule(LOC, head, body))
 
-            prev = Variable(LOC, "__PREV")
-            next_ = Variable(LOC, "__NEXT")
+        # 3. create actual new max/min predicate
+        head = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(Function(LOC, new_name, rest_vars + [prev_agg], False)),
+        )
 
-            prev_agg = next_
-            next_agg = prev
-            if agg.atom.function == AggregateFunction.Max:
-                prev_agg = prev
-                next_agg = next_
-
-            head = Literal(
+        body = []
+        body.append(
+            Literal(
                 LOC,
                 Sign.NoSign,
                 SymbolicAtom(Function(LOC, chain_name, rest_vars + [prev_agg], False)),
             )
-
-            body = []
-            body.append(
-                Literal(
-                    LOC,
-                    Sign.NoSign,
-                    SymbolicAtom(Function(LOC, chain_name, rest_vars + [next_agg], False)),
-                )
-            )
-            body.append(
-                Literal(
-                    LOC,
-                    Sign.NoSign,
-                    SymbolicAtom(Function(LOC, next_pred[0], [prev, next_], False)),
-                )
-            )
-            ret.append(Rule(LOC, head, body))
-
-            # 3. create actual new max/min predicate
-            head = Literal(
+        )
+        body.append(
+            ConditionalLiteral(
                 LOC,
-                Sign.NoSign,
-                SymbolicAtom(Function(LOC, new_name, rest_vars + [prev_agg], False)),
-            )
-
-            body = []
-            body.append(
-                Literal(
-                    LOC,
-                    Sign.NoSign,
-                    SymbolicAtom(Function(LOC, chain_name, rest_vars + [prev_agg], False)),
-                )
-            )
-            body.append(
-                ConditionalLiteral(
-                    LOC,
-                    Literal(
-                        LOC,
-                        Sign.Negation,
-                        SymbolicAtom(Function(LOC, chain_name, rest_vars + [next_agg], False)),
-                    ),
-                    [
-                        Literal(
-                            LOC,
-                            Sign.NoSign,
-                            SymbolicAtom(Function(LOC, next_pred[0], [prev, next_], False)),
-                        )
-                    ],
-                )
-            )
-            ret.append(Rule(LOC, head, body))
-
-            border = Supremum
-            if agg.atom.function == AggregateFunction.Max:
-                border = Infimum
-
-            head = Literal(
-                LOC,
-                Sign.NoSign,
-                SymbolicAtom(Function(LOC, new_name, rest_vars + [SymbolicTerm(LOC, border)], False)),
-            )
-
-            body = []
-            var_x = Variable(LOC, "X")
-
-            body.append(
-                Literal(
-                    LOC,
-                    Sign.NoSign,
-                    SymbolicAtom(Function(LOC, minmax_pred[0], [var_x], False)),
-                )
-            )
-            body.append(
                 Literal(
                     LOC,
                     Sign.Negation,
-                    SymbolicAtom(Function(LOC, chain_name, rest_vars + [var_x], False)),
-                )
+                    SymbolicAtom(Function(LOC, chain_name, rest_vars + [next_agg], False)),
+                ),
+                [
+                    Literal(
+                        LOC,
+                        Sign.NoSign,
+                        SymbolicAtom(Function(LOC, next_pred[0], [PREV, NEXT], False)),
+                    )
+                ],
             )
-            body.extend(lits_with_vars)
-            ret.append(Rule(LOC, head, body))
+        )
+        ret.append(Rule(LOC, head, body))
 
-            # 3. replace original rule
-            head = rule.head
-            body = []
+        border = Supremum
+        if agg.atom.function == AggregateFunction.Max:
+            border = Infimum
 
-            analytics = BodyAggAnalytics(agg.atom)
-            max_var = Variable(LOC, f"__VAR{new_name}")
-            if analytics.equal_variable_bound:
-                max_var = Variable(LOC, analytics.equal_variable_bound.pop(0))
+        head = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(Function(LOC, new_name, rest_vars + [SymbolicTerm(LOC, border)], False)),
+        )
+
+        body = []
+        var_x = Variable(LOC, "X")
+
+        body.append(
+            Literal(
+                LOC,
+                Sign.NoSign,
+                SymbolicAtom(Function(LOC, minmax_pred[0], [var_x], False)),
+            )
+        )
+        body.append(
+            Literal(
+                LOC,
+                Sign.Negation,
+                SymbolicAtom(Function(LOC, chain_name, rest_vars + [var_x], False)),
+            )
+        )
+        body.extend(lits_with_vars)
+        ret.append(Rule(LOC, head, body))
+
+        # 3. replace original rule
+        head = rule.head
+        body = []
+
+        analytics = BodyAggAnalytics(agg.atom)
+        max_var = Variable(LOC, f"__VAR{new_name}")
+        if analytics.equal_variable_bound:
+            max_var = Variable(LOC, analytics.equal_variable_bound.pop(0))
+        body.append(
+            Literal(
+                LOC,
+                Sign.NoSign,
+                SymbolicAtom(Function(LOC, new_name, rest_vars + [max_var], False)),
+            )
+        )
+        # repair bounds
+        if len(analytics.equal_variable_bound) == 1:
             body.append(
                 Literal(
                     LOC,
                     Sign.NoSign,
-                    SymbolicAtom(Function(LOC, new_name, rest_vars + [max_var], False)),
+                    Comparison(
+                        max_var,
+                        [
+                            Guard(
+                                ComparisonOperator.Equal,
+                                Variable(LOC, analytics.equal_variable_bound[0]),
+                            )
+                        ],
+                    ),
                 )
             )
-            # repair bounds
-            if len(analytics.equal_variable_bound) == 1:
-                body.append(
-                    Literal(
-                        LOC,
-                        Sign.NoSign,
-                        Comparison(
-                            max_var,
-                            [
-                                Guard(
-                                    ComparisonOperator.Equal,
-                                    Variable(LOC, analytics.equal_variable_bound[0]),
-                                )
-                            ],
-                        ),
-                    )
-                )
-            for bound in analytics.bounds:
-                body.append(Literal(LOC, Sign.NoSign, Comparison(max_var, [bound])))
-            body.extend(lits_without_vars)
-            ret.append(Rule(LOC, head, body))
+        for bound in analytics.bounds:
+            body.append(Literal(LOC, Sign.NoSign, Comparison(max_var, [bound])))
+        body.extend(lits_without_vars)
+        ret.append(Rule(LOC, head, body))
 
-            if not (
-                head.ast_type == ASTType.Literal
-                and head.atom.ast_type == ASTType.SymbolicAtom
-                and head.atom.symbol.ast_type == ASTType.Function
-                and len(self.rule_dependency.get_bodies((head.atom.symbol.name, len(head.atom.symbol.arguments))))
-                == 1  # only this head occurence
-            ):
-                return ret
-            symbol = head.atom.symbol
-            for arg in symbol.arguments:
-                if arg.ast_type not in {ASTType.Variable, ASTType.SymbolicTerm}:
-                    return ret
-
-            mapping = [
-                (rest_vars + [max_var]).index(arg) if arg in rest_vars + [max_var] else None for arg in symbol.arguments
-            ]
-
-            translation = self.Translation(
-                (symbol.name, len(symbol.arguments)),
-                (new_name, len(rest_vars) + 1),
-                mapping,
-            )
-            for i, arg in enumerate(symbol.arguments):
-                if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
-                    self._minmax_preds.append((agg.atom.function, translation, i))
-
+        if not (
+            head.ast_type == ASTType.Literal
+            and head.atom.ast_type == ASTType.SymbolicAtom
+            and head.atom.symbol.ast_type == ASTType.Function
+            and len(self.rule_dependency.get_bodies((head.atom.symbol.name, len(head.atom.symbol.arguments))))
+            == 1  # only this head occurence
+        ):
             return ret
+        symbol = head.atom.symbol
+        for arg in symbol.arguments:
+            if arg.ast_type not in {ASTType.Variable, ASTType.SymbolicTerm}:
+                return ret
 
-        return [rule]
+        mapping = [
+            (rest_vars + [max_var]).index(arg) if arg in rest_vars + [max_var] else None for arg in symbol.arguments
+        ]
+
+        translation = self.Translation(
+            (symbol.name, len(symbol.arguments)),
+            (new_name, len(rest_vars) + 1),
+            mapping,
+        )
+        for i, arg in enumerate(symbol.arguments):
+            if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
+                self._minmax_preds.append((agg.atom.function, translation, i))
+
+        return ret
+
 
     def _create_replacement(self, minmaxpred, minimize, terms, oldmax, rest_cond, function):
         if minmaxpred is None:
