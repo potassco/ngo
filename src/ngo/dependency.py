@@ -58,10 +58,11 @@ class RuleDependency:
         """return all bodies of head predicate"""
         return self.deps[head]
 
+
 # TODO: refactor all graphs
 def _create_graph_from_prg(prg, signs):
-    """ create a dependency graph from all body predicates (wrt signs) to 
-        all derivable head predicates
+    """create a dependency graph from all body predicates (wrt signs) to
+    all derivable head predicates
     """
     graph = nx.DiGraph()
     for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
@@ -75,6 +76,7 @@ def _create_graph_from_prg(prg, signs):
                 )
             )
     return graph
+
 
 class PositivePredicateDependency:
     """
@@ -125,7 +127,7 @@ class DomainPredicates:
         self.__compute_domains(prg)
 
     def __compute_nonstatic_predicates(self, prg):
-        """ compate _not_static for all predicates that aren't static """
+        """compate _not_static for all predicates that aren't static"""
         for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
             if stm.ast_type == ASTType.Rule:
                 ### remove head choice predicates

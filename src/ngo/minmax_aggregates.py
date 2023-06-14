@@ -486,6 +486,7 @@ class MinMaxAggregator:
             # (also would require more complex variable bindings)
         return ret
 
+    # NOTE. this might actually not be advantageous as it produces a larger set of potential sums
     def _replace_results_in_sum(self, stm):
         """
         replaces min/max predicates in sum aggregates by returning a list of statements
@@ -539,21 +540,15 @@ class MinMaxAggregator:
                                     )
                                 )
 
-                            unsafe = False
-                            for other_elem in atom.elements:
-                                if other_elem == elem:
-                                    continue
-                                if pot_unif(other_elem.terms, term_tuple):
-                                    unsafe = True
-
-                            if not unsafe:
+                            # check if any of the other elements is potentially unifying and therefore unsafe
+                            # pylint: disable=cell-var-from-loop
+                            if not any(map(lambda x: x != elem and pot_unif(x.terms, term_tuple), atom.elements)):
                                 temp_minmax_preds.append((aggtype, translation, idx))
 
-                    if not temp_minmax_preds:
+                    if len(temp_minmax_preds) != 1:
                         elements.append(elem)
                         continue
 
-                    # TODO: still need to fill in element
                     if minimize:
 
                         def negate_if(x):
@@ -578,18 +573,15 @@ class MinMaxAggregator:
                         newpred = translation.newpred
                         chain_name = f"{CHAIN_STR}{newpred[0]}"
                         terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(term_tuple[1:])
-                        body = [
-                            b
-                            for b in elem.condition
-                            if translation.newpred
-                            in set(
-                                map(
-                                    lambda x: (x[1], x[2]),
-                                    chain.from_iterable(predicates(b, {Sign.NoSign}) for b in elem.condition),
-                                )
-                            )
-                        ]
-                        oldmax = [x for x in elem.condition if x not in body][0]
+
+                        rest_cond = []
+                        for cond in elem.condition:
+                            if list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
+                                translation.oldpred
+                            ]:
+                                oldmax = cond
+                            else:
+                                rest_cond.append(cond)
                         # check if all Variables from old predicate are used in the tuple identifier
                         # to make a unique semantics
                         old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
@@ -618,7 +610,7 @@ class MinMaxAggregator:
                                 )
                             ),
                         )
-                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, nextpred] + body))
+                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, nextpred] + rest_cond))
                         # __NEXT, __chain__max_0_0_x(#sup,__NEXT) : __chain__max_0_0_x(P,__NEXT),
                         #  __min_0__dom___max_0_0_x(__NEXT)
                         infsup = Infimum
@@ -649,7 +641,7 @@ class MinMaxAggregator:
                                 )
                             ),
                         )
-                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, minmaxlit] + body))
+                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, minmaxlit] + rest_cond))
                         # #inf and #sup are ignored by minimized and therefore not included
                         # (also would require more complex variable bindings)
 
