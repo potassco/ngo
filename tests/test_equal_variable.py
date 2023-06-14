@@ -138,7 +138,7 @@ def test_toocomplicated_bounds(rule):
             "head(X) :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.",
             "head(X) :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.",
         ),
-                (
+        (
             "a :- X = #count { J: perm(J,_), a }; Z = #count { J: job(J) } = Y; Y = X.",
             "a :- X = #count { J: perm(J,_), a }; Z = #count { J: job(J) } = Y; Y = X.",
         ),

@@ -160,7 +160,7 @@ class MinMaxAggregator:
 
         # 2. create dom and next_ predicates for it, and then use it to
         # create chain with elem.condition + lits_with_vars
-        #ret = _create_dom_and_next_for_pred(agg, new_predicate, )
+        # ret = _create_dom_and_next_for_pred(agg, new_predicate, )
         ret = list(self.domain_predicates.create_domain(new_predicate))
         ret.extend(self.domain_predicates._create_nextpred_for_domain(new_predicate, 0))
 
@@ -178,7 +178,6 @@ class MinMaxAggregator:
             SymbolicAtom(Function(LOC, chain_name, rest_vars + [weight], False)),
         )
         ret.append(Rule(LOC, aux_head, list(chain(elem.condition, lits_with_vars))))
-
 
         prev_agg = NEXT
         next_agg = PREV
@@ -337,7 +336,6 @@ class MinMaxAggregator:
                 self._minmax_preds.append((agg.atom.function, translation, i))
 
         return ret
-
 
     def _create_replacement(self, minmaxpred, minimize, terms, oldmax, rest_cond, function):
         if minmaxpred is None:
