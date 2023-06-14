@@ -344,13 +344,92 @@ class MinMaxAggregator:
 
         return [rule]
 
+    def _create_replacement(self, minmaxpred, minimize, terms, oldmax, rest_cond, function):
+        if minmaxpred is None:
+            return None
+
+        if minimize:
+
+            def negate_if(x):
+                return x
+
+        else:
+
+            def negate_if(x):
+                return UnaryOperation(LOC, UnaryOperator.Minus, x)
+
+        aggtype, translation, idx = minmaxpred
+
+        if aggtype == AggregateFunction.Max:
+            prev = PREV
+            next_ = NEXT
+        else:
+            prev = NEXT
+            next_ = PREV
+
+        # (__NEXT-__PREV), __chain__max_0_0_x(__PREV,__NEXT) : __chain__max_0_0_x(P,__NEXT),
+        #  __next_0__dom___max_0_0_11(__PREV,__NEXT)
+        weight = negate_if(BinaryOperation(LOC, BinaryOperator.Minus, next_, prev))
+        newpred = translation.newpred
+        chain_name = f"{CHAIN_STR}{newpred[0]}"
+        new_terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(terms)
+
+        newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
+        newargs = [next_ if i == idx else x for i, x in enumerate(newargs)]
+        chainpred = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(Function(LOC, chain_name, newargs, False)),
+        )
+        dompred = (f"{DOM_STR}{newpred[0]}", 1)
+        nextpred = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(
+                Function(
+                    LOC,
+                    self.domain_predicates.next_predicate(dompred, 0)[0],
+                    [PREV, NEXT],
+                    False,
+                )
+            ),
+        )
+        ret = []
+        ret.append(function(weight, new_terms, [chainpred, nextpred] + rest_cond))
+        # __NEXT, __chain__max_0_0_x(#sup,__NEXT) : __chain__max_0_0_x(P,__NEXT), __min_0__dom___max_0_0_x(__NEXT)
+        infsup = Infimum
+        if aggtype == AggregateFunction.Max:
+            infsup = Supremum
+        weight = negate_if(next_)
+        new_terms = [Function(LOC, chain_name, [SymbolicTerm(LOC, infsup), next_], False)] + list(terms)
+        if aggtype == AggregateFunction.Max:
+            minmaxpred = self.domain_predicates.min_predicate(dompred, 0)[0]
+        else:
+            minmaxpred = self.domain_predicates.max_predicate(dompred, 0)[0]
+        minmaxlit = Literal(
+            LOC,
+            Sign.NoSign,
+            SymbolicAtom(
+                Function(
+                    LOC,
+                    minmaxpred,
+                    [next_],
+                    False,
+                )
+            ),
+        )
+        ret.append(function(weight, new_terms, [chainpred, minmaxlit] + rest_cond))
+        # #inf and #sup are ignored by minimized and therefore not included
+        # (also would require more complex variable bindings)
+        return ret
+
     def _replace_results_in_minimize(self, stm, minimizes):
         """
         return list of statements that replaces the minimize statement
         or returns the statement itself in a list
         """
+        # pylint: disable=too-many-branches
         assert stm.ast_type == ASTType.Minimize
-        ret = []
 
         term_tuple = (
             stm.weight,
@@ -367,13 +446,14 @@ class MinMaxAggregator:
         ):
             varname = stm.weight.argument.name
             minimize = False
-
         else:
             return [stm]
 
         preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in stm.body))
         preds = [(x[1], x[2]) for x in preds]
-        temp_minmax_preds = []
+        rest_cond = []
+        minmaxpred = None
+        oldmax = None
         for aggtype, translation, idx in self._minmax_preds:
             if translation.oldpred in preds:
                 # check if it is globally safe to assume a unique tuple semantics
@@ -388,103 +468,132 @@ class MinMaxAggregator:
                         unsafe.extend([x for x in objective if x != stm])
 
                 if not unsafe:
-                    temp_minmax_preds.append((aggtype, translation, idx))
+                    minmaxpred = (aggtype, translation, idx)
+                    break
 
-        if not temp_minmax_preds:
+        for cond in stm.body:
+            if minmaxpred is not None and list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
+                minmaxpred[1].oldpred
+            ]:
+                oldmax = cond
+            else:
+                rest_cond.append(cond)
+
+        # check if all Variables from old predicate are used in the tuple identifier
+        # to make a unique semantics
+        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
+        term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))
+        term_vars = {x.name for x in term_vars}
+        if not old_vars <= term_vars:
             return [stm]
 
-        if minimize:
+        replacement = self._create_replacement(
+            minmaxpred,
+            minimize,
+            stm.terms,
+            oldmax,
+            rest_cond,
+            lambda weight, terms, conditions: Minimize(LOC, weight, stm.priority, terms, conditions),
+        )
+        if replacement is None:
+            replacement = [stm]
+        return replacement
 
-            def negate_if(x):
-                return x
+    def _split_element(self, elem, rest_elems):
+        """
+        splits element conditions into the first valid min/max predicate it finds and the other conditions
+        returns it as triple
+        (max predicate, translation, rest of the conditions)
+        """
+        preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in elem.condition))
+        preds = [(x[1], x[2]) for x in preds]
+        rest_cond = []
+        minmaxpred = None
+        oldmax = None
+        for aggtype, translation, idx in self._minmax_preds:
+            if translation.oldpred in preds:
+                # check if it is locally safe to assume a unique tuple semantics
+                def pot_unif(lhs, rhs):
+                    if len(lhs) != len(rhs):
+                        return False
+                    return all(
+                        map(
+                            lambda x: potentially_unifying(*x),
+                            zip(lhs, rhs),
+                        )
+                    )
+
+                # check if any of the other elements is potentially unifying and therefore unsafe
+                # pylint: disable=cell-var-from-loop
+                if not any(map(lambda x: pot_unif(x.terms, elem.terms), rest_elems)):
+                    minmaxpred = (aggtype, translation, idx)
+                    break
+
+        for cond in elem.condition:
+            if minmaxpred is not None and list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
+                minmaxpred[1].oldpred
+            ]:
+                oldmax = cond
+            else:
+                rest_cond.append(cond)
+        return oldmax, minmaxpred, rest_cond
+
+    def _replace_results_in_sum_agg_elem(self, elem, rest_elems):
+        """
+        replaces min/max predicates in sum aggregate elements by returning a
+        new list of elements
+        """
+        # TODO: refactor same replace of chain literals inside minimize and sum constraits out
+        term_tuple = elem.terms
+        if term_tuple[0].ast_type == ASTType.Variable:
+            varname = term_tuple[0].name
+            minimize = True  # TODO: find a better name
+        elif (
+            term_tuple[0].ast_type == ASTType.UnaryOperation
+            and term_tuple[0].operator_type == UnaryOperator.Minus
+            and term_tuple[0].argument.ast_type == ASTType.Variable
+        ):
+            varname = term_tuple[0].argument.name
+            minimize = False
 
         else:
+            return [elem]
 
-            def negate_if(x):
-                return UnaryOperation(LOC, UnaryOperator.Minus, x)
+        # split condition into the max predicate + translation and the rest
+        old_max, minmaxpred, rest_cond = self._split_element(elem, rest_elems)
+        if minmaxpred is None:
+            return [elem]
 
-        for aggtype, translation, idx in temp_minmax_preds:
-            if aggtype == AggregateFunction.Max:
-                prev = PREV
-                next_ = NEXT
-            else:
-                prev = NEXT
-                next_ = PREV
+        # check if all Variables from old predicate are used in the tuple identifier
+        # to make a unique semantics
+        old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}
+        term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))
+        term_vars = {x.name for x in term_vars}
+        if not old_vars <= term_vars:
+            return [elem]
 
-            # (__NEXT-__PREV), __chain__max_0_0_x(__PREV,__NEXT) : __chain__max_0_0_x(P,__NEXT),
-            #  __next_0__dom___max_0_0_11(__PREV,__NEXT)
-            weight = negate_if(BinaryOperation(LOC, BinaryOperator.Minus, next_, prev))
-            priority = stm.priority
-            newpred = translation.newpred
-            chain_name = f"{CHAIN_STR}{newpred[0]}"
-            terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(stm.terms)
-            body = [
-                b
-                for b in stm.body
-                if translation.newpred
-                in set(
-                    map(
-                        lambda x: (x[1], x[2]),
-                        chain.from_iterable(predicates(b, {Sign.NoSign}) for b in stm.body),
-                    )
-                )
-            ]
-            oldmax = [x for x in stm.body if x not in body][0]
-            # check if all Variables from old predicate are used in the tuple identifier
-            # to make a unique semantics
-            old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
-            term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))
-            term_vars = {x.name for x in term_vars}
-            if not old_vars <= term_vars:
-                ret.append(stm)
-                continue
-            newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
-            newargs = [next_ if i == idx else x for i, x in enumerate(newargs)]
-            chainpred = Literal(
-                LOC,
-                Sign.NoSign,
-                SymbolicAtom(Function(LOC, chain_name, newargs, False)),
-            )
-            dompred = (f"{DOM_STR}{newpred[0]}", 1)
-            nextpred = Literal(
-                LOC,
-                Sign.NoSign,
-                SymbolicAtom(
-                    Function(
-                        LOC,
-                        self.domain_predicates.next_predicate(dompred, 0)[0],
-                        [PREV, NEXT],
-                        False,
-                    )
-                ),
-            )
-            ret.append(Minimize(LOC, weight, priority, terms, [chainpred, nextpred] + body))
-            # __NEXT, __chain__max_0_0_x(#sup,__NEXT) : __chain__max_0_0_x(P,__NEXT), __min_0__dom___max_0_0_x(__NEXT)
-            infsup = Infimum
-            if aggtype == AggregateFunction.Max:
-                infsup = Supremum
-            weight = negate_if(next_)
-            terms = [Function(LOC, chain_name, [SymbolicTerm(LOC, infsup), next_], False)] + list(stm.terms)
-            if aggtype == AggregateFunction.Max:
-                minmaxpred = self.domain_predicates.min_predicate(dompred, 0)[0]
-            else:
-                minmaxpred = self.domain_predicates.max_predicate(dompred, 0)[0]
-            minmaxlit = Literal(
-                LOC,
-                Sign.NoSign,
-                SymbolicAtom(
-                    Function(
-                        LOC,
-                        minmaxpred,
-                        [next_],
-                        False,
-                    )
-                ),
-            )
-            ret.append(Minimize(LOC, weight, priority, terms, [chainpred, minmaxlit] + body))
-            # #inf and #sup are ignored by minimized and therefore not included
-            # (also would require more complex variable bindings)
-        return ret
+        replacement = self._create_replacement(
+            minmaxpred,
+            minimize,
+            term_tuple[1:],
+            old_max,
+            rest_cond,
+            lambda weight, terms, conditions: BodyAggregateElement([weight] + terms, conditions),
+        )
+        if replacement is None:
+            replacement = [elem]
+        return replacement
+
+    def _replace_results_in_sum_agg(self, agg):
+        """
+        replaces min/max predicates in sum aggregates by returning an aggregate
+        (this might the a new one or the old one)
+        """
+        atom = agg.atom
+        elements = []
+        for elem in atom.elements:
+            elements.extend(self._replace_results_in_sum_agg_elem(elem, [x for x in atom.elements if x != elem]))
+        return Literal(LOC, agg.sign, BodyAggregate(LOC, atom.left_guard, atom.function, elements, atom.right_guard))
 
     # NOTE. this might actually not be advantageous as it produces a larger set of potential sums
     def _replace_results_in_sum(self, stm):
@@ -502,151 +611,7 @@ class MinMaxAggregator:
                 and b.atom.ast_type == ASTType.BodyAggregate
                 and b.atom.function in (AggregateFunction.Sum, AggregateFunction.SumPlus)
             ):
-                # TODO: refactor same replace of chain literals inside minimize and sum constraits out
-                atom = b.atom
-                elements = []
-                for elem in atom.elements:
-                    term_tuple = elem.terms
-                    if term_tuple[0].ast_type == ASTType.Variable:
-                        varname = term_tuple[0].name
-                        minimize = True  # TODO: find a better name
-                    elif (
-                        term_tuple[0].ast_type == ASTType.UnaryOperation
-                        and term_tuple[0].operator_type == UnaryOperator.Minus
-                        and term_tuple[0].argument.ast_type == ASTType.Variable
-                    ):
-                        varname = term_tuple[0].argument.name
-                        minimize = False
-
-                    else:
-                        elements.append(elem)
-                        continue
-                    # collect all predicates in this condition in preds
-                    preds = set(
-                        chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in elem.condition)
-                    )
-                    preds = [(x[1], x[2]) for x in preds]
-                    temp_minmax_preds = []
-                    for aggtype, translation, idx in self._minmax_preds:
-                        if translation.oldpred in preds:
-                            # check if it is locally safe to assume a unique tuple semantics
-                            def pot_unif(lhs, rhs):
-                                if len(lhs) != len(rhs):
-                                    return False
-                                return all(
-                                    map(
-                                        lambda x: potentially_unifying(*x),
-                                        zip(lhs, rhs),
-                                    )
-                                )
-
-                            # check if any of the other elements is potentially unifying and therefore unsafe
-                            # pylint: disable=cell-var-from-loop
-                            if not any(map(lambda x: x != elem and pot_unif(x.terms, term_tuple), atom.elements)):
-                                temp_minmax_preds.append((aggtype, translation, idx))
-
-                    if len(temp_minmax_preds) != 1:
-                        elements.append(elem)
-                        continue
-
-                    if minimize:
-
-                        def negate_if(x):
-                            return x
-
-                    else:
-
-                        def negate_if(x):
-                            return UnaryOperation(LOC, UnaryOperator.Minus, x)
-
-                    for aggtype, translation, idx in temp_minmax_preds:
-                        if aggtype == AggregateFunction.Max:
-                            prev = PREV
-                            next_ = NEXT
-                        else:
-                            prev = NEXT
-                            next_ = PREV
-
-                        # (__NEXT-__PREV), __chain__max_0_0_x(__PREV,__NEXT) : __chain__max_0_0_x(P,__NEXT),
-                        #  __next_0__dom___max_0_0_11(__PREV,__NEXT)
-                        weight = negate_if(BinaryOperation(LOC, BinaryOperator.Minus, next_, prev))
-                        newpred = translation.newpred
-                        chain_name = f"{CHAIN_STR}{newpred[0]}"
-                        terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(term_tuple[1:])
-
-                        rest_cond = []
-                        for cond in elem.condition:
-                            if list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
-                                translation.oldpred
-                            ]:
-                                oldmax = cond
-                            else:
-                                rest_cond.append(cond)
-                        # check if all Variables from old predicate are used in the tuple identifier
-                        # to make a unique semantics
-                        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
-                        term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))
-                        term_vars = {x.name for x in term_vars}
-                        if not old_vars <= term_vars:
-                            elements.append(elem)
-                            continue
-                        newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
-                        newargs = [next_ if i == idx else x for i, x in enumerate(newargs)]
-                        chainpred = Literal(
-                            LOC,
-                            Sign.NoSign,
-                            SymbolicAtom(Function(LOC, chain_name, newargs, False)),
-                        )
-                        dompred = (f"{DOM_STR}{newpred[0]}", 1)
-                        nextpred = Literal(
-                            LOC,
-                            Sign.NoSign,
-                            SymbolicAtom(
-                                Function(
-                                    LOC,
-                                    self.domain_predicates.next_predicate(dompred, 0)[0],
-                                    [PREV, NEXT],
-                                    False,
-                                )
-                            ),
-                        )
-                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, nextpred] + rest_cond))
-                        # __NEXT, __chain__max_0_0_x(#sup,__NEXT) : __chain__max_0_0_x(P,__NEXT),
-                        #  __min_0__dom___max_0_0_x(__NEXT)
-                        infsup = Infimum
-                        if aggtype == AggregateFunction.Max:
-                            infsup = Supremum
-                        weight = negate_if(next_)
-                        terms = [
-                            Function(
-                                LOC,
-                                chain_name,
-                                [SymbolicTerm(LOC, infsup), next_],
-                                False,
-                            )
-                        ] + list(term_tuple[1:])
-                        if aggtype == AggregateFunction.Max:
-                            minmaxpred = self.domain_predicates.min_predicate(dompred, 0)[0]
-                        else:
-                            minmaxpred = self.domain_predicates.max_predicate(dompred, 0)[0]
-                        minmaxlit = Literal(
-                            LOC,
-                            Sign.NoSign,
-                            SymbolicAtom(
-                                Function(
-                                    LOC,
-                                    minmaxpred,
-                                    [next_],
-                                    False,
-                                )
-                            ),
-                        )
-                        elements.append(BodyAggregateElement([weight] + terms, [chainpred, minmaxlit] + rest_cond))
-                        # #inf and #sup are ignored by minimized and therefore not included
-                        # (also would require more complex variable bindings)
-
-                agg = BodyAggregate(LOC, atom.left_guard, atom.function, elements, atom.right_guard)
-                body.append(Literal(LOC, b.sign, agg))
+                body.append(self._replace_results_in_sum_agg(b))
             else:
                 body.append(b)
         return [Rule(LOC, stm.head, body)]
