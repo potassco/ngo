@@ -849,11 +849,12 @@ def test_minmax_aggregates(prg, converted_prg):
     assert converted_prg == output
 
 
-
 def test_translation_mapping():
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 4), (2,1,0))
-    assert trans.translate_parameters(["X","Y","Z"]) == ["Z","Y","X"]
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (2,1))
-    assert trans.translate_parameters(["X","Y","Z"]) == [None,"Y","X"]
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (None,2,1))
-    assert trans.translate_parameters(["X","Y","Z"]) == [None,"Z","Y"]
+    """ test the argument order translation class"""
+    # NOTE: isn't there something already in python that can reorder things ?
+    trans = MinMaxAggregator.Translation(("a", 3), ("b", 4), (2, 1, 0))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == ["Z", "Y", "X"]
+    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (2, 1))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Y", "X"]
+    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (None, 2, 1))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Z", "Y"]

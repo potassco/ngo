@@ -129,18 +129,18 @@ class MinMaxAggregator:
 
         # TODO: create a new domain if several conditions are used, also create next_ for this domain, issue #9
         if len(elem.condition) > 1:
-            return [rule] # nocoverage
+            return [rule]  # nocoverage
         # TODO: lift restrictions, currently only needed to get some domain
         # NOTE: this could also be Comparisons, see issue #9
         if elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom:
-            return [rule] # nocoverage
+            return [rule]  # nocoverage
 
         condition_pred = (
             elem.condition[0].atom.symbol.name,
             len(elem.condition[0].atom.symbol.arguments),
         )
         if not self.domain_predicates.has_domain(condition_pred) or self.domain_predicates.is_static(condition_pred):
-            return [rule] # NOTE: issue #9, this check needs to be done for all conditions
+            return [rule]  # NOTE: issue #9, this check needs to be done for all conditions
 
         number_of_aggregate = 0
         number_of_element = 0
@@ -158,13 +158,13 @@ class MinMaxAggregator:
         self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
         if not self.domain_predicates.has_domain(new_predicate):
             # NOTE: issue #9, this should become an assert
-            return [rule] # nocoverage
+            return [rule]  # nocoverage
 
         # 2. create dom and next_ predicates for it, and then use it to
         # create chain with elem.condition + lits_with_vars
         # ret = _create_dom_and_next_for_pred(agg, new_predicate, )
         ret = list(self.domain_predicates.create_domain(new_predicate))
-        ret.extend(self.domain_predicates._create_nextpred_for_domain(new_predicate, 0))
+        ret.extend(self.domain_predicates.create_nextpred_for_domain(new_predicate, 0))
 
         minmax_pred = self.domain_predicates.max_predicate(new_predicate, 0)
         if agg.atom.function == AggregateFunction.Max:

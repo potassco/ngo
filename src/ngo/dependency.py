@@ -242,7 +242,7 @@ class DomainPredicates:
                     yield from self.__create_domain_for_condition(cond)
                 yield ast.Rule(LOC, newatom, conditions)
 
-    def _create_nextpred_for_domain(self, pred, position):
+    def create_nextpred_for_domain(self, pred, position):
         """
         given a predicate, yield a list of ast
         that represent rules to create a next predicate for self.domain(pred) in the logic program

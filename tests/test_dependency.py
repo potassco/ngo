@@ -497,8 +497,8 @@ def test_domain_predicates_exceptions():
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp._create_nextpred_for_domain(("a", 1), 0))
+        list(dp.create_nextpred_for_domain(("a", 1), 0))
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp._create_nextpred_for_domain(("c", 1), 1))
+        list(dp.create_nextpred_for_domain(("c", 1), 1))
