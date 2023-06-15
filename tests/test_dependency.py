@@ -252,9 +252,7 @@ def test_positive_dependencies(prg, result):
                 ("c", 2),
                 ("a", 1),
             ],
-            [
-                ("c", 2)
-            ]
+            [("c", 2)],
         ),
     ],
 )
@@ -442,8 +440,8 @@ def test_nodomain_predicates(prg, hasnodomain):
                 ("c", 1),
             ],
             [
-                '__dom_a(X) :- c(X).',
-                '__dom_b(X) :- c(X).',
+                "__dom_a(X) :- c(X).",
+                "__dom_b(X) :- c(X).",
             ],
         ),
         (
@@ -499,8 +497,8 @@ def test_domain_predicates_exceptions():
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp._create_nextpred_for_domain(("a",1), 0))
+        list(dp._create_nextpred_for_domain(("a", 1), 0))
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp._create_nextpred_for_domain(("c",1), 1))
+        list(dp._create_nextpred_for_domain(("c", 1), 1))

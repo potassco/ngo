@@ -338,8 +338,7 @@ class MinMaxAggregator:
         return ret
 
     def _create_replacement(self, minmaxpred, minimize, terms, oldmax, rest_cond, function):
-        if minmaxpred is None:
-            return None
+        assert minmaxpred is not None
 
         if minimize:
 
@@ -463,6 +462,8 @@ class MinMaxAggregator:
                 if not unsafe:
                     minmaxpred = (aggtype, translation, idx)
                     break
+        if minmaxpred is None:
+            return [stm]
 
         for cond in stm.body:
             if minmaxpred is not None and list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
@@ -474,6 +475,7 @@ class MinMaxAggregator:
 
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
+        # see issue #8
         old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
         term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))
         term_vars = {x.name for x in term_vars}
@@ -488,8 +490,6 @@ class MinMaxAggregator:
             rest_cond,
             lambda weight, terms, conditions: Minimize(LOC, weight, stm.priority, terms, conditions),
         )
-        if replacement is None:
-            replacement = [stm]
         return replacement
 
     def _split_element(self, elem, rest_elems):
@@ -559,6 +559,7 @@ class MinMaxAggregator:
 
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
+        # NOTE: is this check really useful ? Why
         old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}
         term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))
         term_vars = {x.name for x in term_vars}
@@ -573,8 +574,6 @@ class MinMaxAggregator:
             rest_cond,
             lambda weight, terms, conditions: BodyAggregateElement([weight] + terms, conditions),
         )
-        if replacement is None:
-            replacement = [elem]
         return replacement
 
     def _replace_results_in_sum_agg(self, agg):
@@ -595,8 +594,7 @@ class MinMaxAggregator:
         or the old statement if no replacement is possible
         """
 
-        if stm.ast_type != ASTType.Rule:
-            return [stm]
+        assert stm.ast_type == ASTType.Rule
         body = []
         for b in stm.body:
             if (
