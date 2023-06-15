@@ -234,13 +234,27 @@ def test_positive_dependencies(prg, result):
             """
             1 = #sum {1,a : a(X)} :- b(X).
             """,
-            ["b", 1],
+            [("b", 1)],
             [
                 ("a", 1),
             ],
             [
                 ("a", 1),
             ],
+        ),
+        (
+            """
+            {c(X,X) : b(X)}.
+            a(X) :- c(X,Y) : b(Y).
+            """,
+            [("b", 1)],
+            [
+                ("c", 2),
+                ("a", 1),
+            ],
+            [
+                ("c", 2)
+            ]
         ),
     ],
 )
@@ -418,6 +432,48 @@ def test_nodomain_predicates(prg, hasnodomain):
                 "__dom_person(b).",
             ],
         ),
+        (
+            """
+            a(X) | b(X) :- c(X).
+            """,
+            [
+                ("a", 1),
+                ("b", 1),
+                ("c", 1),
+            ],
+            [
+                '__dom_a(X) :- c(X).',
+                '__dom_b(X) :- c(X).',
+            ],
+        ),
+        (
+            """
+            {c(X,X) : b(X)}.
+            a(X) :- c(X,Y) : b(Y).
+            """,
+            [
+                ("a", 1),
+                ("b", 1),
+                ("c", 1),
+            ],
+            [],
+        ),
+        (
+            """
+            {b(X) : a(X)}.
+            c(X) :- X = #max{X : b(X)}.
+            d(X) :- c(X).
+            """,
+            [
+                ("a", 1),
+                ("b", 1),
+                ("c", 1),
+                ("d", 1),
+            ],
+            [
+                "__dom_b(X) :- a(X).",
+            ],
+        ),
     ],
 )
 def test_domain_predicates_condition(prg, predicates, domain_program):
@@ -430,3 +486,21 @@ def test_domain_predicates_condition(prg, predicates, domain_program):
         if dp.has_domain(pred):
             strlist.extend(map(str, dp.create_domain(pred)))
     assert sorted(strlist) == sorted(domain_program)
+
+
+def test_domain_predicates_exceptions():
+    # pragma: no cover
+    """test domain computation exceptions"""
+    ast = []
+    parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
+    with pytest.raises(Exception):
+        dp = DomainPredicates(ast)
+        list(dp.create_domain(("a", 1)))
+
+    with pytest.raises(Exception):
+        dp = DomainPredicates(ast)
+        list(dp._create_nextpred_for_domain(("a",1), 0))
+
+    with pytest.raises(Exception):
+        dp = DomainPredicates(ast)
+        list(dp._create_nextpred_for_domain(("c",1), 1))

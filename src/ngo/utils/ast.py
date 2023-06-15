@@ -181,6 +181,7 @@ def body_predicates(rule, signs):
                 yield from literal_predicate(blit, signs)
                 yield from headorbody_aggregate_predicate(blit.atom, signs)
                 yield from aggregate_predicate(blit.atom, signs)
+            yield from conditional_literal_predicate(blit, signs)
 
 
 def literal_predicate(lit, signs):

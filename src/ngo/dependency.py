@@ -399,11 +399,10 @@ class DomainPredicates:
         ### remove too complex predicates from the head
         def not_too_complex(pair):
             (head, _) = pair
-            if head.ast_type == ASTType.SymbolicAtom:
-                name = head.symbol.name
-                arity = len(head.symbol.arguments)
-                return (name, arity) not in self._too_complex
-            return True
+            assert head.ast_type == ASTType.SymbolicAtom
+            name = head.symbol.name
+            arity = len(head.symbol.arguments)
+            return (name, arity) not in self._too_complex
 
         domain_rules = dict(filter(not_too_complex, domain_rules.items()))
 
@@ -472,7 +471,6 @@ class DomainPredicates:
                     all_domain = False
                     break
             if not all_domain:
-                assert True, "Can't find example to let this happen"  # pragma: no cover
                 continue
             # replace all predicates with their respective domain predicates
             new_conditions = []
