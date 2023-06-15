@@ -472,6 +472,7 @@ class DomainPredicates:
                     all_domain = False
                     break
             if not all_domain:
+                assert True, "Can't find example to let this happen"  # pragma: no cover
                 continue
             # replace all predicates with their respective domain predicates
             new_conditions = []

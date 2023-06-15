@@ -399,6 +399,25 @@ def test_nodomain_predicates(prg, hasnodomain):
                 "__dom_max(P,X) :- X = #max { V,ID: skull(P,ID,V) }; __dom_person(P).",
             ],
         ),
+        (
+            """
+            {person(a);
+            person(b)}.
+            a(X) :- b(X).
+            b(X) :- a(X).
+            {c(X) : b(X) } :- b(X).
+            """,
+            [
+                ("person", 1),
+                ("a", 1),
+                ("b", 1),
+                ("c", 1),
+            ],
+            [
+                "__dom_person(a).",
+                "__dom_person(b).",
+            ],
+        ),
     ],
 )
 def test_domain_predicates_condition(prg, predicates, domain_program):
