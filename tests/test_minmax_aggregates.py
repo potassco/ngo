@@ -24,7 +24,7 @@ skill(a, ("knitting",1..10), 100);
 skill(b, t("cooking",1..10), 10);
 skill(b, t("knitting",1..10), 1)
 }.
-max(P, X) :- X = #max {V, ID : skill(P, ID, V)}, person(P).
+max(P, X) :- X = #max {V, ID : skill(P, ID, V)}, person(P), random(Y).
 """,
             """#program base.
 { person(a); person(b) }.
@@ -46,7 +46,7 @@ __chain__max_0_0_11(P,V) :- skill(P,ID,V); person(P).
 __chain__max_0_0_11(P,__PREV) :- __chain__max_0_0_11(P,__NEXT); __next_0__dom___max_0_0_11(__PREV,__NEXT).
 __max_0_0_11(P,__PREV) :- __chain__max_0_0_11(P,__PREV); not __chain__max_0_0_11(P,__NEXT): __next_0__dom___max_0_0_11(__PREV,__NEXT).
 __max_0_0_11(P,#inf) :- __min_0__dom___max_0_0_11(X); not __chain__max_0_0_11(P,X); person(P).
-max(P,X) :- __max_0_0_11(P,X).""",
+max(P,X) :- __max_0_0_11(P,X); random(Y).""",
         ),
         (
             """
@@ -850,7 +850,7 @@ def test_minmax_aggregates(prg, converted_prg):
 
 
 def test_translation_mapping():
-    """ test the argument order translation class"""
+    """test the argument order translation class"""
     # NOTE: isn't there something already in python that can reorder things ?
     trans = MinMaxAggregator.Translation(("a", 3), ("b", 4), (2, 1, 0))
     assert trans.translate_parameters(["X", "Y", "Z"]) == ["Z", "Y", "X"]
