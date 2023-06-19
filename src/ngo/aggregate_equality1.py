@@ -10,6 +10,7 @@ from clingo.ast import ASTType, Comparison, Guard, Literal, Sign, Transformer
 from ngo.utils.ast import (
     LOC,
     BodyAggAnalytics,
+    Predicate,
     contains_ast,
     contains_variable,
     negate_comparison,
@@ -35,7 +36,7 @@ class BoundComputer:
         else:
             self.too_complicated = (
                 True
-                if contains_variable(self.varname, lhs) or contains_variable(self.varname, rhs)
+                if contains_variable(lhs, self.varname) or contains_variable(rhs, self.varname)
                 else self.too_complicated
             )
             self.rest.append(Literal(LOC, Sign.NoSign, Comparison(lhs, [Guard(op, rhs)])))
@@ -47,7 +48,7 @@ class BoundComputer:
         sets self.too_complicated to True if AST is too complicated to analyize
         but still contains variable varname
         """
-        if not contains_variable(self.varname, literal):
+        if not contains_variable(literal, self.varname):
             self.rest.append(literal)
             return
 
@@ -70,7 +71,7 @@ class BoundComputer:
                 newguard = comp.guards[0].update(comparison=negate_comparison(comp.guards[0].comparison))
                 comp = comp.update(guards=[newguard])
             self.bounds.append(comp)
-        elif not contains_variable(self.varname, comp.term) and len(comp.guards) == 1:
+        elif not contains_variable(comp.term, self.varname) and len(comp.guards) == 1:
             guard = comp.guards[0]
             if guard.term.ast_type == ASTType.Variable and guard.term.name == self.varname:
                 newcomparison = (
@@ -124,13 +125,13 @@ class EqualVariable(Transformer):
         pheads = predicates(node.head, {Sign.NoSign})
 
         for i, agg_info in self._create_analytics_from_body(node.body).items():
-            if contains_variable(agg_info.equal_variable_bound[0], node.head):
+            if contains_variable(node.head, agg_info.equal_variable_bound[0]):
                 continue
             cont = False
             pbodies = predicates(node.body[i].atom, {Sign.NoSign})
             for head, body in product(
-                map(lambda triple: (triple[1], triple[2]), pheads),
-                map(lambda triple: (triple[1], triple[2]), pbodies),
+                map(lambda signedpred: signedpred.pred, pheads),
+                map(lambda signedpred: signedpred.pred, pbodies),
             ):
                 if self.dependency.are_dependent([head, body]):
                     cont = True

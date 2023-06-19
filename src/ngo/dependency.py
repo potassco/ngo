@@ -4,10 +4,12 @@ A module for all predicate dependencies in the AST
 from collections import defaultdict
 from copy import deepcopy
 from itertools import chain, product
+from typing import Iterable
 
 import networkx as nx
 from clingo import ast
 from clingo.ast import (
+    AST,
     AggregateFunction,
     ASTType,
     BodyAggregate,
@@ -26,6 +28,7 @@ from clingo.ast import (
 from ngo.utils.ast import (
     LOC,
     SIGNS,
+    Predicate,
     body_predicates,
     collect_ast,
     collect_bound_variables,
@@ -44,23 +47,22 @@ DOM_STR = "__dom_"
 class RuleDependency:
     """get information about heads and body dependencies"""
 
-    def __init__(self, prg):
-        self.deps = defaultdict(list)
+    def __init__(self, prg: Iterable[AST]):
+        self.deps : dict[Predicate, list[AST]]= defaultdict(list)
         for stm in prg:
             if stm.ast_type == ASTType.Rule:
                 for head in map(
-                    lambda x: (x[1], x[2]),
+                    lambda x: x.pred,
                     head_predicates(stm, {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}),
                 ):
                     self.deps[head].append(stm.body)
 
-    def get_bodies(self, head):
+    def get_bodies(self, head: Predicate) -> list[AST]:
         """return all bodies of head predicate"""
         return self.deps[head]
 
-
 # TODO: refactor all graphs
-def _create_graph_from_prg(prg, signs):
+def _create_graph_from_prg(prg: Iterable[AST], signs: set[Sign]) -> nx.DiGraph:
     """create a dependency graph from all body predicates (wrt signs) to
     all derivable head predicates
     """
@@ -71,8 +73,8 @@ def _create_graph_from_prg(prg, signs):
             bodies = body_predicates(stm, signs)
             graph.add_edges_from(
                 product(
-                    map(lambda triple: (triple[1], triple[2]), bodies),
-                    map(lambda triple: (triple[1], triple[2]), heads),
+                    map(lambda signedpred: signedpred.pred, bodies),
+                    map(lambda signedpred: signedpred.pred, heads),
                 )
             )
     return graph
@@ -84,7 +86,7 @@ class PositivePredicateDependency:
     allows for scc check
     """
 
-    def __init__(self, prg):
+    def __init__(self, prg: Iterable[AST]):
         self.sccs = []
         self.graph = _create_graph_from_prg(prg, {Sign.NoSign})
         for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
@@ -93,13 +95,13 @@ class PositivePredicateDependency:
                 bodies = body_predicates(stm, {Sign.NoSign})
                 self.graph.add_edges_from(
                     product(
-                        map(lambda triple: (triple[1], triple[2]), bodies),
-                        map(lambda triple: (triple[1], triple[2]), heads),
+                        map(lambda signedpred: signedpred.pred, bodies),
+                        map(lambda signedpred: signedpred.pred, heads),
                     )
                 )
         self.sccs = list(nx.strongly_connected_components(self.graph))
 
-    def are_dependent(self, predlist):
+    def are_dependent(self, predlist: Iterable[Predicate]) -> bool:
         """returns true if all of the predicates in predlist have a positive dependency with each other"""
         spl = set(predlist)
         for scc in self.sccs:
@@ -115,18 +117,18 @@ class DomainPredicates:
     Also computes domain predicates, min/max elements and chains.
     """
 
-    def __init__(self, prg):
-        self._not_static = set()  # set of predicates that is not already a domain predicate
+    def __init__(self, prg: Iterable[AST]):
+        self._not_static : set[Predicate]= set()  # set of predicates that is not already a domain predicate
 
-        prg = list(prg)
-        self.domains = {}  # key = ("p",3) -> ("dom",3)
-        self.domain_rules = defaultdict(list)  # atom -> [conditions, ...]
-        self._too_complex = set()  # set of predicates that is too complex to provide a domain computation
-        self.created_domain = set()  # set of predicates where I have already created the domain
+        prg : list[AST] = list(prg)
+        self.domains: dict[Predicate, Predicate] = {}  # key = ("p",3) -> ("dom",3)
+        self.domain_rules : dict[AST, list[AST]]= defaultdict(list)  # atom -> [conditions, ...]
+        self._too_complex : set[Predicate]= set()  # set of predicates that is too complex to provide a domain computation
+        self.created_domain : set[Predicate]= set()  # set of predicates where I have already created the domain
         self.__compute_nonstatic_predicates(prg)
         self.__compute_domains(prg)
 
-    def __compute_nonstatic_predicates(self, prg):
+    def __compute_nonstatic_predicates(self, prg: Iterable[AST]) -> None:
         """compate _not_static for all predicates that aren't static"""
         for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
             if stm.ast_type == ASTType.Rule:
@@ -136,14 +138,14 @@ class DomainPredicates:
                     for cond in head.elements:
                         assert cond.ast_type == ASTType.ConditionalLiteral
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                        self._not_static.add((lit[1], lit[2]))
+                        self._not_static.add(lit.pred)
                 elif head.ast_type == ASTType.HeadAggregate:
                     for elem in head.elements:
                         if elem.ast_type == ASTType.HeadAggregateElement:
                             cond = elem.condition
                             assert cond.ast_type == ASTType.ConditionalLiteral
                             lit = list(literal_predicate(cond.literal, SIGNS))[0]
-                            self._not_static.add((lit[1], lit[2]))
+                            self._not_static.add(lit.pred)
 
         graph = _create_graph_from_prg(prg, SIGNS)
         cycle_free_pdg = graph.copy()
@@ -175,7 +177,7 @@ class DomainPredicates:
         """
         return self.is_static(pred) or pred in self.domains
 
-    def domain_predicate(self, pred):
+    def domain_predicate(self, pred: Predicate) -> Predicate:
         """pred = (name, arity)
         returns domain predicate of pred
         """
@@ -184,23 +186,23 @@ class DomainPredicates:
             return pred
         return self.domains[pred]
 
-    def min_predicate(self, pred, position):
+    def min_predicate(self, pred: Predicate, position: int) -> Predicate:
         """pred = (name, arity)
         returns min_domain predicate of pred
         """
-        return (f"{MIN_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return Predicate(f"{MIN_STR}{position}" + self.domain_predicate(pred)[0], 1)
 
-    def max_predicate(self, pred, position):
+    def max_predicate(self, pred: Predicate, position: int) -> Predicate:
         """pred = (name, arity)
         returns max_domain predicate of pred
         """
-        return (f"{MAX_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return Predicate(f"{MAX_STR}{position}" + self.domain_predicate(pred)[0], 1)
 
-    def next_predicate(self, pred, position):
+    def next_predicate(self, pred: Predicate, position: int) -> Predicate:
         """pred = (name, arity)
         returns next_domain predicate of pred
         """
-        return (f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
+        return Predicate(f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
 
     def __create_domain_for_condition(self, node):
         """yield all domain rules for all symbolic atoms in node"""

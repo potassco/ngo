@@ -32,7 +32,7 @@ from clingo.ast import (
 from clingo.symbol import Infimum, Supremum
 
 from ngo.dependency import DOM_STR
-from ngo.utils.ast import LOC, BodyAggAnalytics, collect_ast, potentially_unifying, predicates
+from ngo.utils.ast import LOC, BodyAggAnalytics, Predicate, collect_ast, potentially_unifying, predicates
 
 CHAIN_STR = "__chain"
 NEXT = Variable(LOC, "__NEXT")
@@ -155,7 +155,7 @@ class MinMaxAggregator:
                     return blit
         return None
 
-    def _create_aggregate_replacement(self, agg, elem, rest_vars, new_predicate, lits_with_vars):
+    def _create_aggregate_replacement(self, agg, elem, rest_vars, new_predicate: Predicate, lits_with_vars):
         """return a list of rules as a replacement of this aggregate element"""
         # 2. create dom and next_ predicates for it, and then use it to
         # create chain with elem.condition + lits_with_vars
@@ -204,7 +204,7 @@ class MinMaxAggregator:
             Literal(
                 LOC,
                 Sign.NoSign,
-                SymbolicAtom(Function(LOC, next_pred[0], [PREV, NEXT], False)),
+                SymbolicAtom(Function(LOC, next_pred.name, [PREV, NEXT], False)),
             )
         )
         ret.append(Rule(LOC, head, body))
@@ -216,7 +216,7 @@ class MinMaxAggregator:
         head = Literal(
             LOC,
             Sign.NoSign,
-            SymbolicAtom(Function(LOC, new_predicate[0], rest_vars + [prev_agg], False)),
+            SymbolicAtom(Function(LOC, new_predicate.name, rest_vars + [prev_agg], False)),
         )
 
         body = []
@@ -239,7 +239,7 @@ class MinMaxAggregator:
                     Literal(
                         LOC,
                         Sign.NoSign,
-                        SymbolicAtom(Function(LOC, next_pred[0], [PREV, NEXT], False)),
+                        SymbolicAtom(Function(LOC, next_pred.name, [PREV, NEXT], False)),
                     )
                 ],
             )
@@ -253,7 +253,7 @@ class MinMaxAggregator:
         head = Literal(
             LOC,
             Sign.NoSign,
-            SymbolicAtom(Function(LOC, new_predicate[0], rest_vars + [SymbolicTerm(LOC, border)], False)),
+            SymbolicAtom(Function(LOC, new_predicate.name, rest_vars + [SymbolicTerm(LOC, border)], False)),
         )
 
         body = []
@@ -263,7 +263,7 @@ class MinMaxAggregator:
             Literal(
                 LOC,
                 Sign.NoSign,
-                SymbolicAtom(Function(LOC, minmax_pred[0], [var_x], False)),
+                SymbolicAtom(Function(LOC, minmax_pred.name, [var_x], False)),
             )
         )
         body.append(
@@ -306,7 +306,7 @@ class MinMaxAggregator:
         if agg.atom.function == AggregateFunction.Max:
             direction = "max"
         new_name = f"__{direction}_{number_of_aggregate}_{number_of_element}_{str(rule.location.begin.line)}"
-        new_predicate = (new_name, 1)
+        new_predicate = Predicate(new_name, 1)
 
         head = SymbolicAtom(Function(LOC, new_name, [weight], False))
         lits_with_vars = []
@@ -420,7 +420,7 @@ class MinMaxAggregator:
             SymbolicAtom(
                 Function(
                     LOC,
-                    self.domain_predicates.next_predicate(dompred, 0)[0],
+                    self.domain_predicates.next_predicate(dompred, 0).name,
                     [PREV, NEXT],
                     False,
                 )
@@ -435,9 +435,9 @@ class MinMaxAggregator:
         weight = negate_if(next_)
         new_terms = [Function(LOC, chain_name, [SymbolicTerm(LOC, infsup), next_], False)] + list(terms)
         if aggtype == AggregateFunction.Max:
-            minmaxpred = self.domain_predicates.min_predicate(dompred, 0)[0]
+            minmaxpred = self.domain_predicates.min_predicate(dompred, 0).name
         else:
-            minmaxpred = self.domain_predicates.max_predicate(dompred, 0)[0]
+            minmaxpred = self.domain_predicates.max_predicate(dompred, 0).name
         minmaxlit = Literal(
             LOC,
             Sign.NoSign,
@@ -482,7 +482,7 @@ class MinMaxAggregator:
             return [stm]
 
         preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in stm.body))
-        preds = [(x[1], x[2]) for x in preds]
+        preds = [x.pred for x in preds]
         rest_cond = []
         minmaxpred = None
         oldmax = None
@@ -506,7 +506,7 @@ class MinMaxAggregator:
             return [stm]
 
         for cond in stm.body:
-            if minmaxpred is not None and list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
+            if minmaxpred is not None and list(map(lambda x: x.pred, predicates(cond, {Sign.NoSign}))) == [
                 minmaxpred[1].oldpred
             ]:
                 oldmax = cond
@@ -539,7 +539,7 @@ class MinMaxAggregator:
         (max predicate, translation, rest of the conditions)
         """
         preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in elem.condition))
-        preds = [(x[1], x[2]) for x in preds]
+        preds = [x.pred for x in preds]
         rest_cond = []
         minmaxpred = None
         oldmax = None
@@ -563,7 +563,7 @@ class MinMaxAggregator:
                     break
 
         for cond in elem.condition:
-            if minmaxpred is not None and list(map(lambda x: (x[1], x[2]), predicates(cond, {Sign.NoSign}))) == [
+            if minmaxpred is not None and list(map(lambda x: x.pred, predicates(cond, {Sign.NoSign}))) == [
                 minmaxpred[1].oldpred
             ]:
                 oldmax = cond

@@ -58,7 +58,7 @@ def lint_pylint(session):
 @nox.session
 def typecheck(session):
     session.install(*EXTRA_INSTALL, "-e", ".[typecheck]")
-    session.run("mypy", "-p", "ngo", "-p", "tests")
+    session.run("mypy", "--strict", "-p", "ngo", "-p", "tests")
 
 
 @nox.session(python=PYTHON_VERSIONS)

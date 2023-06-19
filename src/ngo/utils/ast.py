@@ -1,14 +1,20 @@
 """ general ast util functions and classes """
 from dataclasses import dataclass
 from itertools import product
+from typing import Callable, Iterable, Iterator, NamedTuple
 
-from clingo.ast import ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer
+from clingo.ast import AST, ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer
 
 LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
 SIGNS = {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}
 
 
-def negate_comparison(cmp):
+Predicate = NamedTuple("Predicate", [("name", str), ("arity", int)])
+
+SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predicate)])
+
+
+def negate_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
     """reverse clingo.ast.ComparisonOperator"""
     return {
         ComparisonOperator.Equal: ComparisonOperator.NotEqual,
@@ -20,7 +26,7 @@ def negate_comparison(cmp):
     }[cmp]
 
 
-def rhs2lhs_comparison(cmp):
+def rhs2lhs_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
     """move clingo.ast.ComparisonOperator from rhs to lhs"""
     return {
         ComparisonOperator.Equal: ComparisonOperator.Equal,
@@ -37,7 +43,7 @@ def rhs2lhs_comparison(cmp):
 class BodyAggAnalytics:
     """class to analyze a body aggregate and capture its bounds"""
 
-    def __init__(self, node):
+    def __init__(self, node: AST):
         assert node.ast_type == ASTType.BodyAggregate
         self.equal_variable_bound = []  # list of all equal variables as bounds
         self.bounds = []  # all non equal variable bounds as right guards
@@ -60,30 +66,30 @@ class BodyAggAnalytics:
 class GeneralVisitor(Transformer):
     """helper class to visit specific asts"""
 
-    def __init__(self, ast_name):
-        self.collection = []
+    def __init__(self, ast_name: str):
+        self.collection: list[AST] = []
         setattr(self, "visit_" + ast_name, self.visitnode)
 
-    def visitnode(self, node):
+    def visitnode(self, node: AST) -> AST:
         """generic visit function"""
         self.collection.append(node)
         return node
 
 
-def collect_ast(stm, ast_name):
+def collect_ast(stm: AST, ast_name: str) -> list[AST]:
     """returns the list of asts of the given ast_name inside the stm"""
     visitor = GeneralVisitor(ast_name)
     visitor.visit(stm)
     return visitor.collection
 
 
-def contains_ast(stm, ast_name):
+def contains_ast(stm: AST, ast_name: str) -> bool:
     """returns True if the given ast_name is inside the stm"""
     test = collect_ast(stm, ast_name)
     return bool(test)
 
 
-def contains_variable(name, stm):
+def contains_variable(stm: AST, name: str) -> bool:
     """returns true if an AST contains a variable "name" """
     return any(map(lambda x: x.name == name, collect_ast(stm, "Variable")))
 
@@ -91,22 +97,22 @@ def contains_variable(name, stm):
 class GeneralTransformer(Transformer):
     """helper class to transform specific asts"""
 
-    def __init__(self, ast_name, function):
+    def __init__(self, ast_name: str, function: Callable[[AST], AST]):
         self.function = function
         setattr(self, "visit_" + ast_name, self.visitnode)
 
-    def visitnode(self, node):
+    def visitnode(self, node: AST) -> AST:
         """generic visit function"""
         return self.function(node)
 
 
-def transform_ast(stm, ast_name, function):
+def transform_ast(stm: AST, ast_name: str, function: Callable[[AST], AST]) -> None:
     """transforms all ast with name ast_name in stm by calling function on them"""
     transformer = GeneralTransformer(ast_name, function)
     transformer.visit(stm)
 
 
-def _potentially_unifying(lhs, rhs):
+def _potentially_unifying(lhs: AST, rhs: AST) -> bool:
     if (lhs == rhs) or (ASTType.Variable in (lhs.ast_type, rhs.ast_type)):
         return True
     nfunc = {
@@ -122,7 +128,7 @@ def _potentially_unifying(lhs, rhs):
         return False
 
     if lhs.ast_type == ASTType.SymbolicTerm and rhs.ast_type == ASTType.SymbolicTerm:
-        return lhs == rhs
+        return bool(lhs == rhs)
 
     if lhs.ast_type == ASTType.UnaryOperation and (
         rhs.ast_type == ASTType.UnaryOperation and lhs.operator_type == rhs.operator_type
@@ -144,7 +150,7 @@ def _potentially_unifying(lhs, rhs):
     return True
 
 
-def potentially_unifying(lhs, rhs):
+def potentially_unifying(lhs: AST, rhs: AST) -> bool:
     """returns True if both terms could potentially be equal after variable substitution
     Conservative, may falsely return True in cases it does not know
     Also does not consider Variable Names, so f(X) could unify with X
@@ -171,7 +177,7 @@ def potentially_unifying(lhs, rhs):
     return False
 
 
-def body_predicates(rule, signs):
+def body_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the rule body as (name, arity) that have a sign in the set signs
     """
@@ -184,16 +190,16 @@ def body_predicates(rule, signs):
             yield from conditional_literal_predicate(blit, signs)
 
 
-def literal_predicate(lit, signs):
+def literal_predicate(lit: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """converts ast Literal into (sign, name, arity) if sign is in signs"""
     if lit.ast_type == ASTType.Literal:
         if lit.sign in signs and lit.atom.ast_type == ASTType.SymbolicAtom:
             atom = lit.atom
             if atom.symbol.ast_type == ASTType.Function:
-                yield (lit.sign, atom.symbol.name, len(atom.symbol.arguments))
+                yield SignedPredicate(lit.sign, Predicate(atom.symbol.name, len(atom.symbol.arguments)))
 
 
-def conditional_literal_predicate(condlit, signs):
+def conditional_literal_predicate(condlit: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the conditional literal as (name, arity) that have a sign in the set signs
     """
@@ -205,7 +211,7 @@ def conditional_literal_predicate(condlit, signs):
         yield from literal_predicate(cond, signs)
 
 
-def headorbody_aggregate_predicate(agg, signs):
+def headorbody_aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the head or body agregate as (name, arity) that have a sign in the set signs
     """
@@ -219,7 +225,7 @@ def headorbody_aggregate_predicate(agg, signs):
                     yield from literal_predicate(cond, signs)
 
 
-def aggregate_predicate(agg, signs):
+def aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the aggregate as (name, arity) that have a sign in the set signs
     """
@@ -231,7 +237,7 @@ def aggregate_predicate(agg, signs):
                 yield from literal_predicate(cond, signs)
 
 
-def disjunction_predicate(head, signs):
+def disjunction_predicate(head: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the disjunction head as (name, arity) that have a sign in the set signs
     """
@@ -240,7 +246,7 @@ def disjunction_predicate(head, signs):
             yield from conditional_literal_predicate(lit, signs)
 
 
-def head_predicates(rule, signs):
+def head_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the rule head as (name, arity) that have a sign in the set signs
     """
@@ -252,12 +258,12 @@ def head_predicates(rule, signs):
         yield from disjunction_predicate(head, signs)
 
 
-def __get_preds_from_literal_in_conditional(condition, signs):
+def __get_preds_from_literal_in_conditional(condition: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     assert condition.ast_type == ASTType.ConditionalLiteral
     yield from literal_predicate(condition.literal, signs)
 
 
-def headderivable_predicates(rule):
+def headderivable_predicates(rule: AST) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the rule head that are derivable as (name, arity)
     """
@@ -278,7 +284,7 @@ def headderivable_predicates(rule):
                 yield from __get_preds_from_literal_in_conditional(lit, positive)
 
 
-def predicates(ast, signs):
+def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     """
     yields all predicates in ast that have a sign in the set signs
     """
@@ -291,8 +297,8 @@ def predicates(ast, signs):
     yield from body_predicates(ast, signs)
 
 
-def collect_bound_variables(stmlist):
-    """return a list of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
+def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
+    """return a set of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
     bound_variables = set()
     for stm in stmlist:
         if stm.ast_type == ASTType.Literal:

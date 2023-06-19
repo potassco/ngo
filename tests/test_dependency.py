@@ -3,7 +3,7 @@ import pytest
 from clingo.ast import Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates, PositivePredicateDependency
-from ngo.utils.ast import body_predicates, head_predicates
+from ngo.utils.ast import Predicate, SignedPredicate, body_predicates, head_predicates
 
 
 @pytest.mark.parametrize(
@@ -13,22 +13,22 @@ from ngo.utils.ast import body_predicates, head_predicates
             "#false :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2,"
             " X = #sum { 1,e: e; 1,f: f; 1,g: g } 3, X>=2, 5>3, X=Y, 1<=X!=4<5.",
             [
-                (Sign.NoSign, "a", 0),
-                (Sign.NoSign, "b", 0),
-                (Sign.NoSign, "c", 0),
-                (Sign.NoSign, "e", 0),
-                (Sign.NoSign, "f", 0),
-                (Sign.NoSign, "g", 0),
+                SignedPredicate(Sign.NoSign, Predicate("a", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("b", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("c", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("e", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("f", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("g", 0)),
             ],
         ),
         (
             "#false :- 1 { a : e; b : not f; c } 2, d.",
             [
-                (Sign.NoSign, "a", 0),
-                (Sign.NoSign, "b", 0),
-                (Sign.NoSign, "c", 0),
-                (Sign.NoSign, "d", 0),
-                (Sign.NoSign, "e", 0),
+                SignedPredicate(Sign.NoSign, Predicate("a", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("b", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("c", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("d", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("e", 0)),
             ],
         ),
     ],
@@ -53,28 +53,36 @@ def test_positive_body(rule, result):
     [
         (
             "a(1,4,f(4)).",
-            [(Sign.NoSign, "a", 3)],
+            [SignedPredicate(Sign.NoSign, Predicate("a", 3))],
         ),
         (
             "1 <= #sum { 1,a: a; 1,b: b; 1: c } <= 2.",
-            [(Sign.NoSign, "a", 0), (Sign.NoSign, "b", 0), (Sign.NoSign, "c", 0)],
+            [
+                SignedPredicate(Sign.NoSign, Predicate("a", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("b", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("c", 0)),
+            ],
         ),
         (
             "1 { a : e; b : not f; c } 2.",
             [
-                (Sign.NoSign, "a", 0),
-                (Sign.NoSign, "b", 0),
-                (Sign.NoSign, "c", 0),
-                (Sign.NoSign, "e", 0),
+                SignedPredicate(Sign.NoSign, Predicate("a", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("b", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("c", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("e", 0)),
             ],
         ),
         (
             "a; b; not c.",
-            [(Sign.NoSign, "a", 0), (Sign.NoSign, "b", 0)],
+            [SignedPredicate(Sign.NoSign, Predicate("a", 0)), SignedPredicate(Sign.NoSign, Predicate("b", 0))],
         ),
         (
             "a : d; b : not e; not c.",
-            [(Sign.NoSign, "a", 0), (Sign.NoSign, "b", 0), (Sign.NoSign, "d", 0)],
+            [
+                SignedPredicate(Sign.NoSign, Predicate("a", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("b", 0)),
+                SignedPredicate(Sign.NoSign, Predicate("d", 0)),
+            ],
         ),
     ],
 )
@@ -104,7 +112,7 @@ def test_positive_head(rule, result):
             a :- d.
             1 = #sum {1,a : e} :- d.
             """,
-            [{("e", 0)}, {("a", 0), ("b", 0), ("c", 0), ("d", 0)}],
+            [{Predicate("e", 0)}, {Predicate("a", 0), Predicate("b", 0), Predicate("c", 0), Predicate("d", 0)}],
         ),
         (
             """
@@ -118,9 +126,9 @@ def test_positive_head(rule, result):
             e :- not g.
             """,
             [
-                {("g", 0)},
-                {("e", 0), ("f", 0)},
-                {("a", 0), ("b", 0), ("c", 0), ("d", 0)},
+                {Predicate("g", 0)},
+                {Predicate("e", 0), Predicate("f", 0)},
+                {Predicate("a", 0), Predicate("b", 0), Predicate("c", 0), Predicate("d", 0)},
             ],
         ),
     ],
@@ -143,16 +151,16 @@ def test_positive_dependencies(prg, result):
             a :- d.
             e :- d.
             """,
-            [("x", 3)],
+            [Predicate("x", 3)],
             [
-                ("a", 0),
-                ("b", 0),
-                ("c", 0),
-                ("d", 0),
-                ("e", 0),
+                Predicate("a", 0),
+                Predicate("b", 0),
+                Predicate("c", 0),
+                Predicate("d", 0),
+                Predicate("e", 0),
             ],
             [
-                ("x", 3),
+                Predicate("x", 3),
             ],
         ),
         (
@@ -174,31 +182,31 @@ def test_positive_dependencies(prg, result):
             q(X) :- not p(X).
             """,
             [
-                ("y", 0),
-                ("z", 0),
+                Predicate("y", 0),
+                Predicate("z", 0),
             ],
             [
-                ("a", 0),
-                ("b", 0),
-                ("c", 0),
-                ("d", 0),
-                ("e", 0),
-                ("f", 0),
-                ("g", 0),
-                ("x", 0),
-                ("w", 0),
-                ("u", 0),
-                ("v", 0),
-                ("p", 1),
-                ("q", 1),
+                Predicate("a", 0),
+                Predicate("b", 0),
+                Predicate("c", 0),
+                Predicate("d", 0),
+                Predicate("e", 0),
+                Predicate("f", 0),
+                Predicate("g", 0),
+                Predicate("x", 0),
+                Predicate("w", 0),
+                Predicate("u", 0),
+                Predicate("v", 0),
+                Predicate("p", 1),
+                Predicate("q", 1),
             ],
             [
-                ("y", 0),
-                ("z", 0),
-                ("w", 0),
-                ("u", 0),
-                ("v", 0),
-                ("p", 1),
+                Predicate("y", 0),
+                Predicate("z", 0),
+                Predicate("w", 0),
+                Predicate("u", 0),
+                Predicate("v", 0),
+                Predicate("p", 1),
             ],
         ),
         (
@@ -207,16 +215,16 @@ def test_positive_dependencies(prg, result):
             {d(X)} :- b(X,Y), c(Y).
             """,
             [
-                ("a", 1),
-                ("b", 2),
-                ("c", 1),
+                Predicate("a", 1),
+                Predicate("b", 2),
+                Predicate("c", 1),
             ],
-            [("d", 1)],
+            [Predicate("d", 1)],
             [
-                ("a", 1),
-                ("b", 2),
-                ("c", 1),
-                ("d", 1),
+                Predicate("a", 1),
+                Predicate("b", 2),
+                Predicate("c", 1),
+                Predicate("d", 1),
             ],
         ),
         (
@@ -226,7 +234,7 @@ def test_positive_dependencies(prg, result):
             """,
             [],
             [
-                ("a", 2),
+                Predicate("a", 2),
             ],
             [],
         ),
@@ -234,12 +242,12 @@ def test_positive_dependencies(prg, result):
             """
             1 = #sum {1,a : a(X)} :- b(X).
             """,
-            [("b", 1)],
+            [Predicate("b", 1)],
             [
-                ("a", 1),
+                Predicate("a", 1),
             ],
             [
-                ("a", 1),
+                Predicate("a", 1),
             ],
         ),
         (
@@ -247,12 +255,12 @@ def test_positive_dependencies(prg, result):
             {c(X,X) : b(X)}.
             a(X) :- c(X,Y) : b(Y).
             """,
-            [("b", 1)],
+            [Predicate("b", 1)],
             [
-                ("c", 2),
-                ("a", 1),
+                Predicate("c", 2),
+                Predicate("a", 1),
             ],
-            [("c", 2)],
+            [Predicate("c", 2)],
         ),
     ],
 )
@@ -279,7 +287,7 @@ def test_domain_predicates(prg, static, notstatic, hasdomain):
             a(A,B) :- start(A,B).
             """,
             [
-                ("a", 2),
+                Predicate("a", 2),
             ],
         ),
         (
@@ -288,7 +296,7 @@ def test_domain_predicates(prg, static, notstatic, hasdomain):
             b(A,B) :- a(A,B).
             """,
             [
-                ("a", 2),
+                Predicate("a", 2),
             ],
         ),
         (
@@ -298,7 +306,7 @@ def test_domain_predicates(prg, static, notstatic, hasdomain):
             at(X,Y,0) :- start(X,Y).
             """,
             [
-                ("at", 3),
+                Predicate("at", 3),
             ],
         ),
     ],
@@ -331,14 +339,14 @@ def test_nodomain_predicates(prg, hasnodomain):
             {l(Y)} :- Y=X+1, l(X), Y < 100.
             """,
             [
-                ("d", 1),
-                ("f", 1),
-                ("g", 1),
-                ("h", 3),
-                ("i", 1),
-                ("j", 1),
-                ("k", 1),
-                ("l", 1),
+                Predicate("d", 1),
+                Predicate("f", 1),
+                Predicate("g", 1),
+                Predicate("h", 3),
+                Predicate("i", 1),
+                Predicate("j", 1),
+                Predicate("k", 1),
+                Predicate("l", 1),
             ],
             [
                 "__dom_d(X) :- b(X,Y); c(Y).",
@@ -358,9 +366,9 @@ def test_nodomain_predicates(prg, hasnodomain):
             {c(X)} :- X = #sum {1, Y: b(Y)}.
             """,
             [
-                ("a", 1),
-                ("b", 1),
-                ("c", 1),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 1),
             ],
             [
                 "__dom_b(Y) :- a(Y).",
@@ -372,9 +380,9 @@ def test_nodomain_predicates(prg, hasnodomain):
             a(X) :- l(X).
             """,
             [
-                ("l", 1),
-                ("a", 1),
-                ("c", 1),
+                Predicate("l", 1),
+                Predicate("a", 1),
+                Predicate("c", 1),
             ],
             [],
         ),
@@ -392,7 +400,7 @@ def test_nodomain_predicates(prg, hasnodomain):
             max(P, X) :- X = #max {V, ID : skill(P, ID, V)}, person(P).
             """,
             [
-                ("max", 2),
+                Predicate("max", 2),
             ],
             [],
         ),
@@ -403,7 +411,7 @@ def test_nodomain_predicates(prg, hasnodomain):
             max(P, X) :- X = #max {V, ID : skull(P, ID, V)}, person(P).
             """,
             [
-                ("max", 2),
+                Predicate("max", 2),
             ],
             [
                 "__dom_person(a).",
@@ -420,10 +428,10 @@ def test_nodomain_predicates(prg, hasnodomain):
             {c(X) : b(X) } :- b(X).
             """,
             [
-                ("person", 1),
-                ("a", 1),
-                ("b", 1),
-                ("c", 1),
+                Predicate("person", 1),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 1),
             ],
             [
                 "__dom_person(a).",
@@ -435,9 +443,9 @@ def test_nodomain_predicates(prg, hasnodomain):
             a(X) | b(X) :- c(X).
             """,
             [
-                ("a", 1),
-                ("b", 1),
-                ("c", 1),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 1),
             ],
             [
                 "__dom_a(X) :- c(X).",
@@ -450,9 +458,9 @@ def test_nodomain_predicates(prg, hasnodomain):
             a(X) :- c(X,Y) : b(Y).
             """,
             [
-                ("a", 1),
-                ("b", 1),
-                ("c", 1),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 1),
             ],
             [],
         ),
@@ -463,10 +471,10 @@ def test_nodomain_predicates(prg, hasnodomain):
             d(X) :- c(X).
             """,
             [
-                ("a", 1),
-                ("b", 1),
-                ("c", 1),
-                ("d", 1),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 1),
+                Predicate("d", 1),
             ],
             [
                 "__dom_b(X) :- a(X).",
@@ -493,12 +501,12 @@ def test_domain_predicates_exceptions():
     parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp.create_domain(("a", 1)))
+        list(dp.create_domain(Predicate("a", 1)))
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp.create_nextpred_for_domain(("a", 1), 0))
+        list(dp.create_nextpred_for_domain(Predicate("a", 1), 0))
 
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)
-        list(dp.create_nextpred_for_domain(("c", 1), 1))
+        list(dp.create_nextpred_for_domain(Predicate("c", 1), 1))
