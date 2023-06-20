@@ -1,6 +1,6 @@
 """ testing the dependency graph calculations """
 import pytest
-from clingo.ast import Sign, Transformer, parse_string
+from clingo.ast import AST, Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates, PositivePredicateDependency
 from ngo.utils.ast import Predicate, SignedPredicate, body_predicates, head_predicates
@@ -33,19 +33,19 @@ from ngo.utils.ast import Predicate, SignedPredicate, body_predicates, head_pred
         ),
     ],
 )
-def test_positive_body(rule, result):
+def test_positive_body(rule: str, result: list[SignedPredicate]) -> None:
     """test the collection of predicates in positive body context"""
 
     class RuleVisitor(Transformer):
         """Simple Transformer"""
 
-        def visit_Rule(self, stm):  # pylint: disable=C0103
+        def visit_Rule(self, stm: AST) -> AST:  # pylint: disable=invalid-name
             """derived visit method"""
             assert set(body_predicates(stm, {Sign.NoSign})) == set(result)
             return stm
 
     ruler = RuleVisitor()
-    parse_string(rule, ruler)
+    parse_string(rule, ruler)  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -86,19 +86,19 @@ def test_positive_body(rule, result):
         ),
     ],
 )
-def test_positive_head(rule, result):
+def test_positive_head(rule: str, result: list[SignedPredicate]) -> None:
     """test the collection of predicates in positive head context"""
 
     class RuleVisitor(Transformer):
         """Simple Transformer"""
 
-        def visit_Rule(self, stm):  # pylint: disable=C0103
+        def visit_Rule(self, stm: AST) -> AST:  # pylint: disable=invalid-name
             """derived visit method"""
             assert set(head_predicates(stm, {Sign.NoSign})) == set(result)
             return stm
 
     ruler = RuleVisitor()
-    parse_string(rule, ruler)
+    parse_string(rule, ruler)  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -133,9 +133,9 @@ def test_positive_head(rule, result):
         ),
     ],
 )
-def test_positive_dependencies(prg, result):
+def test_positive_dependencies(prg: str, result: list[set[Predicate]]) -> None:
     """test strongly connected component graphs"""
-    ast = []
+    ast: list[AST] = []
     parse_string(prg, ast.append)
     assert sorted(PositivePredicateDependency(ast).sccs) == sorted(result)
 
@@ -264,10 +264,12 @@ def test_positive_dependencies(prg, result):
         ),
     ],
 )
-def test_domain_predicates(prg, static, notstatic, hasdomain):
+def test_domain_predicates(
+    prg: str, static: list[Predicate], notstatic: list[Predicate], hasdomain: list[Predicate]
+) -> None:
     """test computation of static/non-static predicates and
     non cyclic domain inference"""
-    ast = []
+    ast: list[AST] = []
     parse_string(prg, ast.append)
     dp = DomainPredicates(ast)
     for pred in static:
@@ -311,9 +313,9 @@ def test_domain_predicates(prg, static, notstatic, hasdomain):
         ),
     ],
 )
-def test_nodomain_predicates(prg, hasnodomain):
+def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
     """test computation of non cyclic domain inference"""
-    ast = []
+    ast: list[AST] = []
     parse_string(prg, ast.append)
     dp = DomainPredicates(ast)
     for pred in hasnodomain:
@@ -482,22 +484,22 @@ def test_nodomain_predicates(prg, hasnodomain):
         ),
     ],
 )
-def test_domain_predicates_condition(prg, predicates, domain_program):
+def test_domain_predicates_condition(prg: str, predicates: list[Predicate], domain_program: list[str]) -> None:
     """test domain computation on whole programs"""
-    ast = []
+    ast: list[AST] = []
     parse_string(prg, ast.append)
     dp = DomainPredicates(ast)
-    strlist = []
+    strlist: list[str] = []
     for pred in predicates:
         if dp.has_domain(pred):
             strlist.extend(map(str, dp.create_domain(pred)))
     assert sorted(strlist) == sorted(domain_program)
 
 
-def test_domain_predicates_exceptions():
+def test_domain_predicates_exceptions() -> None:
     # pragma: no cover
     """test domain computation exceptions"""
-    ast = []
+    ast: list[AST] = []
     parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
     with pytest.raises(Exception):
         dp = DomainPredicates(ast)

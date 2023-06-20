@@ -1,6 +1,6 @@
 """ test aggregate equality simplifications """
 import pytest
-from clingo.ast import Transformer, parse_string
+from clingo.ast import AST, Transformer, parse_string
 
 from ngo.aggregate_equality1 import BoundComputer, EqualVariable
 from ngo.dependency import PositivePredicateDependency
@@ -13,12 +13,12 @@ from ngo.dependency import PositivePredicateDependency
 class RunBoundComputer(Transformer):
     """simple wrapper for BoundComputer"""
 
-    def __init__(self):
-        self.cbounds = set()
-        self.crest = set()
-        self.too_complicated = False
+    def __init__(self) -> None:
+        self.cbounds: set[str] = set()
+        self.crest: set[str] = set()
+        self.too_complicated: bool = False
 
-    def visit_Rule(self, rule):  # pylint: disable=C0103
+    def visit_Rule(self, rule: AST) -> AST:  # pylint: disable=invalid-name
         """derived visit method"""
         bc = BoundComputer("X")
         for node in rule.body:
@@ -49,10 +49,10 @@ class RunBoundComputer(Transformer):
         ),
     ],
 )
-def test_bound_computation(rule, bounds, rest):
+def test_bound_computation(rule: str, bounds: list[str], rest: list[str]) -> None:
     """check if variable bounds in a body are computed correctly"""
     t = RunBoundComputer()
-    parse_string(rule, t)
+    parse_string(rule, t)  # type: ignore
     assert set(bounds) == t.cbounds
     assert set(rest) == t.crest
     assert not t.too_complicated
@@ -68,10 +68,10 @@ def test_bound_computation(rule, bounds, rest):
         ":- 1 < f(X).",
     ],
 )
-def test_toocomplicated_bounds(rule):
+def test_toocomplicated_bounds(rule: str) -> None:
     """test for cases that are considered too complication as bounds for linear expressions"""
     t = RunBoundComputer()
-    parse_string(rule, t)
+    parse_string(rule, t)  # type: ignore
     assert t.too_complicated
 
 
@@ -144,9 +144,9 @@ def test_toocomplicated_bounds(rule):
         ),
     ],
 )
-def test_equal_variable_replacement(rule, result):
+def test_equal_variable_replacement(rule: str, result: str) -> None:
     """test if equality variable replacement works"""
-    prg = []
+    prg: list[AST] = []
     parse_string(rule, prg.append)
     pdg = PositivePredicateDependency(prg)
     eq = EqualVariable(pdg)
@@ -154,13 +154,13 @@ def test_equal_variable_replacement(rule, result):
     class RuleVisitor(Transformer):
         """Simple Transformer"""
 
-        def visit_Rule(self, stm):  # pylint: disable=C0103
+        def visit_Rule(self, stm: AST) -> AST:  # pylint: disable=invalid-name
             """derived visit method"""
             assert str(stm) == result
             return stm
 
     ruler = RuleVisitor()
-    parse_string(rule, lambda stm: ruler(eq(stm)))
+    parse_string(rule, lambda stm: ruler(eq(stm)))  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -176,9 +176,9 @@ def test_equal_variable_replacement(rule, result):
         ),
     ],
 )
-def test_equal_variable_reject(rule, result):
+def test_equal_variable_reject(rule: str, result: str) -> None:
     """test cases where I do not want to use the equal variable optimization"""
-    prg = []
+    prg: list[AST] = []
     parse_string(rule, prg.append)
     pdg = PositivePredicateDependency(prg)
     eq = EqualVariable(pdg)
@@ -186,10 +186,10 @@ def test_equal_variable_reject(rule, result):
     class RuleVisitor(Transformer):
         """Simple Transformer"""
 
-        def visit_Rule(self, stm):  # pylint: disable=C0103
+        def visit_Rule(self, stm: AST) -> AST:  # pylint: disable=invalid-name
             """derived visit method"""
             assert str(stm) == result
             return stm
 
     ruler = RuleVisitor()
-    parse_string(rule, lambda stm: ruler(eq(stm)))
+    parse_string(rule, lambda stm: ruler(eq(stm)))  # type: ignore

@@ -1,9 +1,10 @@
 """ test translation of min/max aggregates using chaining """
 import pytest
-from clingo.ast import parse_string
+from clingo.ast import AST, parse_string
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.utils.ast import Predicate
 
 # diable line too long warnings
 # ruff: noqa: E501
@@ -838,9 +839,9 @@ c(X) :- X = #sum { Y: person(Y) }.
         ),
     ],
 )
-def test_minmax_aggregates(prg, converted_prg):
+def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     """test minmax aggregates on whole programs"""
-    ast = []
+    ast: list[AST] = []
     parse_string(prg, ast.append)
     rdp = RuleDependency(ast)
     dp = DomainPredicates(ast)
@@ -849,12 +850,12 @@ def test_minmax_aggregates(prg, converted_prg):
     assert converted_prg == output
 
 
-def test_translation_mapping():
+def test_translation_mapping() -> None:
     """test the argument order translation class"""
     # NOTE: isn't there something already in python that can reorder things ?
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 4), (2, 1, 0))
+    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 4), (2, 1, 0))
     assert trans.translate_parameters(["X", "Y", "Z"]) == ["Z", "Y", "X"]
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (2, 1))
+    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 3), (2, 1))
     assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Y", "X"]
-    trans = MinMaxAggregator.Translation(("a", 3), ("b", 3), (None, 2, 1))
+    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 3), (None, 2, 1))
     assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Z", "Y"]

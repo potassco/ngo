@@ -6,8 +6,10 @@
 
 from collections import defaultdict
 from itertools import chain
+from typing import Any, Callable, Iterable, Iterator, Optional
 
 from clingo.ast import (
+    AST,
     AggregateFunction,
     ASTType,
     BinaryOperation,
@@ -31,15 +33,15 @@ from clingo.ast import (
 )
 from clingo.symbol import Infimum, Supremum
 
-from ngo.dependency import DOM_STR
-from ngo.utils.ast import LOC, BodyAggAnalytics, Predicate, collect_ast, potentially_unifying, predicates
+from ngo.dependency import DOM_STR, DomainPredicates, RuleDependency
+from ngo.utils.ast import LOC, BodyAggAnalytics, Predicate, collect_ast, potentially_unifying_sequence, predicates
 
 CHAIN_STR = "__chain"
 NEXT = Variable(LOC, "__NEXT")
 PREV = Variable(LOC, "__PREV")
 
 
-def _characteristic_variables(term):
+def _characteristic_variables(term: AST) -> Iterator[AST]:
     """yield all characteristic variable names of the given Term,
     this means all Variables not occuring in arithmetics, bounds, etc...
     Assumes term is unpooled.
@@ -58,16 +60,16 @@ class MinMaxAggregator:
     class Translation:
         """translates an old predicate to a new one"""
 
-        def __init__(self, oldpred, newpred, mapping):
+        def __init__(self, oldpred: Predicate, newpred: Predicate, mapping: Iterable[int | None]):
             self.oldpred = oldpred
             self.newpred = newpred
             # simple ordered list of indices or none, to map f(A1,A2,A4) to b(A1,A4,A3,A2)
             # have mapping [0,3,1], reverse mapping would be [0,2,None,1]
             self.mapping = mapping
 
-        def translate_parameters(self, arguments):
+        def translate_parameters(self, arguments: list[Any]) -> list[AST | None]:
             """given the mapping, return the mapped order of the argument terms"""
-            ret = []
+            ret: list[AST | None] = []
             for oldidx, index in enumerate(self.mapping):
                 if index is None:
                     continue
@@ -77,14 +79,19 @@ class MinMaxAggregator:
                 ret[index] = arguments[oldidx]
             return ret
 
-    def __init__(self, rule_dependency, domain_predicates):
+    MinMaxPred = tuple[int, Translation, int]
+
+    def __init__(self, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
         self.rule_dependency = rule_dependency
         self.domain_predicates = domain_predicates
-        # list of ({AggregateFunction.Max, AggregateFunction.Min}, (name,arity), index)
+        # list of ({AggregateFunction.Max, AggregateFunction.Min}, Translation, index)
         #  where index is the position of the variable indicating the minimum/maximum
-        self._minmax_preds = []
 
-    def _store_aggregate_head(self, function, head, rest_vars, max_var, new_name):
+        self._minmax_preds: list[MinMaxAggregator.MinMaxPred] = []
+
+    def _store_aggregate_head(
+        self, function: int, head: AST, rest_vars: list[AST], max_var: AST, new_name: str
+    ) -> None:
         """
         if this head represents the result of the aggregate
         store it in self._minmax_preds for other simplifications
@@ -94,7 +101,7 @@ class MinMaxAggregator:
             head.ast_type == ASTType.Literal
             and head.atom.ast_type == ASTType.SymbolicAtom
             and head.atom.symbol.ast_type == ASTType.Function
-            and len(self.rule_dependency.get_bodies((head.atom.symbol.name, len(head.atom.symbol.arguments))))
+            and len(self.rule_dependency.get_bodies(Predicate(head.atom.symbol.name, len(head.atom.symbol.arguments))))
             == 1  # only this head occurence
         ):
             return
@@ -108,15 +115,15 @@ class MinMaxAggregator:
         ]
 
         translation = self.Translation(
-            (symbol.name, len(symbol.arguments)),
-            (new_name, len(rest_vars) + 1),
+            Predicate(symbol.name, len(symbol.arguments)),
+            Predicate(new_name, len(rest_vars) + 1),
             mapping,
         )
         for i, arg in enumerate(symbol.arguments):
             if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
                 self._minmax_preds.append((function, translation, i))
 
-    def _translatable_element(self, elem):
+    def _translatable_element(self, elem: AST) -> bool:
         """check if this element of a minmax aggregate is currently translatable
         this functions can be shrunk down in the future if we lift restrictions
         """
@@ -127,7 +134,7 @@ class MinMaxAggregator:
         # NOTE: this could also be Comparisons, see issue #9
         if elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom:
             return False  # nocoverage
-        condition_pred = (
+        condition_pred = Predicate(
             elem.condition[0].atom.symbol.name,
             len(elem.condition[0].atom.symbol.arguments),
         )
@@ -135,12 +142,13 @@ class MinMaxAggregator:
             return False  # NOTE: issue #9, this check needs to be done for all conditions
         return True
 
-    def _minmax_agg(self, rule):
+    def _minmax_agg(self, rule: AST) -> Optional[AST]:
         """
         returns the first min/max aggregate in the rule body
         or None if none found
         """
         for blit in rule.body:
+            assert isinstance(blit, AST)
             if blit.ast_type == ASTType.Literal:
                 atom = blit.atom
                 if (
@@ -155,7 +163,9 @@ class MinMaxAggregator:
                     return blit
         return None
 
-    def _create_aggregate_replacement(self, agg, elem, rest_vars, new_predicate: Predicate, lits_with_vars):
+    def _create_aggregate_replacement(
+        self, agg: AST, elem: AST, rest_vars: list[AST], new_predicate: Predicate, lits_with_vars: list[AST]
+    ) -> list[AST]:
         """return a list of rules as a replacement of this aggregate element"""
         # 2. create dom and next_ predicates for it, and then use it to
         # create chain with elem.condition + lits_with_vars
@@ -277,7 +287,7 @@ class MinMaxAggregator:
         ret.append(Rule(LOC, head, body))
         return ret
 
-    def _process_rule(self, rule):
+    def _process_rule(self, rule: AST) -> list[AST]:
         """returns a list of rules to replace this rule"""
 
         # TODO: currently only one aggregate is translated, create loop
@@ -311,24 +321,24 @@ class MinMaxAggregator:
         head = SymbolicAtom(Function(LOC, new_name, [weight], False))
         lits_with_vars = []
         lits_without_vars = []
-        rest_vars = set()  # variable names that are used inside but also outside of the aggregate
+        rest_var_names: set[str] = set()  # variable names that are used in- but also outside of the aggregate
         inside_variables = set(
             map(
-                lambda x: x.name,
+                lambda x: x.name,  # type: ignore
                 chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)),
             )
         )
         for blit in rule.body:
             if blit == agg:
                 continue
-            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))
+            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))  # type: ignore
             if len(blit_vars) > 0 and blit_vars <= inside_variables:
-                rest_vars.update(inside_variables.intersection(blit_vars))
+                rest_var_names.update(inside_variables.intersection(blit_vars))
                 lits_with_vars.append(blit)
             else:
                 lits_without_vars.append(blit)
         # variables that are used inside but also outside of the aggregate
-        rest_vars = sorted([Variable(LOC, name) for name in rest_vars])
+        rest_vars: list[AST] = sorted([Variable(LOC, name) for name in rest_var_names])
 
         self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
         if not self.domain_predicates.has_domain(new_predicate):
@@ -377,17 +387,25 @@ class MinMaxAggregator:
         self._store_aggregate_head(agg.atom.function, rule.head, rest_vars, max_var, new_name)
         return ret
 
-    def _create_replacement(self, minmaxpred, minimize, terms, oldmax, rest_cond, function):
+    def _create_replacement(
+        self,
+        minmaxpred: MinMaxPred,
+        minimize: bool,
+        terms: list[AST],
+        oldmax: AST,
+        rest_cond: list[AST],
+        function: Callable[[AST, list[AST], list[AST]], AST],
+    ) -> list[AST]:
         assert minmaxpred is not None
 
         if minimize:
 
-            def negate_if(x):
+            def negate_if(x: AST) -> AST:
                 return x
 
         else:
 
-            def negate_if(x):
+            def negate_if(x: AST) -> AST:
                 return UnaryOperation(LOC, UnaryOperator.Minus, x)
 
         aggtype, translation, idx = minmaxpred
@@ -408,12 +426,14 @@ class MinMaxAggregator:
 
         newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
         newargs = [next_ if i == idx else x for i, x in enumerate(newargs)]
+        for arg in newargs:
+            assert isinstance(arg, AST)
         chainpred = Literal(
             LOC,
             Sign.NoSign,
-            SymbolicAtom(Function(LOC, chain_name, newargs, False)),
+            SymbolicAtom(Function(LOC, chain_name, newargs, False)),  # type: ignore
         )
-        dompred = (f"{DOM_STR}{newpred[0]}", 1)
+        dompred = Predicate(f"{DOM_STR}{newpred[0]}", 1)
         nextpred = Literal(
             LOC,
             Sign.NoSign,
@@ -435,16 +455,16 @@ class MinMaxAggregator:
         weight = negate_if(next_)
         new_terms = [Function(LOC, chain_name, [SymbolicTerm(LOC, infsup), next_], False)] + list(terms)
         if aggtype == AggregateFunction.Max:
-            minmaxpred = self.domain_predicates.min_predicate(dompred, 0).name
+            name = self.domain_predicates.min_predicate(dompred, 0).name
         else:
-            minmaxpred = self.domain_predicates.max_predicate(dompred, 0).name
+            name = self.domain_predicates.max_predicate(dompred, 0).name
         minmaxlit = Literal(
             LOC,
             Sign.NoSign,
             SymbolicAtom(
                 Function(
                     LOC,
-                    minmaxpred,
+                    name,
                     [next_],
                     False,
                 )
@@ -455,7 +475,7 @@ class MinMaxAggregator:
         # (also would require more complex variable bindings)
         return ret
 
-    def _replace_results_in_minimize(self, stm, minimizes):
+    def _replace_results_in_minimize(self, stm: AST, minimizes: dict[tuple[AST, ...], list[AST]]) -> list[AST]:
         """
         return list of statements that replaces the minimize statement
         or returns the statement itself in a list
@@ -481,22 +501,18 @@ class MinMaxAggregator:
         else:
             return [stm]
 
-        preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in stm.body))
-        preds = [x.pred for x in preds]
-        rest_cond = []
-        minmaxpred = None
-        oldmax = None
+        preds = [
+            x.pred
+            for x in set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in stm.body))
+        ]
+        minmaxpred: Optional[MinMaxAggregator.MinMaxPred] = None
         for aggtype, translation, idx in self._minmax_preds:
             if translation.oldpred in preds:
                 # check if it is globally safe to assume a unique tuple semantics
-                def pot_unif(lhs, rhs):
-                    if len(lhs) != len(rhs):
-                        return False
-                    return all(map(lambda x: potentially_unifying(*x), zip(lhs, rhs)))
 
                 unsafe = []
                 for terms, objective in minimizes.items():
-                    if pot_unif(terms, term_tuple):
+                    if potentially_unifying_sequence(terms, term_tuple):
                         unsafe.extend([x for x in objective if x != stm])
 
                 if not unsafe:
@@ -505,6 +521,8 @@ class MinMaxAggregator:
         if minmaxpred is None:
             return [stm]
 
+        rest_cond: list[AST] = []
+        oldmax: Optional[AST] = None
         for cond in stm.body:
             if minmaxpred is not None and list(map(lambda x: x.pred, predicates(cond, {Sign.NoSign}))) == [
                 minmaxpred[1].oldpred
@@ -512,13 +530,13 @@ class MinMaxAggregator:
                 oldmax = cond
             else:
                 rest_cond.append(cond)
+        assert oldmax is not None
 
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
         # see issue #8
-        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
-        term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))
-        term_vars = {x.name for x in term_vars}
+        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}  # type: ignore
+        term_vars = {x.name for x in chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))}
         if not old_vars <= term_vars:
             return [stm]
 
@@ -532,33 +550,26 @@ class MinMaxAggregator:
         )
         return replacement
 
-    def _split_element(self, elem, rest_elems):
+    def _split_element(self, elem: AST, rest_elems: list[AST]) -> tuple[Optional[AST], Optional[MinMaxPred], list[AST]]:
         """
         splits element conditions into the first valid min/max predicate it finds and the other conditions
         returns it as triple
         (max predicate, translation, rest of the conditions)
         """
-        preds = set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in elem.condition))
-        preds = [x.pred for x in preds]
-        rest_cond = []
-        minmaxpred = None
-        oldmax = None
+        preds = [
+            x.pred
+            for x in set(chain.from_iterable(predicates(b, {Sign.NoSign, Sign.DoubleNegation}) for b in elem.condition))
+        ]
+        rest_cond: list[AST] = []
+        minmaxpred: Optional[MinMaxAggregator.MinMaxPred] = None
+        oldmax: Optional[AST] = None
         for aggtype, translation, idx in self._minmax_preds:
             if translation.oldpred in preds:
                 # check if it is locally safe to assume a unique tuple semantics
-                def pot_unif(lhs, rhs):
-                    if len(lhs) != len(rhs):
-                        return False
-                    return all(
-                        map(
-                            lambda x: potentially_unifying(*x),
-                            zip(lhs, rhs),
-                        )
-                    )
 
                 # check if any of the other elements is potentially unifying and therefore unsafe
                 # pylint: disable=cell-var-from-loop
-                if not any(map(lambda x: pot_unif(x.terms, elem.terms), rest_elems)):
+                if not any(map(lambda x: potentially_unifying_sequence(x.terms, elem.terms), rest_elems)):
                     minmaxpred = (aggtype, translation, idx)
                     break
 
@@ -571,7 +582,7 @@ class MinMaxAggregator:
                 rest_cond.append(cond)
         return oldmax, minmaxpred, rest_cond
 
-    def _replace_results_in_sum_agg_elem(self, elem, rest_elems):
+    def _replace_results_in_sum_agg_elem(self, elem: AST, rest_elems: list[AST]) -> list[AST]:
         """
         replaces min/max predicates in sum aggregate elements by returning a
         new list of elements
@@ -596,13 +607,13 @@ class MinMaxAggregator:
         old_max, minmaxpred, rest_cond = self._split_element(elem, rest_elems)
         if minmaxpred is None:
             return [elem]
+        assert old_max is not None
 
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
         # NOTE: is this check really useful ? Why
-        old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}
-        term_vars = chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))
-        term_vars = {x.name for x in term_vars}
+        old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}  # type: ignore
+        term_vars = {x.name for x in chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))}
         if not old_vars <= term_vars:
             return [elem]
 
@@ -616,7 +627,7 @@ class MinMaxAggregator:
         )
         return replacement
 
-    def _replace_results_in_sum_agg(self, agg):
+    def _replace_results_in_sum_agg(self, agg: AST) -> AST:
         """
         replaces min/max predicates in sum aggregates by returning an aggregate
         (this might the a new one or the old one)
@@ -628,7 +639,7 @@ class MinMaxAggregator:
         return Literal(LOC, agg.sign, BodyAggregate(LOC, atom.left_guard, atom.function, elements, atom.right_guard))
 
     # NOTE. this might actually not be advantageous as it produces a larger set of potential sums
-    def _replace_results_in_sum(self, stm):
+    def _replace_results_in_sum(self, stm: AST) -> list[AST]:
         """
         replaces min/max predicates in sum aggregates by returning a list of statements
         or the old statement if no replacement is possible
@@ -647,7 +658,7 @@ class MinMaxAggregator:
                 body.append(b)
         return [Rule(LOC, stm.head, body)]
 
-    def _replace_results_in_x(self, prg, minimizes):
+    def _replace_results_in_x(self, prg: list[AST], minimizes: dict[tuple[AST, ...], list[AST]]) -> list[AST]:
         """
         replace all predicates that computed max/minimum values with their order encoding
         in sum contexts
@@ -670,13 +681,13 @@ class MinMaxAggregator:
                 continue
         return ret
 
-    def execute(self, prg):
+    def execute(self, prg: list[AST]) -> list[AST]:
         """
         replace easy min/max aggregates with chaining rules
         also replace the usage of the results in sum and optimize conditions
         """
-        ret = []
-        minimizes = defaultdict(list)
+        ret: list[AST] = []
+        minimizes: dict[tuple[AST, ...], list[AST]] = defaultdict(list)
         for rule in prg:
             if rule.ast_type == ASTType.Minimize:
                 minimizes[

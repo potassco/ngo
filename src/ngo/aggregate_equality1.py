@@ -5,12 +5,12 @@
 """
 from itertools import product
 
-from clingo.ast import ASTType, Comparison, Guard, Literal, Sign, Transformer
+from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Sign, Transformer
 
+from ngo.dependency import PositivePredicateDependency
 from ngo.utils.ast import (
     LOC,
     BodyAggAnalytics,
-    Predicate,
     contains_ast,
     contains_variable,
     negate_comparison,
@@ -22,13 +22,13 @@ from ngo.utils.ast import (
 class BoundComputer:
     """class to find all bound restrictions of a variable varname"""
 
-    def __init__(self, varname):
+    def __init__(self, varname: str):
         self.varname = varname
-        self.too_complicated = False
-        self.bounds = []
-        self.rest = []
+        self.too_complicated: bool = False
+        self.bounds: list[AST] = []
+        self.rest: list[AST] = []
 
-    def __create_ordered_comparison(self, lhs, op, rhs):
+    def __create_ordered_comparison(self, lhs: AST, op: ComparisonOperator, rhs: AST) -> None:
         if lhs.ast_type == ASTType.Variable and lhs.name == self.varname:
             self.bounds.append(Comparison(lhs, [Guard(op, rhs)]))
         elif rhs.ast_type == ASTType.Variable and rhs.name == self.varname:
@@ -41,7 +41,7 @@ class BoundComputer:
             )
             self.rest.append(Literal(LOC, Sign.NoSign, Comparison(lhs, [Guard(op, rhs)])))
 
-    def compute_bounds(self, literal):
+    def compute_bounds(self, literal: AST) -> None:
         """
         compute self.bounds as bounds for varname from a given ast
         compute self.rest for all non bounds for varname from a given ast
@@ -60,8 +60,8 @@ class BoundComputer:
             self.too_complicated = True
             return
 
-        sign = literal.sign
-        comp = literal.atom
+        sign: Sign = literal.sign
+        comp: AST = literal.atom
 
         if sign != Sign.NoSign and len(comp.guards) > 1:
             self.too_complicated = True
@@ -85,7 +85,7 @@ class BoundComputer:
                 self.too_complicated = True
                 return
         else:
-            long_comp = []
+            long_comp: list[AST | ComparisonOperator] = []
             long_comp.append(comp.term)
             for guard in comp.guards:
                 long_comp.append(guard.comparison)
@@ -94,6 +94,9 @@ class BoundComputer:
                 lhs = long_comp[i]
                 op = long_comp[i + 1]
                 rhs = long_comp[i + 2]
+                assert isinstance(lhs, AST)
+                assert isinstance(op, int)
+                assert isinstance(rhs, AST)
                 self.__create_ordered_comparison(lhs, op, rhs)
         return
 
@@ -107,11 +110,11 @@ class EqualVariable(Transformer):
 
     # TODO: can't replace multiple aggregates at the same time yet, needs a fixpoint calculation
 
-    def __init__(self, dependency):
+    def __init__(self, dependency: PositivePredicateDependency):
         self.dependency = dependency
 
-    def _create_analytics_from_body(self, body):
-        analytics = {}
+    def _create_analytics_from_body(self, body: list[AST]) -> dict[int, BodyAggAnalytics]:
+        analytics: dict[int, BodyAggAnalytics] = {}
         for i, blit in enumerate(body):
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate:
                 agg_info = BodyAggAnalytics(blit.atom)
@@ -119,7 +122,7 @@ class EqualVariable(Transformer):
                     analytics[i] = agg_info
         return analytics
 
-    def visit_Rule(self, node):  # pylint: disable=C0103
+    def visit_Rule(self, node: AST) -> AST:  # pylint: disable=invalid-name
         """visit Rule callback"""
         assert node.ast_type == ASTType.Rule
         pheads = predicates(node.head, {Sign.NoSign})

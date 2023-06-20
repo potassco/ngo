@@ -1,7 +1,7 @@
 """ general ast util functions and classes """
 from dataclasses import dataclass
 from itertools import product
-from typing import Callable, Iterable, Iterator, NamedTuple
+from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
 from clingo.ast import AST, ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer
 
@@ -148,6 +148,21 @@ def _potentially_unifying(lhs: AST, rhs: AST) -> bool:
         )
 
     return True
+
+
+def potentially_unifying_sequence(lhs: Sequence[AST], rhs: Sequence[AST]) -> bool:
+    """
+    returns True if both sequences are potentially unifying
+    see @potentially_unifying
+    """
+    if len(lhs) != len(rhs):
+        return False
+    return all(
+        map(
+            lambda x: potentially_unifying(*x),
+            zip(lhs, rhs),
+        )
+    )
 
 
 def potentially_unifying(lhs: AST, rhs: AST) -> bool:

@@ -121,7 +121,7 @@ class DomainPredicates:
     def __init__(self, prg: Iterable[AST]):
         self._not_static: set[Predicate] = set()  # set of predicates that is not already a domain predicate
 
-        prg: list[AST] = list(prg) # type: ignore
+        prg: list[AST] = list(prg)  # type: ignore
         self.domains: dict[Predicate, Predicate] = {}  # key = ("p",3) -> ("dom",3)
         self.domain_rules: dict[AST, list[list[AST]]] = defaultdict(list)  # atom -> [conditions, ...]
         self._too_complex: set[
@@ -164,11 +164,11 @@ class DomainPredicates:
             self._too_complex.update([scc[0]])
 
         ### remove predicates derived by using not_static predicates
-        for node in nx.topological_sort(cycle_free_pdg): # type: ignore
-            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))): # type: ignore
+        for node in nx.topological_sort(cycle_free_pdg):  # type: ignore
+            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):  # type: ignore
                 self._not_static.add(node)
 
-    def is_static(self, pred: Predicate)  -> bool:
+    def is_static(self, pred: Predicate) -> bool:
         """
         returns true if predicate can be computed statically
         """
@@ -207,7 +207,7 @@ class DomainPredicates:
         """
         return Predicate(f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
 
-    def __create_domain_for_condition(self, node: AST)  -> Iterator[AST]:
+    def __create_domain_for_condition(self, node: AST) -> Iterator[AST]:
         """yield all domain rules for all symbolic atoms in node"""
         for symbol in collect_ast(node, "SymbolicAtom"):
             symbol = symbol.symbol
@@ -262,7 +262,7 @@ class DomainPredicates:
                 " Position exceeds arity, starting with 0."
             )
 
-        def _create_projected_lit(pred: Predicate, variables: Mapping[int, AST], sign : Sign =Sign.NoSign) -> AST:
+        def _create_projected_lit(pred: Predicate, variables: Mapping[int, AST], sign: Sign = Sign.NoSign) -> AST:
             """
             Given a predicate pred, create a literal with only projected variables at certain positions.
             Given p/3, {1 : Variable(LOC, "X"), 2: Variable(LOC, "Y")} create Literal p(_,X,Y)
@@ -286,14 +286,14 @@ class DomainPredicates:
         next_pred = self.next_predicate(pred, position)
         dom_pred = self.domain_predicate(pred)
 
-        var_x : AST = Variable(LOC, "X")
-        var_l : AST = Variable(LOC, "L")
-        var_p : AST = Variable(LOC, "P")
-        var_n : AST = Variable(LOC, "N")
-        var_b : AST = Variable(LOC, "B")
-        dom_lit_l : AST = _create_projected_lit(dom_pred, {position: var_l})
+        var_x: AST = Variable(LOC, "X")
+        var_l: AST = Variable(LOC, "L")
+        var_p: AST = Variable(LOC, "P")
+        var_n: AST = Variable(LOC, "N")
+        var_b: AST = Variable(LOC, "B")
+        dom_lit_l: AST = _create_projected_lit(dom_pred, {position: var_l})
 
-        min_body : AST = Literal(
+        min_body: AST = Literal(
             LOC,
             Sign.NoSign,
             BodyAggregate(
@@ -310,7 +310,7 @@ class DomainPredicates:
             _create_projected_lit(min_pred, {0: var_x}),
             [min_body],
         )
-        max_body : AST = Literal(
+        max_body: AST = Literal(
             LOC,
             Sign.NoSign,
             BodyAggregate(
@@ -397,7 +397,7 @@ class DomainPredicates:
             self._not_static.update([Predicate(atom.symbol.name, len(atom.symbol.arguments))])
         # TODO: refactor, no intermediate map needed anymore, could work on self.domain_rules
         # refactoring then only needs to take new domain rules into account
-        domain_rules : dict[AST, list[list[AST]]]= defaultdict(list)
+        domain_rules: dict[AST, list[list[AST]]] = defaultdict(list)
 
         domain_rules[atom] = bodies
 
@@ -447,9 +447,9 @@ class DomainPredicates:
         def has_head_bounded(pair: tuple[AST, list[list[AST]]]) -> bool:
             (head, _) = pair
             head_variables: set[str]
-            head_variables = set(map(lambda x: x.name, collect_ast(head, "Variable"))) # type: ignore
+            head_variables = set(map(lambda x: x.name, collect_ast(head, "Variable")))  # type: ignore
             for conditions in domain_rules[head]:
-                head_variables -= set(map(lambda x: x.name, collect_bound_variables(conditions))) # type: ignore
+                head_variables -= set(map(lambda x: x.name, collect_bound_variables(conditions)))  # type: ignore
             return len(head_variables) == 0
 
         domain_rules = dict(filter(has_head_bounded, domain_rules.items()))
@@ -461,7 +461,7 @@ class DomainPredicates:
                         return False
             return True
 
-        def replace_domain(atom : AST) -> AST:
+        def replace_domain(atom: AST) -> AST:
             assert atom.ast_type == ASTType.SymbolicAtom
             assert atom.symbol.ast_type == ASTType.Function  # not necessary, but I still have to handle the case, TODO
             name = atom.symbol.name
@@ -471,7 +471,7 @@ class DomainPredicates:
             return atom
 
         for head, all_conds in domain_rules.items():
-            all_domain : bool = True
+            all_domain: bool = True
             for conditions in all_conds:
                 if not all(map(have_domain, conditions)):
                     all_domain = False
@@ -479,7 +479,7 @@ class DomainPredicates:
             if not all_domain:
                 continue
             # replace all predicates with their respective domain predicates
-            new_conditions : list[list[AST]]= []
+            new_conditions: list[list[AST]] = []
             for conditions in all_conds:
                 copy_conditions = deepcopy(conditions)
                 for cond in copy_conditions:
