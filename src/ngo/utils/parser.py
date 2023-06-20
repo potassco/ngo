@@ -27,7 +27,7 @@ def get_parser() -> ArgumentParser:
         description=dedent(
             """\
             ngo
-            filldescription
+            non ground optimizer
             """
         ),
     )

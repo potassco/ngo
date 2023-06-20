@@ -4,7 +4,7 @@ The main entry point for the application.
 
 from argparse import Action, ArgumentParser, Namespace
 from itertools import chain
-from typing import Optional, Any
+from typing import Any, Optional
 
 from clingo.ast import AST, parse_files
 
@@ -21,6 +21,7 @@ class VerifyEnable(Action):
     """
     verify and extend enable option set
     """
+
     def __call__(
         self, parser: ArgumentParser, namespace: Namespace, values: Any, option_string: Optional[str] = None
     ) -> None:
@@ -39,13 +40,19 @@ def main() -> None:
 
     parser = get_parser()
     parser.add_argument(
-        "--enable", action=VerifyEnable, type=str.lower, nargs="+", choices=["all", "none"] + OPTIONS, default=OPTIONS
+        "--enable",
+        action=VerifyEnable,
+        type=str.lower,
+        nargs="+",
+        choices=["all", "none"] + OPTIONS,
+        default=OPTIONS,
+        help="enables a set of traits",
     )
     args = parser.parse_args()
     log = setup_logger("main", args.log)
 
     prg: list[AST] = []
-    parse_files(["test.lp"], prg.append, logger=log) # type: ignore
+    parse_files(["-"], prg.append, logger=log)  # type: ignore
     ### create general tooling and analyzing classes
     rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)
@@ -56,7 +63,7 @@ def main() -> None:
         eq = EqualVariable(pdg)
         prg = list(chain(map(eq, prg)))
 
-    if "minmax_chains" in args.enable:
+    if "summinmax_chains" in args.enable:
         mma = MinMaxAggregator(rdp, dp)
         prg = mma.execute(prg)
 
