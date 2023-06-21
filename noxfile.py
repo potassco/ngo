@@ -7,7 +7,7 @@ nox.options.sessions = "lint_ruff", "lint_pylint", "typecheck", "test"
 EDITABLE_TESTS = True
 PYTHON_VERSIONS = None
 if "GITHUB_ACTIONS" in os.environ:
-    PYTHON_VERSIONS = ["3.7", "3.11"]
+    PYTHON_VERSIONS = ["3.11"]
     EDITABLE_TESTS = False
 
 EXTRA_INSTALL = ["--extra-index-url", "https://test.pypi.org/simple/"]
