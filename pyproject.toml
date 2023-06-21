@@ -41,6 +41,14 @@ argument-rgx = "^[a-z][a-z0-9]*((_[a-z0-9]+)*_?)?$"
 variable-rgx = "^[a-z][a-z0-9]*((_[a-z0-9]+)*_?)?$"
 good-names = ["_", "M", "N", "B", "A", "Nn", "Bn", "An"]
 
+[tool.pylint.miscellanous]
+
+# List of note tags to take in consideration, separated by a comma.
+notes = [] # "FIXME", "XXX", "TODO"
+
+[tool.pylint."messages control"]
+disable = ["logging-fstring-interpolation"]
+
 [tool.coverage.run]
 source = ["ngo", "tests"]
 omit = ["*/ngo/__main__.py"]

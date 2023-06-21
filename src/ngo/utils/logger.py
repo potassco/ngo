@@ -4,6 +4,7 @@ Setup project wide loggers.
 
 import logging
 import sys
+from typing import Optional
 
 COLORS = {
     "GREY": "\033[90m",
@@ -20,35 +21,33 @@ class SingleLevelFilter(logging.Filter):
     Filter levels.
     """
 
-    def __init__(self, passlevel, reject):
+    def __init__(self, passlevel: int, reject: bool):
         # pylint: disable=super-init-not-called
         self.passlevel = passlevel
         self.reject = reject
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         if self.reject:
             return record.levelno != self.passlevel  # nocoverage
 
         return record.levelno == self.passlevel
 
 
-def setup_logger(name, level):
+def _setup_logger(name: str) -> logging.Logger:
     """
     Setup logger.
     """
 
     logger = logging.getLogger(name)
     logger.propagate = False
-    logger.setLevel(level)
-    log_message_str = "{}%(levelname)s:{}  - %(message)s{}"
+    logger.setLevel(logging.ERROR)
+    log_message_str = "{}%(levelname)s:%(name)s{}  - %(message)s{}"
 
-    def set_handler(level, color):
+    def set_handler(level: int, color: str) -> None:
         handler = logging.StreamHandler(sys.stderr)
         handler.addFilter(SingleLevelFilter(level, False))
         handler.setLevel(level)
-        formatter = logging.Formatter(
-            log_message_str.format(COLORS[color], COLORS["GREY"], COLORS["NORMAL"])
-        )
+        formatter = logging.Formatter(log_message_str.format(COLORS[color], COLORS["GREY"], COLORS["NORMAL"]))
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -58,3 +57,21 @@ def setup_logger(name, level):
     set_handler(logging.ERROR, "RED")
 
     return logger
+
+
+def singleton_factory_logger(name: str, level: Optional[int] = None) -> logging.Logger:
+    """
+    get or create a new logger with a specific name
+    use level to set the global level of all loggers
+    """
+    singleton_factory_logger.logger.setdefault(name, _setup_logger(name))  # type: ignore
+    if level is not None:
+        singleton_factory_logger.level = level  # type: ignore
+    if singleton_factory_logger.level is not None:  # type: ignore
+        for logger in singleton_factory_logger.logger.values():  # type: ignore
+            logger.setLevel(level)
+    return singleton_factory_logger.logger[name]  # type: ignore
+
+
+singleton_factory_logger.level = None  # type: ignore
+singleton_factory_logger.logger: dict[str, logging.Logger] = {}  # type: ignore
