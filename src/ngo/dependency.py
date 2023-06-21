@@ -407,7 +407,7 @@ class DomainPredicates:
             assert head.ast_type == ASTType.SymbolicAtom
             name = head.symbol.name
             arity = len(head.symbol.arguments)
-            return (name, arity) not in self._too_complex
+            return Predicate(name, arity) not in self._too_complex
 
         domain_rules = dict(filter(not_too_complex, domain_rules.items()))
 
@@ -446,11 +446,12 @@ class DomainPredicates:
 
         def has_head_bounded(pair: tuple[AST, list[list[AST]]]) -> bool:
             (head, _) = pair
-            head_variables: set[str]
-            head_variables = set(map(lambda x: x.name, collect_ast(head, "Variable")))
+            head_variables: set[str] = set(map(lambda x: x.name, collect_ast(head, "Variable")))
             for conditions in domain_rules[head]:
                 head_variables -= set(map(lambda x: x.name, collect_bound_variables(conditions)))
-            return len(head_variables) == 0
+                if len(head_variables) > 0:
+                    return False
+            return True
 
         domain_rules = dict(filter(has_head_bounded, domain_rules.items()))
 

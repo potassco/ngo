@@ -482,6 +482,17 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
                 "__dom_b(X) :- a(X).",
             ],
         ),
+        (
+            """
+            1 = { at((X+A),(Y+B),S): field((X+A),(Y+B)), diff(A,B), not wall(X,Y,(X+A),(Y+B)) } :-
+              step(S); at(X,Y,(S-1)); goal(X1,Y1); not at(X1,Y1,(S-1)).
+            end(S) :- goal(X,Y); at(X,Y,S).
+            """,
+            [
+                Predicate("end", 1),
+            ],
+            [],
+        ),
     ],
 )
 def test_domain_predicates_condition(prg: str, predicates: list[Predicate], domain_program: list[str]) -> None:
