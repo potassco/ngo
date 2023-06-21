@@ -333,3 +333,8 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
                     if len(variables - bound_variables) <= 1:
                         bound_variables.update(variables)
     return bound_variables
+
+
+def loc2str(loc: Location) -> str:
+    """format location to be a nice looking string"""
+    return f"{loc.begin.filename}:{loc.begin.line}:{loc.begin.column}"

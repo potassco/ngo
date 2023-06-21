@@ -13,10 +13,14 @@ from ngo.utils.ast import (
     BodyAggAnalytics,
     contains_ast,
     contains_variable,
+    loc2str,
     negate_comparison,
     predicates,
     rhs2lhs_comparison,
 )
+from ngo.utils.logger import singleton_factory_logger
+
+log = singleton_factory_logger("equality")
 
 
 class BoundComputer:
@@ -129,6 +133,7 @@ class EqualVariable(Transformer):
 
         for i, agg_info in self._create_analytics_from_body(node.body).items():
             if contains_variable(node.head, agg_info.equal_variable_bound[0]):
+                log.info(f"Skip {loc2str(node.location)} as head contains assignment variable.")
                 continue
             cont = False
             pbodies = predicates(node.body[i].atom, {Sign.NoSign})
@@ -138,6 +143,7 @@ class EqualVariable(Transformer):
             ):
                 if self.dependency.are_dependent([head, body]):
                     cont = True
+                    log.info(f"Skip {loc2str(node.location)} as rule is contained in a positive cycle.")
                     break
             if cont:
                 continue
@@ -160,4 +166,5 @@ class EqualVariable(Transformer):
                     if len(bcomp.bounds) == 2:
                         agg = agg.update(right_guard=bcomp.bounds[1])
                     return node.update(body=[node.body[i].update(atom=agg, sign=sign)] + bcomp.rest)
+            log.info(f"Skip {loc2str(node.location)} as bounds are too complicated.")
         return node

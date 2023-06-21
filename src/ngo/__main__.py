@@ -11,7 +11,7 @@ from clingo.ast import AST, parse_files
 from ngo.aggregate_equality1 import EqualVariable
 from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.minmax_aggregates import MinMaxAggregator
-from ngo.utils.logger import setup_logger
+from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import get_parser
 
 OPTIONS = ["equalities", "summinmax_chains"]
@@ -49,10 +49,10 @@ def main() -> None:
         help="enables a set of traits",
     )
     args = parser.parse_args()
-    log = setup_logger("main", args.log)
+    log = singleton_factory_logger("main", args.log)
 
     prg: list[AST] = []
-    parse_files(["-"], prg.append, logger=log)  # type: ignore
+    parse_files(["-"], prg.append, logger=log.warn)
     ### create general tooling and analyzing classes
     rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)

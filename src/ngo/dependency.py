@@ -447,9 +447,9 @@ class DomainPredicates:
         def has_head_bounded(pair: tuple[AST, list[list[AST]]]) -> bool:
             (head, _) = pair
             head_variables: set[str]
-            head_variables = set(map(lambda x: x.name, collect_ast(head, "Variable")))  # type: ignore
+            head_variables = set(map(lambda x: x.name, collect_ast(head, "Variable")))
             for conditions in domain_rules[head]:
-                head_variables -= set(map(lambda x: x.name, collect_bound_variables(conditions)))  # type: ignore
+                head_variables -= set(map(lambda x: x.name, collect_bound_variables(conditions)))
             return len(head_variables) == 0
 
         domain_rules = dict(filter(has_head_bounded, domain_rules.items()))

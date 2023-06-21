@@ -22,6 +22,7 @@ from clingo.ast import (
     Function,
     Guard,
     Literal,
+    Location,
     Minimize,
     Rule,
     Sign,
@@ -34,7 +35,18 @@ from clingo.ast import (
 from clingo.symbol import Infimum, Supremum
 
 from ngo.dependency import DOM_STR, DomainPredicates, RuleDependency
-from ngo.utils.ast import LOC, BodyAggAnalytics, Predicate, collect_ast, potentially_unifying_sequence, predicates
+from ngo.utils.ast import (
+    LOC,
+    BodyAggAnalytics,
+    Predicate,
+    collect_ast,
+    loc2str,
+    potentially_unifying_sequence,
+    predicates,
+)
+from ngo.utils.logger import singleton_factory_logger
+
+log = singleton_factory_logger("summinmax_chains")
 
 CHAIN_STR = "__chain"
 NEXT = Variable(LOC, "__NEXT")
@@ -123,22 +135,29 @@ class MinMaxAggregator:
             if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
                 self._minmax_preds.append((function, translation, i))
 
-    def _translatable_element(self, elem: AST) -> bool:
+    def _translatable_element(self, loc: Location, elem: AST) -> bool:
         """check if this element of a minmax aggregate is currently translatable
         this functions can be shrunk down in the future if we lift restrictions
         """
         # TODO: create a new domain if several conditions are used, also create next_ for this domain, issue #9
         if len(elem.condition) > 1:
+            log.info(
+                f"Cannot translate {loc2str(loc)} as multiple conditions are currently not supported."
+            )  # nocoverage
             return False  # nocoverage
         # TODO: lift restrictions, currently only needed to get some domain
         # NOTE: this could also be Comparisons, see issue #9
         if elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom:
+            log.info(
+                f"Cannot translate {loc2str(loc)} as only SymbolicAtoms as conditions " "are currently not supported."
+            )  # nocoverage
             return False  # nocoverage
         condition_pred = Predicate(
             elem.condition[0].atom.symbol.name,
             len(elem.condition[0].atom.symbol.arguments),
         )
-        if not self.domain_predicates.has_domain(condition_pred) or self.domain_predicates.is_static(condition_pred):
+        if not self.domain_predicates.has_domain(condition_pred):
+            log.info(f"Cannot translate {loc2str(loc)} as I cannot infer the domain of {condition_pred}.")
             return False  # NOTE: issue #9, this check needs to be done for all conditions
         return True
 
@@ -303,7 +322,7 @@ class MinMaxAggregator:
         # collect all literals outside that aggregate that use the same variables as inside it
         elem = agg.atom.elements[0]
 
-        if not self._translatable_element(elem):
+        if not self._translatable_element(agg.atom.location, elem):
             return [rule]  # nocoverage, #issue9
 
         number_of_aggregate = 0
@@ -324,14 +343,14 @@ class MinMaxAggregator:
         rest_var_names: set[str] = set()  # variable names that are used in- but also outside of the aggregate
         inside_variables = set(
             map(
-                lambda x: x.name,  # type: ignore
+                lambda x: x.name,
                 chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)),
             )
         )
         for blit in rule.body:
             if blit == agg:
                 continue
-            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))  # type: ignore
+            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))
             if len(blit_vars) > 0 and blit_vars <= inside_variables:
                 rest_var_names.update(inside_variables.intersection(blit_vars))
                 lits_with_vars.append(blit)
@@ -342,6 +361,10 @@ class MinMaxAggregator:
 
         self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
         if not self.domain_predicates.has_domain(new_predicate):
+            log.info(
+                f"Cannot translate {loc2str(agg.location)} as I cannot infer "
+                "a domain for {[list(chain(elem.condition, lits_with_vars))]}."
+            )  # nocoverage
             # NOTE: issue #9, this should become an assert
             return [rule]  # nocoverage
 
@@ -499,6 +522,7 @@ class MinMaxAggregator:
             varname = stm.weight.argument.name
             minimize = False
         else:
+            log.info(f"Cannot optimize {loc2str(stm.location)} as the weight is not simple enough.")
             return [stm]
 
         preds = [
@@ -519,6 +543,7 @@ class MinMaxAggregator:
                     minmaxpred = (aggtype, translation, idx)
                     break
         if minmaxpred is None:
+            log.info(f"Cannot optimize {loc2str(stm.location)} as the tuple is not globally unique.")
             return [stm]
 
         rest_cond: list[AST] = []
@@ -535,9 +560,13 @@ class MinMaxAggregator:
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
         # see issue #8
-        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}  # type: ignore
+        old_vars = set(map(lambda x: x.name, collect_ast(oldmax, "Variable"))) - {varname}
         term_vars = {x.name for x in chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))}
         if not old_vars <= term_vars:
+            log.info(
+                f"Cannot optimize {loc2str(stm.location)} as not all variables {old_vars} are used in the tuple."
+                "This might be a bug, see issue #8."
+            )
             return [stm]
 
         replacement = self._create_replacement(
@@ -550,7 +579,9 @@ class MinMaxAggregator:
         )
         return replacement
 
-    def _split_element(self, elem: AST, rest_elems: list[AST]) -> tuple[Optional[AST], Optional[MinMaxPred], list[AST]]:
+    def _split_element(
+        self, loc: Location, elem: AST, rest_elems: list[AST]
+    ) -> tuple[Optional[AST], Optional[MinMaxPred], list[AST]]:
         """
         splits element conditions into the first valid min/max predicate it finds and the other conditions
         returns it as triple
@@ -572,6 +603,7 @@ class MinMaxAggregator:
                 if not any(map(lambda x: potentially_unifying_sequence(x.terms, elem.terms), rest_elems)):
                     minmaxpred = (aggtype, translation, idx)
                     break
+                log.info(f"Cannot optimize {loc2str(loc)} as the tuple is not unique.")
 
         for cond in elem.condition:
             if minmaxpred is not None and list(map(lambda x: x.pred, predicates(cond, {Sign.NoSign}))) == [
@@ -587,8 +619,13 @@ class MinMaxAggregator:
         replaces min/max predicates in sum aggregate elements by returning a
         new list of elements
         """
-        # TODO: refactor same replace of chain literals inside minimize and sum constraits out
         term_tuple = elem.terms
+        # split condition into the max predicate + translation and the rest
+        old_max, minmaxpred, rest_cond = self._split_element(term_tuple[0].location, elem, rest_elems)
+        if minmaxpred is None:
+            return [elem]
+        assert old_max is not None
+
         if term_tuple[0].ast_type == ASTType.Variable:
             varname = term_tuple[0].name
             minimize = True  # TODO: find a better name
@@ -601,20 +638,20 @@ class MinMaxAggregator:
             minimize = False
 
         else:
+            log.info(f"Cannot optimize {loc2str(term_tuple[0].location)} as the weight is not simple enough.")
             return [elem]
-
-        # split condition into the max predicate + translation and the rest
-        old_max, minmaxpred, rest_cond = self._split_element(elem, rest_elems)
-        if minmaxpred is None:
-            return [elem]
-        assert old_max is not None
 
         # check if all Variables from old predicate are used in the tuple identifier
         # to make a unique semantics
         # NOTE: is this check really useful ? Why
-        old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}  # type: ignore
+        old_vars = set(map(lambda x: x.name, collect_ast(old_max, "Variable"))) - {varname}
         term_vars = {x.name for x in chain.from_iterable(map(_characteristic_variables, term_tuple[1:]))}
         if not old_vars <= term_vars:
+            log.info(
+                f"Cannot optimize {loc2str(term_tuple[0].location)} as not all variables {old_vars}"
+                " are used in the tuple."
+                "This might be a bug, see issue #8."
+            )
             return [elem]
 
         replacement = self._create_replacement(

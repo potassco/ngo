@@ -31,7 +31,7 @@ The following traits are available:
 
 **equality**
 
-Replace `X = #sum {}` assignments with actual borders.
+Replace `X = #agg {}` assignments with actual borders.
 
 **summinmax_chains**
 
