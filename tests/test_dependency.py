@@ -262,6 +262,16 @@ def test_positive_dependencies(prg: str, result: list[set[Predicate]]) -> None:
             ],
             [Predicate("c", 2)],
         ),
+        (
+            """
+            1 = { path(X1,Y1,A,B): cell(A,B) } :- cell(X1,Y1); not final(X1,Y1).
+            """,
+            [Predicate("cell", 2)],
+            [
+                Predicate("path", 4),
+            ],
+            [Predicate("cell", 2)],
+        ),
     ],
 )
 def test_domain_predicates(

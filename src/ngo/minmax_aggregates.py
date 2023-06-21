@@ -159,6 +159,9 @@ class MinMaxAggregator:
         if not self.domain_predicates.has_domain(condition_pred):
             log.info(f"Cannot translate {loc2str(loc)} as I cannot infer the domain of {condition_pred}.")
             return False  # NOTE: issue #9, this check needs to be done for all conditions
+        # also reject if aggregate is too easy and not worth translating
+        if self.domain_predicates.is_static(condition_pred):
+            return False
         return True
 
     def _minmax_agg(self, rule: AST) -> Optional[AST]:

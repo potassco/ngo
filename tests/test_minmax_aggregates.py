@@ -875,6 +875,13 @@ c(X) :- X = #sum{Y : person(Y)}.
 c(X) :- X = #sum { Y: person(Y) }.
 #false :- 42 < #max { X: c(X) }; person(P).""",
         ),
+        (
+            """
+timemax(T) :- T = #max { X: cell(X,Y) }.
+""",
+            """#program base.
+timemax(T) :- T = #max { X: cell(X,Y) }.""",
+        ),
     ],
 )
 def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
