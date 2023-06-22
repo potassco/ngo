@@ -96,7 +96,7 @@ def test_toocomplicated_bounds(rule: str) -> None:
         ),
         (
             "#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; X != Y.",
-            "#false :- Y != #count { J: perm(J,_) }; Y = #count { J: job(J) }.",
+            "#false :- not Y = #count { J: perm(J,_) }; Y = #count { J: job(J) }.",
         ),
         (
             "#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not X != Y.",
@@ -116,7 +116,7 @@ def test_toocomplicated_bounds(rule: str) -> None:
         ),
         (
             "#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; Y != X.",
-            "#false :- Y != #count { J: perm(J,_) }; Y = #count { J: job(J) }.",
+            "#false :- not Y = #count { J: perm(J,_) }; Y = #count { J: job(J) }.",
         ),
         (
             "#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not Y != X.",

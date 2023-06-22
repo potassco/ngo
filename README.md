@@ -31,7 +31,8 @@ The following traits are available:
 
 **equality**
 
-Replace `X = #agg {}` assignments with actual borders.
+Replace `X = #agg {}, X > Y` assignments with actual borders `Y < #agg {}`.
+Replace `X != #agg {}` with `not X = #agg {}` if possible.
 
 **summinmax_chains**
 

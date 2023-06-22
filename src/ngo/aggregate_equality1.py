@@ -5,7 +5,7 @@
 """
 from itertools import product
 
-from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Sign, Transformer
+from clingo.ast import AST, ASTType, BodyAggregate, Comparison, ComparisonOperator, Guard, Literal, Sign, Transformer
 
 from ngo.dependency import PositivePredicateDependency
 from ngo.utils.ast import (
@@ -107,9 +107,10 @@ class BoundComputer:
 
 class EqualVariable(Transformer):
     """
-    replaces bodys with aggregates of the form X = #agg{}
+    Replaces bodys with aggregates of the form X = #agg{}
     and other literals of the form lb < X < ub with the direct replacement
     lb < #agg{} < ub
+    Also replaces `X != #agg{}` with `not X = #agg{}` if possible.
     """
 
     # TODO: can't replace multiple aggregates at the same time yet, needs a fixpoint calculation
@@ -122,33 +123,35 @@ class EqualVariable(Transformer):
         for i, blit in enumerate(body):
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate:
                 agg_info = BodyAggAnalytics(blit.atom)
-                if len(agg_info.equal_variable_bound) == 1:
-                    analytics[i] = agg_info
+                analytics[i] = agg_info
         return analytics
 
-    def visit_Rule(self, node: AST) -> AST:  # pylint: disable=invalid-name
-        """visit Rule callback"""
-        assert node.ast_type == ASTType.Rule
-        pheads = predicates(node.head, {Sign.NoSign})
-
-        for i, agg_info in self._create_analytics_from_body(node.body).items():
-            if contains_variable(node.head, agg_info.equal_variable_bound[0]):
-                log.info(f"Skip {loc2str(node.location)} as head contains assignment variable.")
+    def _replace_bounds(self, rule: AST) -> AST:
+        """
+        Replaces bodys with aggregates of the form X = #agg{}
+        and other literals of the form lb < X < ub with the direct replacement
+        """
+        pheads = predicates(rule.head, {Sign.NoSign})
+        for i, agg_info in self._create_analytics_from_body(rule.body).items():
+            if len(agg_info.equal_variable_bound) != 1:
+                continue
+            if contains_variable(rule.head, agg_info.equal_variable_bound[0]):
+                log.info(f"Skip {loc2str(rule.location)} as head contains assignment variable.")
                 continue
             cont = False
-            pbodies = predicates(node.body[i].atom, {Sign.NoSign})
+            pbodies = predicates(rule.body[i].atom, {Sign.NoSign})
             for head, body in product(
                 map(lambda signedpred: signedpred.pred, pheads),
                 map(lambda signedpred: signedpred.pred, pbodies),
             ):
                 if self.dependency.are_dependent([head, body]):
                     cont = True
-                    log.info(f"Skip {loc2str(node.location)} as rule is contained in a positive cycle.")
+                    log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
                     break
             if cont:
                 continue
             bcomp = BoundComputer(agg_info.equal_variable_bound[0])
-            for key, blit in enumerate(node.body):
+            for key, blit in enumerate(rule.body):
                 if key == i:
                     continue
                 bcomp.compute_bounds(blit)
@@ -156,8 +159,8 @@ class EqualVariable(Transformer):
                 bcomp.bounds = [b.guards[0] for b in bcomp.bounds]
                 bcomp.bounds.extend(agg_info.bounds)
                 if len(bcomp.bounds) <= 2:
-                    sign = node.body[i].sign  # currently not used, this is wrong
-                    agg = node.body[i].atom
+                    sign = rule.body[i].sign  # currently not used, this is wrong
+                    agg = rule.body[i].atom
                     agg = agg.update(left_guard=None, right_guard=None)
                     if len(bcomp.bounds) >= 1:
                         agg = agg.update(
@@ -165,6 +168,48 @@ class EqualVariable(Transformer):
                         )
                     if len(bcomp.bounds) == 2:
                         agg = agg.update(right_guard=bcomp.bounds[1])
-                    return node.update(body=[node.body[i].update(atom=agg, sign=sign)] + bcomp.rest)
-            log.info(f"Skip {loc2str(node.location)} as bounds are too complicated.")
+                    return rule.update(body=[rule.body[i].update(atom=agg, sign=sign)] + bcomp.rest)
+            log.info(f"Skip {loc2str(rule.location)} as bounds are too complicated.")
+        return rule
+
+    def _replace_inequality(self, rule: AST) -> AST:
+        """
+        Replaces `X != #agg{}` with `not X = #agg{}` if possible.
+        """
+        pheads = predicates(rule.head, {Sign.NoSign})
+        for i, agg_info in self._create_analytics_from_body(rule.body).items():
+            cont = False
+            if rule.body[i].sign != Sign.NoSign:
+                continue
+            pbodies = predicates(rule.body[i].atom, {Sign.NoSign})
+            for head, body in product(
+                map(lambda signedpred: signedpred.pred, pheads),
+                map(lambda signedpred: signedpred.pred, pbodies),
+            ):
+                if self.dependency.are_dependent([head, body]):
+                    cont = True
+                    log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
+                    break
+            if cont:
+                continue
+
+            if not (
+                len(agg_info.bounds) == 1
+                and agg_info.bounds[0].comparison == ComparisonOperator.NotEqual
+                and len(agg_info.equal_variable_bound) == 0
+            ):
+                continue
+            agg = rule.body[i].atom
+            agg = BodyAggregate(
+                LOC, Guard(ComparisonOperator.Equal, agg_info.bounds[0].term), agg.function, agg.elements, None
+            )
+            rule.body[i] = rule.body[i].update(atom=agg, sign=Sign.Negation)
+            return rule
+        return rule
+
+    def visit_Rule(self, node: AST) -> AST:  # pylint: disable=invalid-name
+        """visit Rule callback"""
+        assert node.ast_type == ASTType.Rule
+        node = self._replace_bounds(node)
+        node = self._replace_inequality(node)
         return node
