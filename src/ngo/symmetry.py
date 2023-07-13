@@ -3,6 +3,7 @@
  with X1 < X2 if this preserves semantics.
 """
 
+from functools import partial
 from typing import Iterable, Optional
 
 from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Rule, Sign
@@ -88,10 +89,12 @@ class SymmetryTranslator:
         for lhs, rhs in zip(pair[0].atom.symbol.arguments, pair[1].atom.symbol.arguments):
             if lhs == rhs:
                 continue
-            if contains_variable(head, lhs.name) or contains_variable(head, rhs.name):
-                symmetric = False
-                break
+            rest = {b for b in body if b not in pair} | {head}
             for lit, var1, var2 in inequalities:
+                if any(map(partial(contains_variable, name=lhs.name), rest.difference([lit]))) or any(
+                    map(partial(contains_variable, name=rhs.name), rest.difference([lit]))
+                ):
+                    continue
                 if (lhs == var1 and rhs == var2) or (lhs == var2 and rhs == var1):
                     used_inequalities[lit] = (lhs, rhs)
                     break
