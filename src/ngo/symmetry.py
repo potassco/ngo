@@ -81,8 +81,6 @@ class SymmetryTranslator:
         inequalities = SymmetryTranslator._inequality_variables(body)
         if pair is None or len(inequalities) == 0:
             return rule
-        print(pair)
-        print(inequalities)
         # all positions in the pair must be either equal or an inequality
         # furthermore, ineuality variables may not occur in the head
         symmetric = True
