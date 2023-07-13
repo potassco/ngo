@@ -2,3 +2,4 @@
  - initial commit and refactoring
  - adds equality trait
  - adds summinmax_chains trait
+ - add symmetry trait
