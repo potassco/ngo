@@ -272,6 +272,20 @@ def test_positive_dependencies(prg: str, result: list[set[Predicate]]) -> None:
             ],
             [Predicate("cell", 2)],
         ),
+        (
+            """
+            a(Z) :- Z = Y, c(Y).
+            """,
+            [
+                Predicate("a", 1),
+                Predicate("c", 1),
+            ],
+            [],
+            [
+                Predicate("a", 1),
+                Predicate("c", 1),
+            ],
+        ),
     ],
 )
 def test_domain_predicates(
@@ -510,6 +524,18 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
                 Predicate("end", 1),
             ],
             [],
+        ),
+        (
+            """
+            {a(Z)} :- Y = Z, c(Y).
+            """,
+            [
+                Predicate("a", 1),
+                Predicate("c", 1),
+            ],
+            [
+                "__dom_a(Z) :- Y = Z; c(Y).",
+            ],
         ),
     ],
 )
