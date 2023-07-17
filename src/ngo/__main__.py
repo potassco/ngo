@@ -11,10 +11,11 @@ from clingo.ast import AST, parse_files
 from ngo.aggregate_equality1 import EqualVariable
 from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.symmetry import SymmetryTranslator
 from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import get_parser
 
-OPTIONS = ["equalities", "summinmax_chains"]
+OPTIONS = ["equalities", "summinmax_chains", "symmetry"]
 
 
 class VerifyEnable(Action):
@@ -59,6 +60,10 @@ def main() -> None:
     dp = DomainPredicates(prg)
 
     ### call transformers
+    if "symmetry" in args.enable:
+        trans = SymmetryTranslator(rdp, dp)
+        prg = trans.execute(prg)
+
     if "equalities" in args.enable:
         eq = EqualVariable(pdg)
         prg = list(chain(map(eq, prg)))
