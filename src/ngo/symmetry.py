@@ -9,7 +9,7 @@ from typing import Iterable, Optional
 from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Rule, Sign
 
 from ngo.dependency import DomainPredicates, RuleDependency
-from ngo.utils.ast import LOC, Predicate, contains_variable
+from ngo.utils.ast import LOC, Predicate, comparison2comparisonlist, contains_variable
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("symmetry")
@@ -73,6 +73,24 @@ class SymmetryTranslator:
                 symbol_literals[pred] = lit
         return None
 
+    @staticmethod
+    def _equal(body: Iterable[AST], lhs: AST, rhs: AST) -> bool:
+        """return true if lhs and rhs are equal wrt. body"""
+        if lhs == rhs:
+            return True
+        for bodylit in body:
+            if bodylit.ast_type == ASTType.Literal and bodylit.atom.ast_type == ASTType.Comparison:
+                for comparison in comparison2comparisonlist(bodylit.atom):
+                    both_sides = (comparison[0] == lhs and comparison[2] == rhs) or (
+                        comparison[0] == rhs and comparison[2] == lhs
+                    )
+                    if (
+                        (bodylit.sign == Sign.NoSign and comparison[1] == ComparisonOperator.Equal)
+                        or (bodylit.sign == Sign.Negation and comparison[1] == ComparisonOperator.NotEqual)
+                    ) and both_sides:
+                        return True
+        return False
+
     def _process_rule(self, rule: AST) -> AST:
         """replace X1 != X2 with X2 < X2 if possible"""
         assert rule.ast_type == ASTType.Rule
@@ -87,7 +105,8 @@ class SymmetryTranslator:
         symmetric = True
         used_inequalities: dict[AST, tuple[AST, AST]] = {}
         for lhs, rhs in zip(pair[0].atom.symbol.arguments, pair[1].atom.symbol.arguments):
-            if lhs == rhs:
+            # 1. both sides are equal
+            if SymmetryTranslator._equal(body, lhs, rhs):
                 continue
             rest = {b for b in body if b not in pair} | {head}
             for lit, var1, var2 in inequalities:

@@ -322,17 +322,27 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
             elif stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.BodyAggregate:
                 if stm.atom.left_guard.comparison == ComparisonOperator.Equal:
                     bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
-    changed = True
-    while changed:
-        changed = False
-        for stm in stmlist:
-            if stm.ast_type == ASTType.Literal and stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.Comparison:
-                guards = stm.atom.guards
-                if any(map(lambda x: x.comparison == ComparisonOperator.Equal, guards)):
-                    variables = set(collect_ast(stm, "Variable"))
-                    if len(variables - bound_variables) <= 1:
-                        bound_variables.update(variables)
+    for stm in stmlist:
+        if stm.ast_type == ASTType.Literal and stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.Comparison:
+            guards = stm.atom.guards
+            if any(map(lambda x: x.comparison == ComparisonOperator.Equal, guards)):
+                variables = set(collect_ast(stm, "Variable"))
+                if len(variables - bound_variables) <= 1:
+                    bound_variables.update(variables)
     return bound_variables
+
+
+def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
+    """convert the nested AST Comparison structure to a plain list of (term op term)"""
+    assert comparison.ast_type == ASTType.Comparison
+    ret: list[tuple[AST, ComparisonOperator, AST]] = []
+    lhs = comparison.term
+    for guard in comparison.guards:
+        operator = guard.comparison
+        rhs = guard.term
+        ret.append((lhs, operator, rhs))
+        lhs = rhs
+    return ret
 
 
 def loc2str(loc: Location) -> str:
