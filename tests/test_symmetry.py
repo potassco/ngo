@@ -14,6 +14,14 @@ from ngo.symmetry import SymmetryTranslator
             "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
         ),
         (
+            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), X1 = X2, P1 != P2.",
+            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); X1 = X2; P1 < P2.",
+        ),
+        (
+            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), not X1 != X2, P1 != P2.",
+            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); not X1 != X2; P1 < P2.",
+        ),
+        (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), not P1 = P2.",
             "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
         ),
