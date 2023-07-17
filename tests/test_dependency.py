@@ -321,6 +321,14 @@ def test_domain_predicates(
                 Predicate("at", 3),
             ],
         ),
+        (
+            """
+            1 = #sum {1,a : a(X)} :- a(X).
+            """,
+            [
+                Predicate("a", 1),
+            ],
+        ),
     ],
 )
 def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
