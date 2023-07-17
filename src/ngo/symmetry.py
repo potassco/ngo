@@ -9,7 +9,7 @@ from typing import Iterable, Optional
 from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Rule, Sign
 
 from ngo.dependency import DomainPredicates, RuleDependency
-from ngo.utils.ast import LOC, Predicate, comparison2comparisonlist, contains_variable
+from ngo.utils.ast import LOC, Predicate, comparison2comparisonlist, contains_variable, loc2str
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("symmetry")
@@ -114,6 +114,7 @@ class SymmetryTranslator:
                     continue
                 if (lhs == var1 and rhs == var2) or (lhs == var2 and rhs == var1):
                     used_inequalities[lit] = (lhs, rhs)
+                    log.info(f"Skip {loc2str(rule.location)} as inequality variables are used somewhere else.")
                     break
             if (lhs, rhs) in used_inequalities.values():
                 continue
