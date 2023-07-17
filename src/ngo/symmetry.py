@@ -80,13 +80,11 @@ class SymmetryTranslator:
             return True
         for bodylit in body:
             if bodylit.ast_type == ASTType.Literal and bodylit.atom.ast_type == ASTType.Comparison:
-                for comparison in comparison2comparisonlist(bodylit.atom):
-                    both_sides = (comparison[0] == lhs and comparison[2] == rhs) or (
-                        comparison[0] == rhs and comparison[2] == lhs
-                    )
+                for clhs, operator, crhs in comparison2comparisonlist(bodylit.atom):
+                    both_sides = (clhs == lhs and crhs == rhs) or (clhs == rhs and crhs == lhs)
                     if (
-                        (bodylit.sign == Sign.NoSign and comparison[1] == ComparisonOperator.Equal)
-                        or (bodylit.sign == Sign.Negation and comparison[1] == ComparisonOperator.NotEqual)
+                        (bodylit.sign == Sign.NoSign and operator == ComparisonOperator.Equal)
+                        or (bodylit.sign == Sign.Negation and operator == ComparisonOperator.NotEqual)
                     ) and both_sides:
                         return True
         return False

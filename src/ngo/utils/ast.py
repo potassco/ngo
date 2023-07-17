@@ -324,11 +324,14 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
                     bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
     for stm in stmlist:
         if stm.ast_type == ASTType.Literal and stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.Comparison:
-            guards = stm.atom.guards
-            if any(map(lambda x: x.comparison == ComparisonOperator.Equal, guards)):
-                variables = set(collect_ast(stm, "Variable"))
-                if len(variables - bound_variables) <= 1:
-                    bound_variables.update(variables)
+            for lhs, operator, rhs in comparison2comparisonlist(stm.atom):
+                if operator == ComparisonOperator.Equal:
+                    lhs_vars = set(collect_ast(lhs, "Variable"))
+                    rhs_vars = set(collect_ast(rhs, "Variable"))
+                    if lhs_vars <= bound_variables:
+                        bound_variables.update(rhs_vars)
+                    elif rhs_vars <= bound_variables:
+                        bound_variables.update(lhs_vars)
     return bound_variables
 
 
