@@ -99,7 +99,7 @@ class SymmetryTranslator:
         if pair is None or len(inequalities) == 0:
             return rule
         # all positions in the pair must be either equal or an inequality
-        # furthermore, ineuality variables may not occur in the head
+        # furthermore, ineuality variables may not occur somewhere else
         symmetric = True
         used_inequalities: dict[AST, tuple[AST, AST]] = {}
         for lhs, rhs in zip(pair[0].atom.symbol.arguments, pair[1].atom.symbol.arguments):
