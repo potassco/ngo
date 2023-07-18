@@ -322,6 +322,12 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
             elif stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.BodyAggregate:
                 if stm.atom.left_guard.comparison == ComparisonOperator.Equal:
                     bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
+        if (
+            stm.ast_type == ASTType.ConditionalLiteral
+            and stm.literal.sign == Sign.NoSign
+            and stm.literal.atom.ast_type == ASTType.SymbolicAtom
+        ):
+            bound_variables.update(collect_ast(stm.literal, "Variable"))
     for stm in stmlist:
         if stm.ast_type == ASTType.Literal and stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.Comparison:
             for lhs, operator, rhs in comparison2comparisonlist(stm.atom):
