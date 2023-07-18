@@ -8,7 +8,7 @@ from ngo.symmetry import SymmetryTranslator
 
 @pytest.mark.parametrize(
     "prg, converted_prg",
-    [
+    (
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.",
             "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
@@ -45,7 +45,11 @@ from ngo.symmetry import SymmetryTranslator
             "#false :- at(X,Y,T); at(X,Y,U); foo(Z,W,T); bar(Z,W,U); not U = T.",
             "#program base.\n#false :- at(X,Y,T); at(X,Y,U); foo(Z,W,T); bar(Z,W,U); not U = T.",
         ),
-    ],
+        (
+            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
+            "#program base.\n#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); T < U.",
+        ),
+    ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
     """test minmax aggregates on whole programs"""
@@ -56,3 +60,34 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     mma = SymmetryTranslator(rdp, dp)
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output
+
+
+@pytest.mark.parametrize(
+    "input_, output",
+    [
+        (
+            (1, 2, 3, 4),
+            [
+                (1, 2, 3, 4),
+                (2, 3, 4),
+                (1, 3, 4),
+                (1, 2, 4),
+                (1, 2, 3),
+                (3, 4),
+                (2, 4),
+                (2, 3),
+                (1, 4),
+                (1, 3),
+                (1, 2),
+                (4,),
+                (3,),
+                (2,),
+                (1,),
+                tuple(),
+            ],
+        )
+    ],
+)
+def test_largest_subset(input_: tuple[int, ...], output: list[tuple[int, ...]]) -> None:
+    """ "test largest subset order"""
+    assert list(SymmetryTranslator.largest_subset(input_)) == output
