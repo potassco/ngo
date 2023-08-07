@@ -496,7 +496,10 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
                 Predicate("b", 1),
                 Predicate("c", 1),
             ],
-            [],
+            [
+                "__dom_c(X,X) :- b(X).",
+                "__dom_a(X) :- __dom_c(X,Y): b(Y).",
+            ],
         ),
         (
             """

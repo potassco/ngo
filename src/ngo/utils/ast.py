@@ -1,5 +1,6 @@
 """ general ast util functions and classes """
 from dataclasses import dataclass
+from functools import partial
 from itertools import product
 from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
@@ -312,27 +313,122 @@ def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     yield from body_predicates(ast, signs)
 
 
-def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
-    """return a set of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
-    bound_variables = set()
+def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set[AST]]:
+    bound_variables: set[AST] = set()
+    unbound_variables: set[AST] = set()
+    assert lit.ast_type == ASTType.Literal
+    if lit.atom.ast_type == ASTType.SymbolicAtom:
+        if lit.sign == Sign.NoSign:
+            bound_variables.update(collect_ast(lit, "Variable"))
+        else:
+            unbound_variables.update(collect_ast(lit, "Variable"))
+    return bound_variables, unbound_variables
+
+
+def _collect_binding_information_conditions(conditions: Iterable[AST]) -> tuple[set[AST], set[AST]]:
+    """given a list of Literal inside a condition
+    returns a set of Variables that it binds
+    returns a set of Variables that it needs to be bounded"""
+    bound_variables: set[AST] = set()
+    unbound_variables: set[AST] = set()
+    for condition in conditions:
+        bound, unbound = _collect_binding_information_simple_literal(condition)
+        bound_variables.update(bound)
+        unbound_variables.update(unbound)
+    unbound_variables -= bound_variables
+    return bound_variables, unbound_variables
+
+
+def _collect_binding_information_from_comparison(
+    comparison: AST, input_bound_variables: set[AST]
+) -> tuple[set[AST], set[AST]]:
+    assert comparison.ast_type == ASTType.Comparison
+    bound_variables: set[AST] = input_bound_variables
+    unbound_variables: set[AST] = set()
+    for lhs, operator, rhs in comparison2comparisonlist(comparison):
+        if operator == ComparisonOperator.Equal:
+            lhs_vars = set(collect_ast(lhs, "Variable"))
+            rhs_vars = set(collect_ast(rhs, "Variable"))
+            if lhs_vars <= bound_variables:
+                bound_variables.update(rhs_vars)
+            elif rhs_vars <= bound_variables:
+                bound_variables.update(lhs_vars)
+            else:
+                unbound_variables.update(rhs_vars)
+                unbound_variables.update(lhs_vars)
+    return bound_variables, unbound_variables
+
+
+def _collect_binding_information_from_comparisons(
+    stmlist: Iterable[AST], input_bound_variables: set[AST]
+) -> tuple[set[AST], set[AST]]:
+    """given a list of body literal and already bound variables
+    returns a set of Variables that it binds by comparison ASTs
+    returns a set of Variables that it needs to be bounded by comparison ASTs"""
+    # needs to run until a fixpoint is found
+    bound_variables: set[AST] = input_bound_variables
+    unbound_variables: set[AST] = set()
+    while True:
+        orig = bound_variables.copy()
+        for stm in stmlist:
+            if stm.ast_type == ASTType.Literal and stm.atom.ast_type == ASTType.Comparison:
+                if stm.sign != Sign.NoSign:
+                    unbound_variables.update(collect_ast(stm.atom, "Variable"))
+                    continue
+                bound, unbound = _collect_binding_information_from_comparison(stm.atom, bound_variables)
+                bound_variables.update(bound)
+                unbound_variables.update(unbound)
+
+        if orig == bound_variables:
+            break
+
+    return bound_variables, unbound_variables
+
+
+def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[AST]]:
+    """given a list of body literal
+    returns a set of Variables that it binds
+    returns a set of Variables that it needs to be bounded"""
+
+    bound_variables: set[AST] = set()
+    unbound_variables: set[AST] = set()
     for stm in stmlist:
         if stm.ast_type == ASTType.Literal:
-            if stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.SymbolicAtom:
-                bound_variables.update(collect_ast(stm, "Variable"))
-            elif stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.BodyAggregate:
-                if stm.atom.left_guard.comparison == ComparisonOperator.Equal:
+            bound, unbound = _collect_binding_information_simple_literal(stm)
+            bound_variables.update(bound)
+            unbound_variables.update(unbound)
+            if stm.atom.ast_type == ASTType.BodyAggregate:
+                if stm.sign == Sign.NoSign and stm.atom.left_guard.comparison == ComparisonOperator.Equal:
                     bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
-    for stm in stmlist:
-        if stm.ast_type == ASTType.Literal and stm.sign == Sign.NoSign and stm.atom.ast_type == ASTType.Comparison:
-            for lhs, operator, rhs in comparison2comparisonlist(stm.atom):
-                if operator == ComparisonOperator.Equal:
-                    lhs_vars = set(collect_ast(lhs, "Variable"))
-                    rhs_vars = set(collect_ast(rhs, "Variable"))
-                    if lhs_vars <= bound_variables:
-                        bound_variables.update(rhs_vars)
-                    elif rhs_vars <= bound_variables:
-                        bound_variables.update(lhs_vars)
-    return bound_variables
+                else:
+                    unbound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
+                for element in stm.atom.elements:
+                    term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
+                    bound, unbound = _collect_binding_information_conditions(element.condition)
+                    term_vars -= bound
+                    term_vars -= bound_variables
+                    unbound_variables.update(term_vars)
+                    unbound -= bound_variables
+                    unbound_variables.update(unbound)
+        elif stm.ast_type == ASTType.ConditionalLiteral:
+            term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
+            _, unbound = _collect_binding_information_conditions(stm.condition)
+            bound_variables.update(term_vars)
+            unbound_variables.update(unbound)
+    unbound_variables -= bound_variables
+    bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
+    bound_variables.update(bound)
+    unbound_variables.update(unbound)
+    unbound_variables -= bound_variables
+    return bound_variables, unbound_variables
+
+
+def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
+    """return a set of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
+    return collect_binding_information(stmlist)[0]
+
+
+# def all_variables_bounded(literals : Sequence[AST])  -> bool:
 
 
 def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
