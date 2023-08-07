@@ -85,7 +85,7 @@ class LiteralSet:
             nonlocal old2new
             assert var.ast_type == ASTType.Variable
             new = AUX_VAR + str(counter)
-            if var.name in old2new:
+            if var.name != "_" and var.name in old2new:
                 new = old2new[var.name]
             else:
                 old2new[var.name] = new
