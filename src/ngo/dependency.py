@@ -484,7 +484,7 @@ class DomainPredicates:
             for conditions in all_conds:
                 copy_conditions = deepcopy(conditions)
                 for cond in copy_conditions:
-                    transform_ast(cond, "SymbolicAtom", replace_domain)
+                    cond = transform_ast(cond, "SymbolicAtom", replace_domain)
                 new_conditions.append(copy_conditions)
             domain_rules[head] = new_conditions
             self.domains[Predicate(head.symbol.name, len(head.symbol.arguments))] = Predicate(

@@ -3,7 +3,8 @@
  with an extra predicate that is derived only once
 """
 
-from copy import deepcopy
+from __future__ import annotations
+
 from functools import partial
 from typing import Iterable
 
@@ -14,6 +15,8 @@ from ngo.utils.ast import LOC, comparison2comparisonlist, transform_ast
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("literal_duplication")
+
+AUX_VAR = "__AUX_"
 
 
 def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
@@ -31,9 +34,12 @@ class LiteralSet:
     """
 
     def __init__(self, literals: Iterable[AST]):
-        self.literals = list(sorted(self.replace_assignments(literals)))
+        literals = list(sorted(LiteralSet.replace_assignments(literals)))
+        literals = LiteralSet.replace_variables(literals)
+        self.literals = sorted(literals)
 
-    def replace_assignments(self, literals: Iterable[AST]) -> list[AST]:
+    @staticmethod
+    def replace_assignments(literals: Iterable[AST]) -> list[AST]:
         """replace equalities with their inlined versions
         e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
         ret: list[AST] = []
@@ -45,10 +51,8 @@ class LiteralSet:
                     ret.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
             else:
                 ret.append(lit)
-        ret = deepcopy(ret)
-        index = 0
-        while index < len(ret):
-            lit = ret[index]
+        removal: list[int] = []
+        for index, lit in enumerate(ret):
             if (
                 lit.ast_type == ASTType.Literal
                 and lit.atom.ast_type == ASTType.Comparison
@@ -60,13 +64,41 @@ class LiteralSet:
                     for other, elem in enumerate(ret):
                         if other == index:
                             continue
-                        transform_ast(
+                        ret[other] = transform_ast(
                             elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                         )
-                    ret.remove(lit)
+                    removal.append(index)
                     continue
-            index += 1
+        for index in removal:
+            ret.pop(index)
         return ret
+
+    @staticmethod
+    def replace_variables(literals: Iterable[AST]) -> list[AST]:
+        """change variable names in literals to generic ones"""
+        counter = 0
+        old2new: dict[str, str] = {}
+        ret: list[AST] = []
+
+        def replace(var: AST) -> AST:
+            nonlocal counter
+            nonlocal old2new
+            assert var.ast_type == ASTType.Variable
+            new = AUX_VAR + str(counter)
+            if var.name in old2new:
+                new = old2new[var.name]
+            else:
+                old2new[var.name] = new
+                counter += 1
+            return var.update(name=new)
+
+        for lit in literals:
+            ret.append(transform_ast(lit, "Variable", replace))
+        return ret
+
+    def equal_besides_variables(self, other: LiteralSet) -> bool:
+        """returns true if the Literal sets are equal besides variable renaming"""
+        return self.literals == other.literals
 
 
 class LiteralDuplicationTranslator:

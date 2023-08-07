@@ -107,10 +107,10 @@ class GeneralTransformer(Transformer):
         return self.function(node)
 
 
-def transform_ast(stm: AST, ast_name: str, function: Callable[[AST], AST]) -> None:
+def transform_ast(stm: AST, ast_name: str, function: Callable[[AST], AST]) -> AST:
     """transforms all ast with name ast_name in stm by calling function on them"""
     transformer = GeneralTransformer(ast_name, function)
-    transformer.visit(stm)
+    return transformer(stm)
 
 
 def _potentially_unifying(lhs: AST, rhs: AST) -> bool:
