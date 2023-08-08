@@ -3,7 +3,8 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.dependency import DomainPredicates
-from ngo.literal_duplication import LiteralDuplicationTranslator, LiteralSet
+from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables, replace_assignments
+from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -47,12 +48,13 @@ def test_literal_set_equal(lhs: str, rhs: str) -> None:
     """test removal of duplicate literals on whole programs"""
     lhs_ast: list[AST] = []
     parse_string(lhs, lhs_ast.append)
+    lhs_ast, _ = anonymize_variables(replace_assignments(lhs_ast[1]).body)
     rhs_ast: list[AST] = []
     parse_string(rhs, rhs_ast.append)
-    assert LiteralSet(lhs_ast[1].body).equal_besides_variables(LiteralSet(rhs_ast[1].body))
+    rhs_ast, _ = anonymize_variables(replace_assignments(rhs_ast[1]).body)
+    assert tuple(lhs_ast) == tuple(rhs_ast)
 
 
-@pytest.mark.skip(reason="no way of currently testing this")
 @pytest.mark.parametrize(
     "prg, converted_prg",
     (
@@ -69,41 +71,63 @@ foo :-a, b, c.
 bar :- a, b, d.
             """,
             """#program base.
-_aux_a_b_1 :- a, b.
-foo :- _aux_a_b_1, c.
-bar :- _aux_a_b_1, d.""",
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.""",
         ),
         (
             """
-foo(X,Z) :-a(X,Y,Z), b(X,X,Z+1), c. 
-bar(X,Z) :- a(U,V,W), b(U,V,W+1), d.
+foo(X,Z) :- a(X,Y,Z), b(X,X,Z+1), c.
+bar(U,W) :- a(U,V,W), b(U,V,W+1), d, V = U.
             """,
             """#program base.
-_aux_a_b_1(X,Z) :- a(X,Y,Z), b(X,X,Z+1).
-foo(X,Z) : -_aux_a_b_1(X,Z), c. 
-bar(X,Z) :- _aux_a_b_1(X,Z), d.""",
+foo(X,Z) :- a(X,Y,Z); b(X,X,(Z+1)); c.
+bar(U,W) :- a(U,V,W); b(U,V,(W+1)); d; V = U.""",
         ),
         (
             """
-foo :-a, b, c. 
-bar :- a, b, d.
-foobar :- e : a, b.
+foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c.
+bar(U,W) :- a(U,V,W), b(U,V,W+1), d, V = U.
             """,
             """#program base.
-_aux_a_b :- a, b.
-foo :- _aux_a_b, c.
-bar :- _aux_a_b, d.
-foobar :- e : _aux_a_b.""",
+__aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX_1+1)).
+foo(X,Z) :- c; __aux_1(X,Z).
+bar(U,W) :- d; __aux_1(U,W).""",
+        ),
+        #         (
+        #             """
+        # foo :-a, b, c.
+        # bar :- a, b, d.
+        # foobar :- e : a, b.
+        #             """,
+        #             """#program base.
+        # _aux_a_b :- a, b.
+        # foo :- _aux_a_b, c.
+        # bar :- _aux_a_b, d.
+        # foobar :- e : _aux_a_b.""",
+        #         ),
+        (
+            """
+foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c.
+bar(U,W) :- a(U,V,W), b(U,V,W+1), d, not V != U.
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX_1+1)).
+foo(X,Z) :- c; __aux_1(X,Z).
+bar(U,W) :- d; __aux_1(U,W).""",
         ),
         (
             """
-foo(X,Z) :-a(X,Y,Z), b(X,X,Z+1), c, X = Y. 
-bar(X,Z) :- a(U,V,W), b(U,V,W+1), d, not V != U.
+foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c, e.
+bar(U,W) :- a(U,V,W), b(U,V,W+1), d, not V != U.
+foobar :- c, e.
             """,
             """#program base.
-_aux_a_b_1(X,Z) :- a(X,X,Z), b(X,X,Z+1).
-foo(X,Z) : -_aux_a_b_1(X,Z), c. 
-bar(X,Z) :- _aux_a_b_1(X,Z), d.""",
+__aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX_1+1)).
+__aux_2 :- c; e.
+foo(X,Z) :- __aux_1(X,Z); __aux_2.
+bar(U,W) :- d; __aux_1(U,W).
+foobar :- __aux_2.""",
         ),
     ),
 )
@@ -112,6 +136,7 @@ def test_duplication(prg: str, converted_prg: str) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     dp = DomainPredicates(ast)
-    ldt = LiteralDuplicationTranslator(dp)
+    unique_names = UniqueNames()
+    ldt = LiteralDuplicationTranslator(unique_names, dp)
     output = "\n".join(map(str, ldt.execute(ast)))
     assert converted_prg == output

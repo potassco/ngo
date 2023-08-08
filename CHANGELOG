@@ -3,3 +3,4 @@
  - adds equality trait
  - adds summinmax_chains trait
  - add symmetry trait
+ - add duplication trait
