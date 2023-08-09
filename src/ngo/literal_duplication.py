@@ -144,6 +144,7 @@ class LiteralCollector:
             if len(rulebuilding) > 1:
                 if any(map(lambda rb: rb.ruleid in changed_rules, rulebuilding)):
                     continue
+                # create new aux predicate
                 min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
                 aux_name = unique_names.function_name(AUX_FUNC)
                 bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
@@ -153,10 +154,11 @@ class LiteralCollector:
                     body=literal_set,
                 )
                 self.additional_rules[min_index].append(new_rule)
+                # change old rules to use the new predicate
                 for rule_builder in rulebuilding:
                     changed_rules.add(rule_builder.ruleid)
                     rule = self.prg[rule_builder.ruleid]
-                    reverted_bound = [var.update(name=rule_builder.newvars2oldvars[var.name]) for var in bound]
+                    reverted_bound = unanonymize_variables(bound, rule_builder.newvars2oldvars)
                     if not rule_builder.sub_ast:
                         new_body = [lit for lit in rule.body if lit not in rule_builder.original_literals]
                         new_body.append(
@@ -261,6 +263,14 @@ def replace_assignments(rule: AST) -> AST:
     return rule.update(head=new_head, body=new_body)
 
 
+def unanonymize_variables(variables: Iterable[AST], mapping: dict[str, str]) -> list[AST]:
+    """change variable names back if they are in the mapping
+    remove all other variables"""
+    for var in variables:
+        assert var.ast_type == ASTType.Variable
+    return [var.update(name=mapping[var.name]) for var in variables if var.name in mapping]
+
+
 def anonymize_variables(literals: Iterable[AST]) -> tuple[list[AST], dict[str, str]]:
     """change variable names in literals to generic ones,
     additionally return a mapping from the old variables to the new ones"""
@@ -273,11 +283,13 @@ def anonymize_variables(literals: Iterable[AST]) -> tuple[list[AST], dict[str, s
         nonlocal old2new
         assert var.ast_type == ASTType.Variable
         new = AUX_VAR + str(counter)
-        if var.name != "_" and var.name in old2new:
+        if var.name in old2new:
             new = old2new[var.name]
-        else:
+        elif var.name != "_":
             old2new[var.name] = new
             counter += 1
+        else:
+            new = var.name
         return var.update(name=new)
 
     for lit in literals:

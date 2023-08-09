@@ -63,6 +63,10 @@ def main() -> None:
     unique_names = UniqueNames()
 
     ### call transformers
+    if "duplication" in args.enable:
+        ldt = LiteralDuplicationTranslator(unique_names, dp)
+        prg = ldt.execute(prg)
+
     if "symmetry" in args.enable:
         trans = SymmetryTranslator(rdp, dp)
         prg = trans.execute(prg)
@@ -74,10 +78,6 @@ def main() -> None:
     if "summinmax_chains" in args.enable:
         mma = MinMaxAggregator(rdp, dp)
         prg = mma.execute(prg)
-
-    if "duplication" in args.enable:
-        ldt = LiteralDuplicationTranslator(unique_names, dp)
-        prg = ldt.execute(prg)
 
     for i in prg:
         print(i)

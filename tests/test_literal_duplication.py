@@ -176,6 +176,32 @@ __aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4) :- duration(__AUX_0,(__AUX_1+1)
 proc(J,(M+1),(T+D),(P+1)) :- #false: proc(J0,(M+1),T0,P), T0 > T; __aux_1(J,M,D,T,P).
 proc(J,(M+1),(T0+D),(P+1)) :- proc(J0,(M+1),T0,P); T0 > T; __aux_1(J,M,D,T,P).""",
         ),
+        (
+            """
+  #false :- job(J); machine(M); not perm(J,M,_).
+  #false :- job(J); machine(M); not started(J,M,_,_).
+  #false :- job(J); machine(M); not stopped(J,M,_,_).
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- job(__AUX_0); machine(__AUX_1).
+#false :- not perm(J,M,_); __aux_1(J,M).
+#false :- not started(J,M,_,_); __aux_1(J,M).
+#false :- not stopped(J,M,_,_); __aux_1(J,M).""",
+        ),
+        (
+            """
+started(J,M,P,(T+1)) :- perm(J,M,P); P > 1; sequence(J,M,O); O > 1;\
+ stopped(_,M,(P-1),T); stopped(J,M',_,T'); sequence(J,M',(O-1)); T >= T'.
+started(J,M,P,(T'+1)) :- perm(J,M,P); P > 1; sequence(J,M,O); O > 1;\
+ stopped(_,M,(P-1),T); stopped(J,M',_,T'); sequence(J,M',(O-1)); T < T'.
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4,__AUX_5,__AUX_6) :- perm(__AUX_0,__AUX_1,__AUX_2);\
+ sequence(__AUX_0,__AUX_1,__AUX_3); sequence(__AUX_0,__AUX_5,(__AUX_3-1));\
+ stopped(_,__AUX_1,(__AUX_2-1),__AUX_4); stopped(__AUX_0,__AUX_5,_,__AUX_6); __AUX_2 > 1; __AUX_3 > 1.
+started(J,M,P,(T+1)) :- T >= T'; __aux_1(J,M,P,O,T,M',T').
+started(J,M,P,(T'+1)) :- T < T'; __aux_1(J,M,P,O,T,M',T').""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:

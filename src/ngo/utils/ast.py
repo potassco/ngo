@@ -431,6 +431,8 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
         unbound_variables.update(unbound)
         unbound_variables -= bound_variables
         size_before = len(bound_variables)
+    bound_variables = set(filter(lambda var: var.name != "_", bound_variables))
+    unbound_variables = set(filter(lambda var: var.name != "_", unbound_variables))
     return bound_variables, unbound_variables
 
 
