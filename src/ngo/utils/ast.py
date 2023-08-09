@@ -318,8 +318,13 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
     unbound_variables: set[AST] = set()
     assert lit.ast_type == ASTType.Literal
     if lit.atom.ast_type == ASTType.SymbolicAtom:
-        if lit.sign == Sign.NoSign:
-            bound_variables.update(collect_ast(lit, "Variable"))
+        if lit.sign == Sign.NoSign and lit.atom.symbol.ast_type == ASTType.Function:
+            for arg in lit.atom.symbol.arguments:
+                variables = collect_ast(arg, "Variable")
+                if len(variables) == 1:
+                    bound_variables.update(variables)
+                else:
+                    unbound_variables.update(variables)
         else:
             unbound_variables.update(collect_ast(lit, "Variable"))
     elif lit.atom.ast_type == ASTType.Comparison:
