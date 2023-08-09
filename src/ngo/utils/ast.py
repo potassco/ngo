@@ -322,6 +322,8 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
             bound_variables.update(collect_ast(lit, "Variable"))
         else:
             unbound_variables.update(collect_ast(lit, "Variable"))
+    elif lit.atom.ast_type == ASTType.Comparison:
+        unbound_variables.update(collect_ast(lit, "Variable"))
     return bound_variables, unbound_variables
 
 
@@ -392,34 +394,38 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
 
     bound_variables: set[AST] = set()
     unbound_variables: set[AST] = set()
-    for stm in stmlist:
-        if stm.ast_type == ASTType.Literal:
-            bound, unbound = _collect_binding_information_simple_literal(stm)
-            bound_variables.update(bound)
-            unbound_variables.update(unbound)
-            if stm.atom.ast_type == ASTType.BodyAggregate:
-                if stm.sign == Sign.NoSign and stm.atom.left_guard.comparison == ComparisonOperator.Equal:
-                    bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
-                else:
-                    unbound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
-                for element in stm.atom.elements:
-                    term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
-                    bound, unbound = _collect_binding_information_conditions(element.condition)
-                    term_vars -= bound
-                    term_vars -= bound_variables
-                    unbound_variables.update(term_vars)
-                    unbound -= bound_variables
-                    unbound_variables.update(unbound)
-        elif stm.ast_type == ASTType.ConditionalLiteral:
-            term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
-            _, unbound = _collect_binding_information_conditions(stm.condition)
-            bound_variables.update(term_vars)
-            unbound_variables.update(unbound)
-    unbound_variables -= bound_variables
-    bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
-    bound_variables.update(bound)
-    unbound_variables.update(unbound)
-    unbound_variables -= bound_variables
+    ### need to do a fixpoint computation
+    size_before = -1
+    while len(bound_variables) > size_before:
+        for stm in stmlist:
+            if stm.ast_type == ASTType.Literal:
+                bound, unbound = _collect_binding_information_simple_literal(stm)
+                bound_variables.update(bound)
+                unbound_variables.update(unbound)
+                if stm.atom.ast_type == ASTType.BodyAggregate:
+                    if stm.sign == Sign.NoSign and stm.atom.left_guard.comparison == ComparisonOperator.Equal:
+                        bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
+                    else:
+                        unbound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
+                    for element in stm.atom.elements:
+                        term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
+                        bound, unbound = _collect_binding_information_conditions(element.condition)
+                        term_vars -= bound
+                        term_vars -= bound_variables
+                        unbound_variables.update(term_vars)
+                        unbound -= bound_variables
+                        unbound_variables.update(unbound)
+            elif stm.ast_type == ASTType.ConditionalLiteral:
+                term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
+                _, unbound = _collect_binding_information_conditions(stm.condition)
+                bound_variables.update(term_vars)
+                unbound_variables.update(unbound)
+        unbound_variables -= bound_variables
+        bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
+        bound_variables.update(bound)
+        unbound_variables.update(unbound)
+        unbound_variables -= bound_variables
+        size_before = len(bound_variables)
     return bound_variables, unbound_variables
 
 

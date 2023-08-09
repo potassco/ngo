@@ -165,6 +165,17 @@ foo :- c; __aux_1.
 bar :- d; __aux_1.
 foobar :- 0 = #sum { 2,e: __aux_1 }.""",
         ),
+        (
+            """
+proc(J,(M+1),(T+D),(P+1)) :- duration(J,(M+1),D); proc(J,M,T,(P+1)); #false: proc(J0,(M+1),T0,P), T0 > T.
+proc(J,(M+1),(T0+D),(P+1)) :- duration(J,(M+1),D); proc(J,M,T,(P+1)); proc(J0,(M+1),T0,P); T0 > T.
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4) :- duration(__AUX_0,(__AUX_1+1),__AUX_2);\
+ proc(__AUX_0,__AUX_1,__AUX_3,(__AUX_4+1)).
+proc(J,(M+1),(T+D),(P+1)) :- #false: proc(J0,(M+1),T0,P), T0 > T; __aux_1(J,M,D,T,P).
+proc(J,(M+1),(T0+D),(P+1)) :- proc(J0,(M+1),T0,P); T0 > T; __aux_1(J,M,D,T,P).""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:
