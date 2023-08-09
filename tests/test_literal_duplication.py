@@ -94,18 +94,30 @@ __aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX
 foo(X,Z) :- c; __aux_1(X,Z).
 bar(U,W) :- d; __aux_1(U,W).""",
         ),
-        #         (
-        #             """
-        # foo :-a, b, c.
-        # bar :- a, b, d.
-        # foobar :- e : a, b.
-        #             """,
-        #             """#program base.
-        # _aux_a_b :- a, b.
-        # foo :- _aux_a_b, c.
-        # bar :- _aux_a_b, d.
-        # foobar :- e : _aux_a_b.""",
-        #         ),
+        (
+            """
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- e : a, b.
+            """,
+            """#program base.
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- e: __aux_1.""",
+        ),
+        (
+            """
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- a, b, e : a, b.
+            """,
+            """#program base.
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- __aux_1; e: __aux_1.""",
+        ),
         (
             """
 foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c.
@@ -128,6 +140,30 @@ __aux_2 :- c; e.
 foo(X,Z) :- __aux_1(X,Z); __aux_2.
 bar(U,W) :- d; __aux_1(U,W).
 foobar :- __aux_2.""",
+        ),
+        (
+            """
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- {e : a, b}.
+            """,
+            """#program base.
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- { e: __aux_1 }.""",
+        ),
+        (
+            """
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- 0 = #sum{2,e : a, b}.
+            """,
+            """#program base.
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- 0 = #sum { 2,e: __aux_1 }.""",
         ),
     ),
 )
