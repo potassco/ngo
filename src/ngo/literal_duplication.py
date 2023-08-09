@@ -45,6 +45,183 @@ class RuleRebuilder:
     newvars2oldvars: dict[str, str]
 
 
+class LiteralCollector:
+    """read in prg and find duplicates of a certain size,
+    changes the program and produces additional rules with an index into the original program where to put them"""
+
+    def __init__(self, size: int, prg: list[AST], additional_rules: dict[int, list[AST]]):
+        self.size = size
+        self.prg = prg
+        self.additional_rules = additional_rules
+        self.occurences: dict[tuple[AST, ...], list[RuleRebuilder]] = defaultdict(list)
+        for index, rule in enumerate(self.prg):
+            if rule.ast_type != ASTType.Rule:
+                continue
+            self._add_occurences_from_body(rule.body, index)
+            self._add_occurences_from_conditionals(rule.body, index)
+            self._add_occurences_from_aggregate_in_body(rule.body, index)
+            self._add_occurences_from_body_aggregate(rule.body, index)
+
+    def _add_occurences_from_body(self, body: Iterable[AST], index: int) -> None:
+        """add all combinations of self.size from literals from the body"""
+        for original_subset in combinations(body, self.size):
+            _, unbound = collect_binding_information(original_subset)
+            if not unbound:
+                new_subset, oldvars2newvars = anonymize_variables(original_subset)
+                newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
+                self.occurences[tuple(new_subset)].append(
+                    RuleRebuilder(
+                        index, None, None, original_subset, tuple(new_subset), oldvars2newvars, newvars2oldvars
+                    )
+                )
+
+    def _add_occurences_from_conditionals(self, body: Iterable[AST], index: int) -> None:
+        """add all combinations of self.size from literals from a conditional"""
+        bound_body, _ = collect_binding_information(body)
+        for lit in body:
+            if lit.ast_type == ASTType.ConditionalLiteral:
+                for original_subset in combinations(lit.condition, self.size):
+                    _, unbound = collect_binding_information(original_subset)
+                    if not unbound - bound_body:
+                        new_subset, oldvars2newvars = anonymize_variables(original_subset)
+                        newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
+                        self.occurences[tuple(new_subset)].append(
+                            RuleRebuilder(
+                                index, lit, None, original_subset, tuple(new_subset), oldvars2newvars, newvars2oldvars
+                            )
+                        )
+
+    def _add_occurences_from_aggregate_in_body(self, body: Iterable[AST], index: int) -> None:
+        """add all combinations of self.size from literals from a conditional inside an aggregate in the body"""
+        bound_body, _ = collect_binding_information(body)
+        for lit in body:
+            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Aggregate:
+                for element in lit.atom.elements:
+                    assert element.ast_type == ASTType.ConditionalLiteral
+                    for original_subset in combinations(element.condition, self.size):
+                        _, unbound = collect_binding_information(original_subset)
+                        if not unbound - bound_body:
+                            new_subset, oldvars2newvars = anonymize_variables(original_subset)
+                            newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
+                            self.occurences[tuple(new_subset)].append(
+                                RuleRebuilder(
+                                    index,
+                                    lit,
+                                    element,
+                                    original_subset,
+                                    tuple(new_subset),
+                                    oldvars2newvars,
+                                    newvars2oldvars,
+                                )
+                            )
+
+    def _add_occurences_from_body_aggregate(self, body: Iterable[AST], index: int) -> None:
+        """add all combinations of self.size from literals from a conditional inside a bodyaggregate"""
+        bound_body, _ = collect_binding_information(body)
+        for lit in body:
+            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate:
+                for element in lit.atom.elements:
+                    assert element.ast_type == ASTType.BodyAggregateElement
+                    for original_subset in combinations(element.condition, self.size):
+                        _, unbound = collect_binding_information(original_subset)
+                        if not unbound - bound_body:
+                            new_subset, oldvars2newvars = anonymize_variables(original_subset)
+                            newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
+                            self.occurences[tuple(new_subset)].append(
+                                RuleRebuilder(
+                                    index,
+                                    lit,
+                                    element,
+                                    original_subset,
+                                    tuple(new_subset),
+                                    oldvars2newvars,
+                                    newvars2oldvars,
+                                )
+                            )
+
+    def process(self, unique_names: UniqueNames) -> set[int]:
+        """actually apply changes to the self.prg and self.additional_rules
+        returns the set of rules that has been modified"""
+        changed_rules: set[int] = set()
+        for literal_set, rulebuilding in self.occurences.items():
+            if len(rulebuilding) > 1:
+                if any(map(lambda rb: rb.ruleid in changed_rules, rulebuilding)):
+                    continue
+                min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
+                aux_name = unique_names.function_name(AUX_FUNC)
+                bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
+                new_rule = Rule(
+                    location=LOC,
+                    head=Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, bound, False))),
+                    body=literal_set,
+                )
+                self.additional_rules[min_index].append(new_rule)
+                for rule_builder in rulebuilding:
+                    changed_rules.add(rule_builder.ruleid)
+                    rule = self.prg[rule_builder.ruleid]
+                    reverted_bound = [var.update(name=rule_builder.newvars2oldvars[var.name]) for var in bound]
+                    if not rule_builder.sub_ast:
+                        new_body = [lit for lit in rule.body if lit not in rule_builder.original_literals]
+                        new_body.append(
+                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
+                        )
+
+                    elif rule_builder.sub_ast.ast_type == ASTType.ConditionalLiteral:
+                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+                        new_condition = [
+                            lit for lit in rule_builder.sub_ast.condition if lit not in rule_builder.original_literals
+                        ]
+                        new_condition.append(
+                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
+                        )
+                        new_body.append(rule_builder.sub_ast.update(condition=new_condition))
+                    elif (
+                        rule_builder.sub_ast.ast_type == ASTType.Literal
+                        and rule_builder.sub_ast.atom.ast_type == ASTType.Aggregate
+                    ):
+                        assert rule_builder.sub_sub_ast is not None
+                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+                        new_condition = [
+                            lit
+                            for lit in rule_builder.sub_sub_ast.condition
+                            if lit not in rule_builder.original_literals
+                        ]
+                        new_condition.append(
+                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
+                        )
+                        new_conditions = [
+                            clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
+                        ]
+                        new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
+                        new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
+                        new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
+                    elif (
+                        rule_builder.sub_ast.ast_type == ASTType.Literal
+                        and rule_builder.sub_ast.atom.ast_type == ASTType.BodyAggregate
+                    ):
+                        assert rule_builder.sub_sub_ast is not None
+                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+                        new_condition = [
+                            lit
+                            for lit in rule_builder.sub_sub_ast.condition
+                            if lit not in rule_builder.original_literals
+                        ]
+                        new_condition.append(
+                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
+                        )
+                        new_conditions = [
+                            clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
+                        ]
+                        new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
+                        new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
+                        new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
+                    else:
+                        assert f"NOT IMPLEMENTED: can not rebuild {rule_builder}"
+                    new_rule = rule.update(body=new_body)
+                    self.prg[rule_builder.ruleid] = new_rule
+        return changed_rules
+
+
 def replace_assignments(rule: AST) -> AST:
     """replace equalities with their inlined versions
     e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
@@ -158,91 +335,6 @@ class LiteralDuplicationTranslator:
                     max_size = max(max_size, len(element.condition))
         return max_size
 
-    @staticmethod
-    def _add_occurences_from_body(
-        occurences: dict[tuple[AST, ...], list[RuleRebuilder]], body: Iterable[AST], index: int, size: int
-    ) -> None:
-        for original_subset in combinations(body, size):
-            _, unbound = collect_binding_information(original_subset)
-            if not unbound:
-                new_subset, oldvars2newvars = anonymize_variables(original_subset)
-                newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
-                occurences[tuple(new_subset)].append(
-                    RuleRebuilder(
-                        index, None, None, original_subset, tuple(new_subset), oldvars2newvars, newvars2oldvars
-                    )
-                )
-
-    @staticmethod
-    def _add_occurences_from_conditionals(
-        occurences: dict[tuple[AST, ...], list[RuleRebuilder]], body: Iterable[AST], index: int, size: int
-    ) -> None:
-        bound_body, _ = collect_binding_information(body)
-        for lit in body:
-            if lit.ast_type == ASTType.ConditionalLiteral:
-                for original_subset in combinations(lit.condition, size):
-                    _, unbound = collect_binding_information(original_subset)
-                    if not unbound - bound_body:
-                        new_subset, oldvars2newvars = anonymize_variables(original_subset)
-                        newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
-                        occurences[tuple(new_subset)].append(
-                            RuleRebuilder(
-                                index, lit, None, original_subset, tuple(new_subset), oldvars2newvars, newvars2oldvars
-                            )
-                        )
-
-    @staticmethod
-    def _add_occurences_from_aggregate_in_body(
-        occurences: dict[tuple[AST, ...], list[RuleRebuilder]], body: Iterable[AST], index: int, size: int
-    ) -> None:
-        bound_body, _ = collect_binding_information(body)
-        for lit in body:
-            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Aggregate:
-                for element in lit.atom.elements:
-                    assert element.ast_type == ASTType.ConditionalLiteral
-                    for original_subset in combinations(element.condition, size):
-                        _, unbound = collect_binding_information(original_subset)
-                        if not unbound - bound_body:
-                            new_subset, oldvars2newvars = anonymize_variables(original_subset)
-                            newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
-                            occurences[tuple(new_subset)].append(
-                                RuleRebuilder(
-                                    index,
-                                    lit,
-                                    element,
-                                    original_subset,
-                                    tuple(new_subset),
-                                    oldvars2newvars,
-                                    newvars2oldvars,
-                                )
-                            )
-
-    @staticmethod
-    def _add_occurences_from_body_aggregate(
-        occurences: dict[tuple[AST, ...], list[RuleRebuilder]], body: Iterable[AST], index: int, size: int
-    ) -> None:
-        bound_body, _ = collect_binding_information(body)
-        for lit in body:
-            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate:
-                for element in lit.atom.elements:
-                    assert element.ast_type == ASTType.BodyAggregateElement
-                    for original_subset in combinations(element.condition, size):
-                        _, unbound = collect_binding_information(original_subset)
-                        if not unbound - bound_body:
-                            new_subset, oldvars2newvars = anonymize_variables(original_subset)
-                            newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
-                            occurences[tuple(new_subset)].append(
-                                RuleRebuilder(
-                                    index,
-                                    lit,
-                                    element,
-                                    original_subset,
-                                    tuple(new_subset),
-                                    oldvars2newvars,
-                                    newvars2oldvars,
-                                )
-                            )
-
     def execute(self, prg: list[AST]) -> list[AST]:
         """
         collect all possible sets of literals to find common subsets and replace them
@@ -276,94 +368,8 @@ class LiteralDuplicationTranslator:
         size = maxsize
         globally_changed_rules: set[int] = set()
         while size > 1:
-            occurences: dict[tuple[AST, ...], list[RuleRebuilder]] = defaultdict(list)
-            changed_rules: set[int] = set()
-            for index, rule in enumerate(newprogram):
-                if rule.ast_type != ASTType.Rule:
-                    continue
-                self._add_occurences_from_body(occurences, rule.body, index, size)
-                self._add_occurences_from_conditionals(occurences, rule.body, index, size)
-                self._add_occurences_from_aggregate_in_body(occurences, rule.body, index, size)
-                self._add_occurences_from_body_aggregate(occurences, rule.body, index, size)
-
-            for literal_set, rulebuilding in occurences.items():
-                if len(rulebuilding) > 1:
-                    if any(map(lambda rb: rb.ruleid in changed_rules, rulebuilding)):
-                        continue
-                    min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
-                    aux_name = self.unique_names.function_name(AUX_FUNC)
-                    bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
-                    new_rule = Rule(
-                        location=LOC,
-                        head=Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, bound, False))),
-                        body=literal_set,
-                    )
-                    additional_rules[min_index].append(new_rule)
-                    for rule_builder in rulebuilding:
-                        changed_rules.add(rule_builder.ruleid)
-                        rule = newprogram[rule_builder.ruleid]
-                        reverted_bound = [var.update(name=rule_builder.newvars2oldvars[var.name]) for var in bound]
-                        if not rule_builder.sub_ast:
-                            new_body = [lit for lit in rule.body if lit not in rule_builder.original_literals]
-                            new_body.append(
-                                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                            )
-
-                        elif rule_builder.sub_ast.ast_type == ASTType.ConditionalLiteral:
-                            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                            new_condition = [
-                                lit
-                                for lit in rule_builder.sub_ast.condition
-                                if lit not in rule_builder.original_literals
-                            ]
-                            new_condition.append(
-                                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                            )
-                            new_body.append(rule_builder.sub_ast.update(condition=new_condition))
-                        elif (
-                            rule_builder.sub_ast.ast_type == ASTType.Literal
-                            and rule_builder.sub_ast.atom.ast_type == ASTType.Aggregate
-                        ):
-                            assert rule_builder.sub_sub_ast is not None
-                            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                            new_condition = [
-                                lit
-                                for lit in rule_builder.sub_sub_ast.condition
-                                if lit not in rule_builder.original_literals
-                            ]
-                            new_condition.append(
-                                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                            )
-                            new_conditions = [
-                                clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
-                            ]
-                            new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
-                            new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
-                            new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
-                        elif (
-                            rule_builder.sub_ast.ast_type == ASTType.Literal
-                            and rule_builder.sub_ast.atom.ast_type == ASTType.BodyAggregate
-                        ):
-                            assert rule_builder.sub_sub_ast is not None
-                            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                            new_condition = [
-                                lit
-                                for lit in rule_builder.sub_sub_ast.condition
-                                if lit not in rule_builder.original_literals
-                            ]
-                            new_condition.append(
-                                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                            )
-                            new_conditions = [
-                                clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
-                            ]
-                            new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
-                            new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
-                            new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
-                        else:
-                            assert f"NOT IMPLEMENTED: can not rebuild {rule_builder}"
-                        new_rule = rule.update(body=new_body)
-                        newprogram[rule_builder.ruleid] = new_rule
+            lc = LiteralCollector(size, newprogram, additional_rules)
+            changed_rules = lc.process(self.unique_names)
             globally_changed_rules.update(changed_rules)
             if len(changed_rules) == 0:
                 size -= 1
