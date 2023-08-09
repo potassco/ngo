@@ -256,7 +256,7 @@ def replace_assignments(rule: AST) -> AST:
                     new_head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                 )
                 continue
-    for index in removal:
+    for index in reversed(removal):
         new_body.pop(index)
     return rule.update(head=new_head, body=new_body)
 
