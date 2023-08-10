@@ -413,19 +413,16 @@ def _collect_binding_information_from_comparison(
 ) -> tuple[set[AST], set[AST]]:
     assert comparison.ast_type == ASTType.Comparison
     bound_variables: set[AST] = input_bound_variables
-    unbound_variables: set[AST] = set()
+    unbound_variables: set[AST] = set(collect_ast(comparison, "Variable"))
     for lhs, operator, rhs in comparison2comparisonlist(comparison):
         if operator == ComparisonOperator.Equal:
             lhs_vars = set(collect_ast(lhs, "Variable"))
             rhs_vars = set(collect_ast(rhs, "Variable"))
-            if lhs_vars <= bound_variables and not has_unsafe_operation(rhs):
-                bound_variables.update(rhs_vars)
-            elif rhs_vars <= bound_variables and not has_unsafe_operation(lhs):
+            if len(lhs_vars) == 1 and not has_unsafe_operation(lhs) and rhs_vars <= bound_variables:
                 bound_variables.update(lhs_vars)
-            else:
-                unbound_variables.update(rhs_vars)
-                unbound_variables.update(lhs_vars)
-    return bound_variables, unbound_variables
+            if len(rhs_vars) == 1 and not has_unsafe_operation(rhs) and lhs_vars <= bound_variables:
+                bound_variables.update(rhs_vars)
+    return bound_variables, unbound_variables - bound_variables
 
 
 def _collect_binding_information_from_comparisons(
