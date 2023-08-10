@@ -14,13 +14,7 @@ from typing import Iterable, Optional
 from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Function, Guard, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import (
-    LOC,
-    collect_binding_information,
-    comparison2comparisonlist,
-    has_interval,
-    transform_ast,
-)
+from ngo.utils.ast import LOC, collect_binding_information, comparison2comparisonlist, has_interval, transform_ast
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -142,6 +136,56 @@ class LiteralCollector:
                                 )
                             )
 
+    def rebuild(self, rule_builder: RuleRebuilder, predicate_name: str, variables: list[AST]) -> list[AST]:
+        """takes a RuleRebuilder and returns the new body for the rule
+        returns None if rebuilding failed"""
+        rule = self.prg[rule_builder.ruleid]
+        if not rule_builder.sub_ast:
+            new_body = [lit for lit in rule.body if lit not in rule_builder.original_literals]
+            new_body.append(Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False))))
+
+        elif rule_builder.sub_ast.ast_type == ASTType.ConditionalLiteral:
+            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+            new_condition = [lit for lit in rule_builder.sub_ast.condition if lit not in rule_builder.original_literals]
+            new_condition.append(
+                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False)))
+            )
+            new_body.append(rule_builder.sub_ast.update(condition=new_condition))
+        elif (
+            rule_builder.sub_ast.ast_type == ASTType.Literal and rule_builder.sub_ast.atom.ast_type == ASTType.Aggregate
+        ):
+            assert rule_builder.sub_sub_ast is not None
+            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+            new_condition = [
+                lit for lit in rule_builder.sub_sub_ast.condition if lit not in rule_builder.original_literals
+            ]
+            new_condition.append(
+                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False)))
+            )
+            new_conditions = [clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast]
+            new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
+            new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
+            new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
+        elif (
+            rule_builder.sub_ast.ast_type == ASTType.Literal
+            and rule_builder.sub_ast.atom.ast_type == ASTType.BodyAggregate
+        ):
+            assert rule_builder.sub_sub_ast is not None
+            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
+            new_condition = [
+                lit for lit in rule_builder.sub_sub_ast.condition if lit not in rule_builder.original_literals
+            ]
+            new_condition.append(
+                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False)))
+            )
+            new_conditions = [clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast]
+            new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
+            new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
+            new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
+        else:
+            assert f"NOT IMPLEMENTED: can not rebuild {rule_builder}"
+        return new_body
+
     def process(self, unique_names: UniqueNames) -> set[int]:
         """actually apply changes to the self.prg and self.additional_rules
         returns the set of rules that has been modified"""
@@ -162,68 +206,15 @@ class LiteralCollector:
                 self.additional_rules[min_index].append(new_rule)
                 # change old rules to use the new predicate
                 for rule_builder in rulebuilding:
+                    if rule_builder.ruleid in changed_rules:
+                        continue
                     changed_rules.add(rule_builder.ruleid)
                     rule = self.prg[rule_builder.ruleid]
                     reverted_bound = unanonymize_variables(bound, rule_builder.newvars2oldvars)
-                    if not rule_builder.sub_ast:
-                        new_body = [lit for lit in rule.body if lit not in rule_builder.original_literals]
-                        new_body.append(
-                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                        )
-
-                    elif rule_builder.sub_ast.ast_type == ASTType.ConditionalLiteral:
-                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                        new_condition = [
-                            lit for lit in rule_builder.sub_ast.condition if lit not in rule_builder.original_literals
-                        ]
-                        new_condition.append(
-                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                        )
-                        new_body.append(rule_builder.sub_ast.update(condition=new_condition))
-                    elif (
-                        rule_builder.sub_ast.ast_type == ASTType.Literal
-                        and rule_builder.sub_ast.atom.ast_type == ASTType.Aggregate
-                    ):
-                        assert rule_builder.sub_sub_ast is not None
-                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                        new_condition = [
-                            lit
-                            for lit in rule_builder.sub_sub_ast.condition
-                            if lit not in rule_builder.original_literals
-                        ]
-                        new_condition.append(
-                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                        )
-                        new_conditions = [
-                            clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
-                        ]
-                        new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
-                        new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
-                        new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
-                    elif (
-                        rule_builder.sub_ast.ast_type == ASTType.Literal
-                        and rule_builder.sub_ast.atom.ast_type == ASTType.BodyAggregate
-                    ):
-                        assert rule_builder.sub_sub_ast is not None
-                        new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-                        new_condition = [
-                            lit
-                            for lit in rule_builder.sub_sub_ast.condition
-                            if lit not in rule_builder.original_literals
-                        ]
-                        new_condition.append(
-                            Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, reverted_bound, False)))
-                        )
-                        new_conditions = [
-                            clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast
-                        ]
-                        new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
-                        new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
-                        new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
-                    else:
-                        assert f"NOT IMPLEMENTED: can not rebuild {rule_builder}"
-                    new_rule = rule.update(body=new_body)
-                    self.prg[rule_builder.ruleid] = new_rule
+                    new_body = self.rebuild(rule_builder, aux_name, reverted_bound)
+                    if new_body:
+                        new_rule = rule.update(body=new_body)
+                        self.prg[rule_builder.ruleid] = new_rule
         return changed_rules
 
 

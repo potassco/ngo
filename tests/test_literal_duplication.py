@@ -110,13 +110,13 @@ foobar :- e: __aux_1.""",
             """
 foo :-a, b, c.
 bar :- a, b, d.
-foobar :- a, b, e : a, b.
+foobar :- x, e : a, b.
             """,
             """#program base.
 __aux_1 :- a; b.
 foo :- c; __aux_1.
 bar :- d; __aux_1.
-foobar :- __aux_1; e: __aux_1.""",
+foobar :- x; e: __aux_1.""",
         ),
         (
             """
@@ -224,6 +224,73 @@ __aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4) :- at(_,__AUX_4,__AUX_2);\
  tempMino(__AUX_0,__AUX_1,__AUX_2,__AUX_3); __aux_3(__AUX_2,__AUX_3).
 tempDirY(1,S,SS) :- Y > PY; not wall(PX,PY,PX,(PY+1)); __aux_1(PX,PY,S,SS,Y).
 tempDirY(-1,S,SS) :- Y < PY; not wall(PX,PY,PX,(PY-1)); __aux_1(PX,PY,S,SS,Y).""",
+        ),
+        (
+            """
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- xrow(X); ycolumn(Y).
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
+                          xrow(X2); ycolumn(Y2);
+                          ((X1-1)/3) = ((X2-1)/3);
+                          ((Y1-1)/3) = ((Y2-1)/3).
+            """,
+            """#program base.
+__aux_2(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
+__aux_1(__AUX_0,__AUX_1) :- __aux_2(__AUX_0,__AUX_1).
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- __aux_1(X,Y).
+xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
+ __aux_1(X1,Y1); __aux_2(X2,Y2).""",
+        ),
+        (
+            """
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- xrow(X); ycolumn(Y).
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
+                          ycolumn(Y2);
+                          ((X1-1)/3) = ((X2-1)/3);
+                          ((Y1-1)/3) = ((Y2-1)/3).
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- __aux_1(X,Y).
+xysubgrid(X1,Y1,X2,Y2) :- ycolumn(Y2); ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
+ __aux_1(X1,Y1).""",
+        ),
+        (
+            """
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
+                          xrow(X2); ycolumn(Y2);
+                          ((X1-1)/3) = ((X2-1)/3);
+                          ((Y1-1)/3) = ((Y2-1)/3).
+            """,
+            """#program base.
+__aux_2(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
+__aux_1(__AUX_0,__AUX_1) :- __aux_2(__AUX_0,__AUX_1).
+xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
+ __aux_1(X1,Y1); __aux_2(X2,Y2).""",
+        ),
+        (  # this is bad, as two times the same predicate is detected and unecessary aux
+            # predicate is created
+            """
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
+                          ycolumn(Y2);
+                          ((X1-1)/3) = ((X2-1)/3);
+                          ((Y1-1)/3) = ((Y2-1)/3).
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
+xysubgrid(X1,Y1,X2,Y2) :- ycolumn(Y2); ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
+ __aux_1(X1,Y1).""",
+        ),
+        (  # this is bad, as two times the same predicate is detected and unecessary aux
+            # predicate is created
+            """
+xysubgrid(X1,Y1,X2,Y2) :- a : xrow(X1), ycolumn(Y1), ycolumn(Y2);
+                          ((X1-1)/3) = ((X2-1)/3);
+                          ((Y1-1)/3) = ((Y2-1)/3).
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
+xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
+ a: ycolumn(Y2), __aux_1(X1,Y1).""",
         ),
     ),
 )

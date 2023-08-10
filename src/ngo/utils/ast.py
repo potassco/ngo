@@ -4,7 +4,18 @@ from functools import partial
 from itertools import product
 from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
-from clingo.ast import AST, ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer, UnaryOperator
+from clingo.ast import (
+    AST,
+    ASTType,
+    BinaryOperator,
+    ComparisonOperator,
+    Guard,
+    Location,
+    Position,
+    Sign,
+    Transformer,
+    UnaryOperator,
+)
 
 LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
 SIGNS = {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}
@@ -313,14 +324,52 @@ def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     yield from body_predicates(ast, signs)
 
 
-def has_absolute(ast: AST) -> bool:
-    """ true if ast contains a math-absolute operation"""
-    return any(map(lambda x: x.operator_type == UnaryOperator.Absolute, collect_ast(ast, "UnaryOperation")))
-
-
 def has_interval(ast: AST) -> bool:
     """true if ast contains an interval"""
     return bool(collect_ast(ast, "Interval"))
+
+
+def _has_absolute(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == UnaryOperator.Absolute, collect_ast(ast, "UnaryOperation")))
+
+
+def _has_multiplication(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == BinaryOperator.Multiplication, collect_ast(ast, "BinaryOperation")))
+
+
+def _has_division(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == BinaryOperator.Division, collect_ast(ast, "BinaryOperation")))
+
+
+def _has_modulo(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == BinaryOperator.Modulo, collect_ast(ast, "BinaryOperation")))
+
+
+def _has_power(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == BinaryOperator.Power, collect_ast(ast, "BinaryOperation")))
+
+
+def _has_xor(ast: AST) -> bool:
+    """true if ast contains a math-absolute operation"""
+    return any(map(lambda x: x.operator_type == BinaryOperator.XOr, collect_ast(ast, "BinaryOperation")))
+
+
+def has_unsafe_operation(ast: AST) -> bool:
+    """true if ast contains a possibly unsafe operation"""
+    return (
+        has_interval(ast)
+        or _has_absolute(ast)
+        or _has_multiplication(ast)
+        or _has_division(ast)
+        or _has_modulo(ast)
+        or _has_power(ast)
+        or _has_xor(ast)
+    )
 
 
 def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set[AST]]:
@@ -334,7 +383,7 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
         if lit.sign == Sign.NoSign and lit.atom.symbol.ast_type == ASTType.Function:
             for arg in lit.atom.symbol.arguments:
                 variables = collect_ast(arg, "Variable")
-                if len(variables) == 1 and not has_absolute(arg):
+                if len(variables) == 1 and not has_unsafe_operation(arg):
                     bound_variables.update(variables)
                 else:
                     unbound_variables.update(variables)
@@ -369,9 +418,9 @@ def _collect_binding_information_from_comparison(
         if operator == ComparisonOperator.Equal:
             lhs_vars = set(collect_ast(lhs, "Variable"))
             rhs_vars = set(collect_ast(rhs, "Variable"))
-            if lhs_vars <= bound_variables and not has_absolute(rhs) and not has_interval(rhs):
+            if lhs_vars <= bound_variables and not has_unsafe_operation(rhs):
                 bound_variables.update(rhs_vars)
-            elif rhs_vars <= bound_variables and not has_absolute(lhs) and not has_interval(lhs):
+            elif rhs_vars <= bound_variables and not has_unsafe_operation(lhs):
                 bound_variables.update(lhs_vars)
             else:
                 unbound_variables.update(rhs_vars)
