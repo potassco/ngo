@@ -202,6 +202,29 @@ __aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4,__AUX_5,__AUX_6) :- perm(__AUX_0
 started(J,M,P,(T+1)) :- T >= T'; __aux_1(J,M,P,O,T,M',T').
 started(J,M,P,(T'+1)) :- T < T'; __aux_1(J,M,P,O,T,M',T').""",
         ),
+        (
+            """
+tempDirX(1,S,SS) :- tempMino(PX,PY,S,SS); at(X,_,S); X > PX; not wall(PX,PY,(PX+1),PY); subStep(S,SS).
+tempDirX(-1,S,SS) :- tempMino(PX,PY,S,SS); at(X,_,S); X < PX; not wall(PX,PY,(PX-1),PY); subStep(S,SS).
+tempDirX(0,S,SS) :- not tempDirX(1,S,SS); not tempDirX(-1,S,SS); subStep(S,SS).
+tempDirY(1,S,SS) :- tempMino(PX,PY,S,SS); at(_,Y,S); Y > PY; not wall(PX,PY,PX,(PY+1));\
+ subStep(S,SS); not tempDirX(1,S,SS); not tempDirX(-1,S,SS).
+tempDirY(-1,S,SS) :- tempMino(PX,PY,S,SS); at(_,Y,S); Y < PY; not wall(PX,PY,PX,(PY-1));\
+ subStep(S,SS); not tempDirX(1,S,SS); not tempDirX(-1,S,SS).
+            """,
+            """#program base.
+__aux_2(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4) :- at(__AUX_4,_,__AUX_2); subStep(__AUX_2,__AUX_3);\
+ tempMino(__AUX_0,__AUX_1,__AUX_2,__AUX_3).
+tempDirX(1,S,SS) :- X > PX; not wall(PX,PY,(PX+1),PY); __aux_2(PX,PY,S,SS,X).
+tempDirX(-1,S,SS) :- X < PX; not wall(PX,PY,(PX-1),PY); __aux_2(PX,PY,S,SS,X).
+__aux_3(__AUX_0,__AUX_1) :- subStep(__AUX_0,__AUX_1); not tempDirX(1,__AUX_0,__AUX_1);\
+ not tempDirX(-1,__AUX_0,__AUX_1).
+tempDirX(0,S,SS) :- __aux_3(S,SS).
+__aux_1(__AUX_0,__AUX_1,__AUX_2,__AUX_3,__AUX_4) :- at(_,__AUX_4,__AUX_2);\
+ tempMino(__AUX_0,__AUX_1,__AUX_2,__AUX_3); __aux_3(__AUX_2,__AUX_3).
+tempDirY(1,S,SS) :- Y > PY; not wall(PX,PY,PX,(PY+1)); __aux_1(PX,PY,S,SS,Y).
+tempDirY(-1,S,SS) :- Y < PY; not wall(PX,PY,PX,(PY-1)); __aux_1(PX,PY,S,SS,Y).""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:

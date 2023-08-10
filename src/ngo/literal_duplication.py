@@ -348,6 +348,7 @@ class LiteralDuplicationTranslator:
         """
         collect all possible sets of literals to find common subsets and replace them
         """
+        prg = prg.copy()
 
         # 1. collect all literals in a rule, create all possible subsets of them for this rule
         # 1.1 all variables in the subset must be bounded
@@ -360,10 +361,8 @@ class LiteralDuplicationTranslator:
         # 2. find a biggest common subset
         # 3. replace this subset with an additional rule and a new predicate
         # 4. restart from 1 until fixpoint
-        ret: list[AST] = []
         maxsize = 0
         newprogram: list[AST] = []
-        additional_rules: dict[int, list[AST]] = defaultdict(list)  # maps to an index to insert the new rules
         for stm in prg:
             if stm.ast_type != ASTType.Rule:
                 newprogram.append(stm)
@@ -375,18 +374,21 @@ class LiteralDuplicationTranslator:
             maxsize = max(maxsize, self.compute_max_size_from_body_aggregate(newprogram[-1]))
 
         size = maxsize
-        globally_changed_rules: set[int] = set()
+        restore: list[bool] = [True] * len(prg)
         while size > 1:
+            additional_rules: dict[int, list[AST]] = defaultdict(list)  # maps to an index to insert the new rules
             lc = LiteralCollector(size, newprogram, additional_rules)
             changed_rules = lc.process(self.unique_names)
-            globally_changed_rules.update(changed_rules)
             if len(changed_rules) == 0:
                 size -= 1
-        for index, rule in enumerate(newprogram):
-            if index < len(prg) and index not in globally_changed_rules:
-                ret.append(prg[index])
-            else:
-                ret.append(rule)
-        for index in sorted(additional_rules.keys(), reverse=True):
-            ret[index:index] = additional_rules[index]
-        return ret
+            for index in changed_rules:
+                restore[index] = False
+            for index in sorted(additional_rules.keys(), reverse=True):
+                newprogram[index:index] = additional_rules[index]
+                prg[index:index] = additional_rules[index]
+                restore[index:index] = [False] * len(additional_rules[index])
+        for index, old in enumerate(restore):
+            if old:
+                newprogram[index] = prg[index]
+
+        return newprogram
