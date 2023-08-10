@@ -4,7 +4,17 @@ from functools import partial
 from itertools import product
 from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
-from clingo.ast import AST, ASTType, ComparisonOperator, Guard, Location, Position, Sign, Transformer
+from clingo.ast import (
+    AST,
+    ASTType,
+    ComparisonOperator,
+    Guard,
+    Location,
+    Position,
+    Sign,
+    Transformer,
+    UnaryOperator,
+)
 
 LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
 SIGNS = {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}
@@ -313,15 +323,22 @@ def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     yield from body_predicates(ast, signs)
 
 
+def _has_absolute(ast: AST) -> bool:
+    return any(map(lambda x: x.operator_type == UnaryOperator.Absolute, collect_ast(ast, "UnaryOperation")))
+
+
 def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set[AST]]:
     bound_variables: set[AST] = set()
     unbound_variables: set[AST] = set()
     assert lit.ast_type == ASTType.Literal
     if lit.atom.ast_type == ASTType.SymbolicAtom:
+        # simple operations (no absolute with more than 1 variable) can bind exactly one variable
+        # if all other variables are bound
+        # This is probably not exactly the thing that gringo does
         if lit.sign == Sign.NoSign and lit.atom.symbol.ast_type == ASTType.Function:
             for arg in lit.atom.symbol.arguments:
                 variables = collect_ast(arg, "Variable")
-                if len(variables) == 1:
+                if len(variables) == 1 and not _has_absolute(arg):
                     bound_variables.update(variables)
                 else:
                     unbound_variables.update(variables)
@@ -356,9 +373,9 @@ def _collect_binding_information_from_comparison(
         if operator == ComparisonOperator.Equal:
             lhs_vars = set(collect_ast(lhs, "Variable"))
             rhs_vars = set(collect_ast(rhs, "Variable"))
-            if lhs_vars <= bound_variables:
+            if lhs_vars <= bound_variables and not _has_absolute(rhs):
                 bound_variables.update(rhs_vars)
-            elif rhs_vars <= bound_variables:
+            elif rhs_vars <= bound_variables and not _has_absolute(lhs):
                 bound_variables.update(lhs_vars)
             else:
                 unbound_variables.update(rhs_vars)
