@@ -14,7 +14,13 @@ from typing import Iterable, Optional
 from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Function, Guard, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import LOC, collect_binding_information, comparison2comparisonlist, contains_ast, transform_ast
+from ngo.utils.ast import (
+    LOC,
+    collect_binding_information,
+    comparison2comparisonlist,
+    has_interval,
+    transform_ast,
+)
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -242,7 +248,7 @@ def replace_assignments(rule: AST) -> AST:
             lit.ast_type == ASTType.Literal
             and lit.atom.ast_type == ASTType.Comparison
             and lit.atom.term.ast_type == ASTType.Variable
-            and not contains_ast(lit.atom.guards[0].term, "Interval")
+            and not has_interval(lit.atom.guards[0].term)
         ):
             if (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal) or (
                 lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual
