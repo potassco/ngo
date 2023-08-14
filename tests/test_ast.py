@@ -2,7 +2,13 @@
 import pytest
 from clingo.ast import AST, ASTType, parse_string
 
-from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates, potentially_unifying
+from ngo.utils.ast import (
+    Predicate,
+    SignedPredicate,
+    collect_binding_information,
+    headderivable_predicates,
+    potentially_unifying,
+)
 
 
 @pytest.mark.parametrize(
@@ -83,3 +89,73 @@ def test_headderivable_predicates(prg: str, head_preds: list[SignedPredicate]) -
     ast: list[AST] = []
     parse_string(prg, ast.append)
     assert sorted(head_preds) == sorted(headderivable_predicates(ast[1]))
+
+
+@pytest.mark.parametrize(
+    "prg, bound_vars, unbound_vars",
+    [
+        (
+            """
+:- b(Y), c(Y) : d(Z,W), not e(Z), not f(U).
+""",
+            ["Y"],
+            ["U"],
+        ),
+        (
+            """
+:- Z = #sum {X,Y,W,V : b(VV)}.
+    """,
+            ["Z"],
+            ["X", "Y", "W", "V"],
+        ),
+        (
+            """
+:- Z != #sum {X,Y,W,V : b(VV)}.
+    """,
+            [],
+            ["X", "Y", "W", "V", "Z"],
+        ),
+        (
+            """
+:- X = Y, not Z = Y.
+""",
+            [],
+            ["X", "Y", "Z"],
+        ),
+        (
+            """
+:- foo(X+Y,Z).
+""",
+            ["Z"],
+            ["X", "Y"],
+        ),
+        (
+            """
+:- b(Y), |X|=Y.
+""",
+            ["Y"],
+            ["X"],
+        ),
+        (
+            """
+:- at2(XX,YY,Z); Z = ((S+1)..(S+2)).
+""",
+            ["XX", "YY", "Z"],
+            ["S"],
+        ),
+        (
+            """
+:- at(X); X-W = 0.
+""",
+            ["X"],
+            ["W"],
+        ),
+    ],
+)
+def test_binding_variables(prg: str, bound_vars: list[str], unbound_vars: list[str]) -> None:
+    """test minmax aggregates on whole programs"""
+    ast: list[AST] = []
+    parse_string(prg, ast.append)
+    bound, unbound = collect_binding_information(ast[1].body)
+    assert set(bound_vars) == set(x.name for x in bound)
+    assert set(unbound_vars) == set(x.name for x in unbound)
