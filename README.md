@@ -29,10 +29,34 @@ cat encoding.lp | ngo --enable equality summinmax_chains
 
 The following traits are available:
 
+**duplication**
+
+This module replaces sets of literals that occur in multiple rules
+ with an extra predicate that is derived only once.
+```
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- {e : a, b}.
+```
+becomes
+```
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- { e: __aux_1 }.
+```
+
+**symmetry**
+
+This modtrait replaces bodys with symmetry breaking rules of the form X1 != X2
+with X1 < X2 if this preserves semantics. This can reduce the number of grounded
+rules by half for this rule, but has no effect on solving.
+
 **equality**
 
 Replace `X = #agg {}, X > Y` assignments with actual borders `Y < #agg {}`.
 Replace `X != #agg {}` with `not X = #agg {}` if possible.
+This can reduce grounding drastically but usually has no effect on solving.
 
 **summinmax_chains**
 
