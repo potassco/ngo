@@ -11,10 +11,10 @@ from functools import partial
 from itertools import combinations
 from typing import Iterable, Optional
 
-from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Function, Guard, Literal, Rule, Sign, SymbolicAtom
+from clingo.ast import AST, ASTType, ComparisonOperator, Function, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import LOC, collect_binding_information, comparison2comparisonlist, has_interval, transform_ast
+from ngo.utils.ast import LOC, collect_binding_information, has_interval, normalize_operators, transform_ast
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -54,13 +54,14 @@ class LiteralCollector:
         self.prg = prg
         self.additional_rules = additional_rules
         self.occurences: dict[tuple[AST, ...], list[RuleRebuilder]] = defaultdict(list)
-        for index, rule in enumerate(self.prg):
-            if rule.ast_type != ASTType.Rule:
-                continue
-            self._add_occurences_from_body(rule.body, index)
-            self._add_occurences_from_conditionals(rule.body, index)
-            self._add_occurences_from_aggregate_in_body(rule.body, index)
-            self._add_occurences_from_body_aggregate(rule.body, index)
+        for index, stm in enumerate(self.prg):
+            if stm.ast_type == ASTType.Rule:
+                self._add_occurences_from_body(stm.body, index)
+                self._add_occurences_from_conditionals(stm.body, index)
+                self._add_occurences_from_aggregate_in_body(stm.body, index)
+                self._add_occurences_from_body_aggregate(stm.body, index)
+            elif stm.ast_type == ASTType.Minimize:
+                self._add_occurences_from_body(stm.body, index)
 
     def _add_occurences_from_body(self, body: Iterable[AST], index: int) -> None:
         """add all combinations of self.size from literals from the body"""
@@ -213,26 +214,27 @@ class LiteralCollector:
                     reverted_bound = unanonymize_variables(bound, rule_builder.newvars2oldvars)
                     new_body = self.rebuild(rule_builder, aux_name, reverted_bound)
                     if new_body:
-                        new_rule = rule.update(body=new_body)
+                        new_rule = rule.update(body=new_body)  # should work for rules and minimize statements
                         self.prg[rule_builder.ruleid] = new_rule
         return changed_rules
 
 
-def replace_assignments(rule: AST) -> AST:
+def replace_assignments(stm: AST) -> AST:
     """replace equalities with their inlined versions
     e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
-    assert rule.ast_type == ASTType.Rule
-    literals: Iterable[AST] = rule.body
+    if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
+        return stm
+    literals: Iterable[AST] = stm.body
     new_body: list[AST] = []
-    new_head: AST = rule.head
+    new_heads: list[AST]
+    if stm.ast_type == ASTType.Rule:
+        new_heads = [stm.head]
+    else:
+        new_heads = [stm.weight, stm.priority, *stm.terms]
     # normalize comparison operators
     # TODO: normalize comparison operators to ignore sign and create a list
-    for lit in literals:
-        if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison:
-            for lhs, cop, rhs in comparison2comparisonlist(lit.atom):
-                new_body.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
-        else:
-            new_body.append(lit)
+    new_body = normalize_operators(literals)
+
     removal: list[int] = []
     for index, lit in enumerate(new_body):
         if (
@@ -251,13 +253,16 @@ def replace_assignments(rule: AST) -> AST:
                         elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                     )
                 removal.append(index)
-                new_head = transform_ast(
-                    new_head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
-                )
+                for i, head in enumerate(new_heads):
+                    new_heads[i] = transform_ast(
+                        head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                    )
                 continue
     for index in reversed(removal):
         new_body.pop(index)
-    return rule.update(head=new_head, body=new_body)
+    if stm.ast_type == ASTType.Rule:
+        return stm.update(head=new_heads[0], body=new_body)
+    return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=new_body)
 
 
 def unanonymize_variables(variables: Iterable[AST], mapping: dict[str, str]) -> list[AST]:
@@ -306,6 +311,12 @@ class LiteralDuplicationTranslator:
         """compute size of rule body"""
         assert rule.ast_type == ASTType.Rule
         return len(rule.body)
+
+    @staticmethod
+    def compute_size_from_minimize(stm: AST) -> int:
+        """compute size of rule body"""
+        assert stm.ast_type == ASTType.Minimize
+        return len(stm.body)
 
     @staticmethod
     def compute_max_size_from_conditionals(rule: AST) -> int:
@@ -361,14 +372,15 @@ class LiteralDuplicationTranslator:
         maxsize = 0
         newprogram: list[AST] = []
         for stm in prg:
-            if stm.ast_type != ASTType.Rule:
-                newprogram.append(stm)
-                continue
             newprogram.append(replace_assignments(stm))
-            maxsize = max(maxsize, self.compute_size_from_body(newprogram[-1]))
-            maxsize = max(maxsize, self.compute_max_size_from_conditionals(newprogram[-1]))
-            maxsize = max(maxsize, self.compute_max_size_from_aggregate_in_body(newprogram[-1]))
-            maxsize = max(maxsize, self.compute_max_size_from_body_aggregate(newprogram[-1]))
+            if stm.ast_type == ASTType.Rule:
+                maxsize = max(maxsize, self.compute_size_from_body(newprogram[-1]))
+                maxsize = max(maxsize, self.compute_max_size_from_conditionals(newprogram[-1]))
+                maxsize = max(maxsize, self.compute_max_size_from_aggregate_in_body(newprogram[-1]))
+                maxsize = max(maxsize, self.compute_max_size_from_body_aggregate(newprogram[-1]))
+            else:
+                if stm.ast_type == ASTType.Minimize:
+                    maxsize = max(maxsize, self.compute_size_from_minimize(newprogram[-1]))
 
         size = maxsize
         restore: list[bool] = [True] * len(prg)

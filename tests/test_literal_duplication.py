@@ -292,6 +292,36 @@ __aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
 xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
  a: ycolumn(Y2), __aux_1(X1,Y1).""",
         ),
+        (
+            """
+foo :-a, b, c.
+#minimize {1,x,y : a, b, d}.
+            """,
+            """#program base.
+__aux_1 :- a; b.
+foo :- c; __aux_1.
+:~ d; __aux_1. [1@0,x,y]""",
+        ),
+        (
+            """
+foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c.
+:~ a(U,U,W), b(U,U,W+1), d. [1@U,W]
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX_1+1)).
+foo(X,Z) :- c; __aux_1(X,Z).
+:~ d; __aux_1(U,W). [1@U,W]""",
+        ),
+        (
+            """
+foo(X,Z) :- a(X,X,Z), b(X,X,Z+1), c.
+:~ a(U,V,W), b(U,V,W+1), d, not V != U. [1@U*V,W]
+            """,
+            """#program base.
+__aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX_1+1)).
+foo(X,Z) :- c; __aux_1(X,Z).
+:~ d; __aux_1(U,W). [1@(U*U),W]""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:

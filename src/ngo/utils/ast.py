@@ -8,8 +8,10 @@ from clingo.ast import (
     AST,
     ASTType,
     BinaryOperator,
+    Comparison,
     ComparisonOperator,
     Guard,
+    Literal,
     Location,
     Position,
     Sign,
@@ -500,7 +502,16 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
     return collect_binding_information(stmlist)[0]
 
 
-# def all_variables_bounded(literals : Sequence[AST])  -> bool:
+def normalize_operators(literals: Iterable[AST]) -> list[AST]:
+    """replace a list of literals with a new list where all comparisons are binary and not chained"""
+    new_literals: list[AST] = []
+    for lit in literals:
+        if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison:
+            for lhs, cop, rhs in comparison2comparisonlist(lit.atom):
+                new_literals.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
+        else:
+            new_literals.append(lit)
+    return new_literals
 
 
 def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
