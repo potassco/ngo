@@ -322,6 +322,16 @@ __aux_1(__AUX_0,__AUX_1) :- a(__AUX_0,__AUX_0,__AUX_1); b(__AUX_0,__AUX_0,(__AUX
 foo(X,Z) :- c; __aux_1(X,Z).
 :~ d; __aux_1(U,W). [1@(U*U),W]""",
         ),
+        (
+            """
+foo(E) :- edge(E,From,_,_,_,0); foo(From); bar(N,T): cond(E,N,T).
+{ foo(E) } :- edge(E,From,_,_,_,1); foo(From); bar(N,T): cond(E,N,T).
+            """,
+            """#program base.
+__aux_1(__AUX_0) :- bar(__AUX_1,__AUX_2): cond(__AUX_3,__AUX_1,__AUX_2); foo(__AUX_0).
+foo(E) :- edge(E,From,_,_,_,0); __aux_1(From).
+{ foo(E) } :- edge(E,From,_,_,_,1); __aux_1(From).""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:

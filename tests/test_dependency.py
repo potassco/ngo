@@ -494,11 +494,10 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
             [
                 Predicate("a", 1),
                 Predicate("b", 1),
-                Predicate("c", 1),
+                Predicate("c", 2),
             ],
             [
                 "__dom_c(X,X) :- b(X).",
-                "__dom_a(X) :- __dom_c(X,Y): b(Y).",
             ],
         ),
         (
@@ -555,26 +554,26 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
         (
             """
             {c(1..2, 3..4)}.
-            a(X) :- c(X,Y) : b(Y).
+            a(X) :- d(X), c(X,Y) : b(Y).
             """,
             [
                 ("a", 1),
                 ("c", 2),
             ],
-            ["__dom_c((1..2),(3..4)).", "__dom_a(X) :- __dom_c(X,Y): b(Y)."],
+            ["__dom_c((1..2),(3..4)).", "__dom_a(X) :- d(X); __dom_c(X,Y): b(Y)."],
         ),
         (
             """
             {c(1..2, 3..4)}.
             {b((1..4))}.
-            a(X) :- c(X,Y) : b(Y).
+            a(X) :- d(X); c(X,Y) : b(Y).
             """,
             [
                 ("a", 1),
                 ("b", 1),
                 ("c", 2),
             ],
-            ["__dom_c((1..2),(3..4)).", "__dom_b((1..4)).", "__dom_a(X) :- __dom_c(X,Y): __dom_b(Y)."],
+            ["__dom_c((1..2),(3..4)).", "__dom_b((1..4)).", "__dom_a(X) :- d(X); __dom_c(X,Y): __dom_b(Y)."],
         ),
     ],
 )

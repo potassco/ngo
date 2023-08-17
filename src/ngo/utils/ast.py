@@ -483,9 +483,9 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
                         unbound_variables.update(unbound)
             elif stm.ast_type == ASTType.ConditionalLiteral:
                 term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
-                _, unbound = _collect_binding_information_conditions(stm.condition)
-                bound_variables.update(term_vars)
+                bound, unbound = _collect_binding_information_conditions(stm.condition)
                 unbound_variables.update(unbound)
+                unbound_variables.update(term_vars - bound)
         unbound_variables -= bound_variables
         bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
         bound_variables.update(bound)
