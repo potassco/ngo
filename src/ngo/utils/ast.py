@@ -530,3 +530,53 @@ def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOper
 def loc2str(loc: Location) -> str:
     """format location to be a nice looking string"""
     return f"{loc.begin.filename}:{loc.begin.line}:{loc.begin.column}"
+
+
+def _global_vars_body_agg(atom: AST) -> set[AST]:
+    assert atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)
+    vars_: set[AST] = set()
+    if atom.left_guard:
+        vars_.update(collect_ast(atom.left_guard, "Variable"))
+    if atom.right_guard:
+        vars_.update(collect_ast(atom.right_guard, "Variable"))
+    for element in atom.elements:
+        bound, unbound = _collect_binding_information_conditions(element.condition)
+        total: set[AST] = set()
+        if atom.ast_type == ASTType.Aggregate:
+            total.update(collect_ast(element.literal, "Variable"))
+        else:
+            for term in element.terms:
+                total.update(collect_ast(term, "Variable"))
+        unbound -= bound
+        total -= bound
+        total |= unbound
+        vars_.update(total)
+    vars_ = set(filter(lambda var: var.name != "_", vars_))
+    return vars_
+
+
+def global_vars(lits: list[AST]) -> set[AST]:
+    """compute all Variables that are visible within the same outer scope"""
+    vars_: set[AST] = set()
+    for lit in lits:
+        if lit.ast_type == ASTType.Literal:
+            atom = lit.atom
+            if atom.ast_type in (ASTType.Comparison, ASTType.SymbolicAtom):
+                vars_.update(collect_ast(lit, "Variable"))
+            elif atom.ast_type in (
+                ASTType.BodyAggregate,
+                ASTType.Aggregate,
+            ):
+                vars_.update(_global_vars_body_agg(atom))
+            elif atom.ast_type in (ASTType.TheoryAtom,):  # pragma: no cover
+                raise NotImplementedError("theory atom handling is not yet supported")  # pragma: no cover
+        elif lit.ast_type == ASTType.ConditionalLiteral:
+            bound, unbound = _collect_binding_information_conditions(lit.condition)
+            lbound, lunbound = _collect_binding_information_simple_literal(lit.literal)
+            total = lbound | lunbound
+            unbound -= bound
+            total -= bound
+            total |= unbound
+            vars_.update(total)
+    vars_ = set(filter(lambda var: var.name != "_", vars_))
+    return vars_

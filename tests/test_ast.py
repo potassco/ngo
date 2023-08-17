@@ -6,6 +6,7 @@ from ngo.utils.ast import (
     Predicate,
     SignedPredicate,
     collect_binding_information,
+    global_vars,
     headderivable_predicates,
     potentially_unifying,
 )
@@ -166,3 +167,103 @@ def test_binding_variables(prg: str, bound_vars: list[str], unbound_vars: list[s
     bound, unbound = collect_binding_information(ast[1].body)
     assert set(bound_vars) == set(x.name for x in bound)
     assert set(unbound_vars) == set(x.name for x in unbound)
+
+
+@pytest.mark.parametrize(
+    "prg, globals_",
+    [
+        (
+            """
+:- b(Y), c(Y) : d(Z,W), not e(Z), not f(U).
+""",
+            ["Y", "U"],
+        ),
+        (
+            """
+:- Z = #sum {X,Y,W,V : b(VV)}.
+    """,
+            ["Z", "X", "Y", "W", "V"],
+        ),
+        (
+            """
+:- Z = #sum {X,Y,W,V : b(VV)} != I.
+    """,
+            ["Z", "X", "Y", "W", "V", "I"],
+        ),
+        (
+            """
+:- Z != #sum {X,Y,W,V : b(VV)}.
+    """,
+            ["X", "Y", "W", "V", "Z"],
+        ),
+        (
+            """
+:- Z != #sum {X,Y,W,V : not b(VV)}.
+    """,
+            ["X", "Y", "W", "V", "Z", "VV"],
+        ),
+        (
+            """
+:- X = Y, not Z = Y.
+""",
+            ["X", "Y", "Z"],
+        ),
+        (
+            """
+:- foo(X+Y,Z).
+""",
+            ["Z", "X", "Y"],
+        ),
+        (
+            """
+:- b(Y), |X|=Y.
+""",
+            ["Y", "X"],
+        ),
+        (
+            """
+:- at2(XX,YY,Z); Z = ((S+1)..(S+2)).
+""",
+            ["XX", "YY", "Z", "S"],
+        ),
+        (
+            """
+:- at(X); X-W = 0.
+""",
+            ["X", "W"],
+        ),
+        (
+            """
+:- b(Y), c(Y,YY,Z) : d(Z,W), not e(Z), not f(U).
+""",
+            ["Y", "YY", "U"],
+        ),
+    ],
+)
+def test_global_vars(prg: str, globals_: list[str]) -> None:
+    """test minmax aggregates on whole programs"""
+    ast: list[AST] = []
+    parse_string(prg, ast.append)
+    assert set(globals_) == set(map(lambda x: x.name, global_vars(ast[1].body)))
+
+
+@pytest.mark.parametrize(
+    "prg",
+    [
+        (
+            """
+:- &diff{5-4}=4.
+"""
+        ),
+    ],
+)
+def test_global_varexception(prg: str) -> None:
+    """test minmax aggregates on whole programs"""
+    ast: list[AST] = []
+    parse_string(prg, ast.append)
+    caught = False
+    try:
+        global_vars(ast[1].body)
+    except NotImplementedError:
+        caught = True
+    assert caught
