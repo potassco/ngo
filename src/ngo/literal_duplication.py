@@ -11,10 +11,18 @@ from functools import partial
 from itertools import combinations
 from typing import Iterable, Optional
 
+import networkx as nx
 from clingo.ast import AST, ASTType, ComparisonOperator, Function, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import LOC, collect_binding_information, has_interval, normalize_operators, transform_ast
+from ngo.utils.ast import (
+    LOC,
+    collect_binding_information,
+    global_vars,
+    has_interval,
+    normalize_operators,
+    transform_ast,
+)
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -62,6 +70,27 @@ class LiteralCollector:
                 self._add_occurences_from_body_aggregate(stm.body, index)
             elif stm.ast_type == ASTType.Minimize:
                 self._add_occurences_from_body(stm.body, index)
+        self._filter_occurences()
+
+    def _filter_occurences(self) -> None:
+        remove: list[tuple[AST, ...]] = []
+        # connect the global variables of each element with each other.
+        # in the end there should be only one scc
+        for subset in self.occurences.keys():
+            graph = nx.Graph()
+            all_vars: set[AST] = set()
+            for lit in subset:
+                vars_ = global_vars([lit])
+                all_vars.update(vars_)
+                graph.add_edges_from(combinations(vars_, 2))
+            cc = list(nx.connected_components(graph))
+            if (len(cc) > 1) or (len(cc) == 0 and len(all_vars) > 1):
+                remove.append(subset)
+                continue
+            if len(cc) == 1 and set(cc[0]) < all_vars:
+                remove.append(subset)
+        for subset in remove:
+            del self.occurences[subset]
 
     def _add_occurences_from_body(self, body: Iterable[AST], index: int) -> None:
         """add all combinations of self.size from literals from the body"""

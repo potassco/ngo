@@ -183,10 +183,9 @@ proc(J,(M+1),(T0+D),(P+1)) :- proc(J0,(M+1),T0,P); T0 > T; __aux_1(J,M,D,T,P).""
   #false :- job(J); machine(M); not stopped(J,M,_,_).
             """,
             """#program base.
-__aux_1(__AUX_0,__AUX_1) :- job(__AUX_0); machine(__AUX_1).
-#false :- not perm(J,M,_); __aux_1(J,M).
-#false :- not started(J,M,_,_); __aux_1(J,M).
-#false :- not stopped(J,M,_,_); __aux_1(J,M).""",
+#false :- job(J); machine(M); not perm(J,M,_).
+#false :- job(J); machine(M); not started(J,M,_,_).
+#false :- job(J); machine(M); not stopped(J,M,_,_).""",
         ),
         (
             """
@@ -234,11 +233,11 @@ xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
                           ((Y1-1)/3) = ((Y2-1)/3).
             """,
             """#program base.
-__aux_2(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
-__aux_1(__AUX_0,__AUX_1) :- __aux_2(__AUX_0,__AUX_1).
-1 <= { sudoku(X,Y,N): num(N) } <= 1 :- __aux_1(X,Y).
-xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
- __aux_1(X1,Y1); __aux_2(X2,Y2).""",
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- xrow(X); ycolumn(Y).
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);\
+ xrow(X2); ycolumn(Y2);\
+ ((X1-1)/3) = ((X2-1)/3);\
+ ((Y1-1)/3) = ((Y2-1)/3).""",
         ),
         (
             """
@@ -249,10 +248,11 @@ xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
                           ((Y1-1)/3) = ((Y2-1)/3).
             """,
             """#program base.
-__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
-1 <= { sudoku(X,Y,N): num(N) } <= 1 :- __aux_1(X,Y).
-xysubgrid(X1,Y1,X2,Y2) :- ycolumn(Y2); ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
- __aux_1(X1,Y1).""",
+1 <= { sudoku(X,Y,N): num(N) } <= 1 :- xrow(X); ycolumn(Y).
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);\
+ ycolumn(Y2);\
+ ((X1-1)/3) = ((X2-1)/3);\
+ ((Y1-1)/3) = ((Y2-1)/3).""",
         ),
         (
             """
@@ -262,13 +262,12 @@ xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
                           ((Y1-1)/3) = ((Y2-1)/3).
             """,
             """#program base.
-__aux_2(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
-__aux_1(__AUX_0,__AUX_1) :- __aux_2(__AUX_0,__AUX_1).
-xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
- __aux_1(X1,Y1); __aux_2(X2,Y2).""",
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);\
+ xrow(X2); ycolumn(Y2);\
+ ((X1-1)/3) = ((X2-1)/3);\
+ ((Y1-1)/3) = ((Y2-1)/3).""",
         ),
-        (  # this is bad, as two times the same predicate is detected and unecessary aux
-            # predicate is created
+        (
             """
 xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
                           ycolumn(Y2);
@@ -276,11 +275,12 @@ xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);
                           ((Y1-1)/3) = ((Y2-1)/3).
             """,
             """#program base.
-__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
-xysubgrid(X1,Y1,X2,Y2) :- ycolumn(Y2); ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
- __aux_1(X1,Y1).""",
+xysubgrid(X1,Y1,X2,Y2) :- xrow(X1); ycolumn(Y1);\
+ ycolumn(Y2);\
+ ((X1-1)/3) = ((X2-1)/3);\
+ ((Y1-1)/3) = ((Y2-1)/3).""",
         ),
-        (  # this is bad, as two times the same predicate is detected and unecessary aux
+        (
             # predicate is created
             """
 xysubgrid(X1,Y1,X2,Y2) :- a : xrow(X1), ycolumn(Y1), ycolumn(Y2);
@@ -288,9 +288,9 @@ xysubgrid(X1,Y1,X2,Y2) :- a : xrow(X1), ycolumn(Y1), ycolumn(Y2);
                           ((Y1-1)/3) = ((Y2-1)/3).
             """,
             """#program base.
-__aux_1(__AUX_0,__AUX_1) :- xrow(__AUX_0); ycolumn(__AUX_1).
-xysubgrid(X1,Y1,X2,Y2) :- ((X1-1)/3) = ((X2-1)/3); ((Y1-1)/3) = ((Y2-1)/3);\
- a: ycolumn(Y2), __aux_1(X1,Y1).""",
+xysubgrid(X1,Y1,X2,Y2) :- a: xrow(X1), ycolumn(Y1), ycolumn(Y2);\
+ ((X1-1)/3) = ((X2-1)/3);\
+ ((Y1-1)/3) = ((Y2-1)/3).""",
         ),
         (
             """
@@ -331,6 +331,37 @@ foo(E) :- edge(E,From,_,_,_,0); foo(From); bar(N,T): cond(E,N,T).
 __aux_1(__AUX_0) :- bar(__AUX_1,__AUX_2): cond(__AUX_3,__AUX_1,__AUX_2); foo(__AUX_0).
 foo(E) :- edge(E,From,_,_,_,0); __aux_1(From).
 { foo(E) } :- edge(E,From,_,_,_,1); __aux_1(From).""",
+        ),
+        (  # no double changes so far
+            """
+foo :-a, b, c.
+bar :- a, b, d.
+foobar :- a, b, {e : a, b}.
+            """,
+            """#program base.
+__aux_2 :- a; b.
+__aux_1 :- __aux_2.
+foo :- c; __aux_1.
+bar :- d; __aux_1.
+foobar :- __aux_1; { e: __aux_2 }.""",
+        ),
+        (
+            """
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(_) }.
+#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(_) }.
+            """,
+            """#program base.
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(_) }.
+#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(_) }.""",
+        ),
+        (
+            """
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(O) }.
+#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(O) }.
+            """,
+            """#program base.
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(O) }.
+#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(O) }.""",
         ),
     ),
 )
