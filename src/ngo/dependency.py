@@ -29,6 +29,7 @@ from ngo.utils.ast import (
     LOC,
     SIGNS,
     Predicate,
+    SignSetType,
     body_predicates,
     collect_ast,
     collect_bound_variables,
@@ -63,7 +64,7 @@ class RuleDependency:
 
 
 # TODO: refactor all graphs
-def _create_graph_from_prg(prg: Iterable[AST], signs: set[Sign]) -> nx.DiGraph:
+def _create_graph_from_prg(prg: Iterable[AST], signs: SignSetType) -> nx.DiGraph:
     """create a dependency graph from all body predicates (wrt signs) to
     all derivable head predicates
     """
