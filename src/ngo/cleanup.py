@@ -97,17 +97,7 @@ class CleanupTranslator:
                         continue
                     head_symbols.append(symbol)
                     local_superseed.update(set(x for x in self._create_mappings(symbol, element.condition.condition)))
-        elif head.ast_type == ASTType.Aggregate:
-            for element in head.elements:
-                lit = element.literal
-                assert lit.ast_type == ASTType.Literal
-                if lit.atom.ast_type == ASTType.SymbolicAtom and lit.atom.symbol.ast_type == ASTType.Function:
-                    symbol = lit.atom.symbol
-                    if pred != Predicate(symbol.name, len(symbol.arguments)):
-                        continue
-                    head_symbols.append(symbol)
-                    local_superseed.update(set(x for x in self._create_mappings(symbol, element.condition)))
-        elif head.ast_type == ASTType.Disjunction:
+        elif head.ast_type in (ASTType.Aggregate, ASTType.Disjunction):
             for element in head.elements:
                 lit = element.literal
                 assert lit.ast_type == ASTType.Literal
@@ -120,9 +110,7 @@ class CleanupTranslator:
         # add all body elements to all heads according to they variables
         body_literals = self._collect_top_level_body_symbols(rule.body)
         for symbol in head_symbols:
-            local_superseed.update(
-                set(x for x in self._create_mappings(symbol, body_literals))
-            )  # TODO: why is this not the same as loop above
+            local_superseed.update(set(x for x in self._create_mappings(symbol, body_literals)))
         return local_superseed
 
     @staticmethod
@@ -201,18 +189,38 @@ class CleanupTranslator:
                     return True
         return False
 
+    def _remove_superseed_from_list(self, body: list[AST]) -> bool:
+        fix = False
+        updated = False
+        while not fix:
+            fix = True
+            for lhs, rhs in permutations(body, 2):
+                if self._superseeded(lhs, rhs):
+                    body.remove(rhs)
+                    updated = True
+                    fix = False
+                    break
+        return updated
+
     def _apply_superseeding(self, stm: AST) -> AST:
         if stm.ast_type == ASTType.Rule:
             body: list[AST] = list(stm.body)
-            fix = False
-            while not fix:
-                fix = True
-                for lhs, rhs in permutations(body, 2):
-                    if self._superseeded(lhs, rhs):
-                        body.remove(rhs)
-                        fix = False
-                        break
-            if len(body) != len(stm.body):
+            updated = self._remove_superseed_from_list(body)
+            for idx, blit in enumerate(body):
+                if blit.ast_type == ASTType.ConditionalLiteral:
+                    condition: list[AST] = list(blit.condition)
+                    updated |= self._remove_superseed_from_list(condition)
+                    body[idx] = blit.update(condition=condition)
+                elif blit.ast_type == ASTType.Literal and blit.atom.ast_type in (
+                    ASTType.BodyAggregate,
+                    ASTType.Aggregate,
+                ):
+                    for element_idx, element in enumerate(blit.atom.elements):
+                        condition = list(element.condition)
+                        updated |= self._remove_superseed_from_list(condition)
+                        blit.atom.elements[element_idx] = element.update(condition=condition)
+
+            if updated:
                 return stm.update(body=body)
         return stm
 
