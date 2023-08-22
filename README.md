@@ -20,6 +20,16 @@ cat encoding.lp | ngo > optimized_encoding.lp
 ```
 Now use any diff viewer on the two new files.
 
+### Option --input-predicates
+For the `cleanup` trait you have to state which predicates in your logic
+program are considered input. This means they are provided outside of the encoding,
+for example in an instance file. You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0. 
+Example:
+```shell
+ngo --input-predicates="edge/2, node/1"
+```
+You can also write `--input-predicates=auto` to try to auto-detect the input predicates by screening your program for all predicates and taking the ones that do not occur in the head of any rule.
+
 ### Option --enable
 
 The option enable support several traits that can be added, like
@@ -27,7 +37,25 @@ The option enable support several traits that can be added, like
 cat encoding.lp | ngo --enable equality summinmax_chains
 ```
 
-The following traits are available:
+The following traits are available:src/ngo/literal_duplication.py
+
+**cleanup**
+
+This module removes unnecessary literals that are superseeded by others.
+This requires the knowledge of which predicates are input predicates,
+beeing derived somewhere else, e.g. an instance of the problem.
+
+```
+b(X,Y) :- dom(X), dom(Y), X+Y < 42.
+a(X,Y) :- b(X,Y), dom(X), dom(Y).
+```
+becomes
+```
+b(X,Y) :- dom(X), dom(Y), X+Y < 42.
+a(X,Y) :- b(X,Y).
+```
+if `dom/2` is an input predicate.
+To enter input predicates, see option `--input-predicates`.
 
 **duplication**
 

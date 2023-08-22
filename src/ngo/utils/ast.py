@@ -20,12 +20,14 @@ from clingo.ast import (
 )
 
 LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
-SIGNS = {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}
+SIGNS = frozenset({Sign.NoSign, Sign.Negation, Sign.DoubleNegation})
 
 
 Predicate = NamedTuple("Predicate", [("name", str), ("arity", int)])
 
 SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predicate)])
+
+SignSetType = frozenset[Sign] | set[Sign]
 
 
 def negate_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
@@ -206,7 +208,7 @@ def potentially_unifying(lhs: AST, rhs: AST) -> bool:
     return False
 
 
-def body_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def body_predicates(rule: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the rule body as (name, arity) that have a sign in the set signs
     """
@@ -219,7 +221,18 @@ def body_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
             yield from conditional_literal_predicate(blit, signs)
 
 
-def literal_predicate(lit: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def minimize_predicates(stm: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
+    """
+    yields all predicates used in the minimize statement as (name, arity) that have a sign in the set signs
+    """
+    if stm.ast_type == ASTType.Minimize:
+        for blit in stm.body:
+            if blit.ast_type == ASTType.Literal:
+                yield from literal_predicate(blit, signs)
+            yield from conditional_literal_predicate(blit, signs)
+
+
+def literal_predicate(lit: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """converts ast Literal into (sign, name, arity) if sign is in signs"""
     if lit.ast_type == ASTType.Literal:
         if lit.sign in signs and lit.atom.ast_type == ASTType.SymbolicAtom:
@@ -228,7 +241,7 @@ def literal_predicate(lit: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
                 yield SignedPredicate(lit.sign, Predicate(atom.symbol.name, len(atom.symbol.arguments)))
 
 
-def conditional_literal_predicate(condlit: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def conditional_literal_predicate(condlit: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the conditional literal as (name, arity) that have a sign in the set signs
     """
@@ -240,7 +253,7 @@ def conditional_literal_predicate(condlit: AST, signs: set[Sign]) -> Iterator[Si
         yield from literal_predicate(cond, signs)
 
 
-def headorbody_aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def headorbody_aggregate_predicate(agg: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the head or body agregate as (name, arity) that have a sign in the set signs
     """
@@ -254,7 +267,7 @@ def headorbody_aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[Signe
                     yield from literal_predicate(cond, signs)
 
 
-def aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def aggregate_predicate(agg: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the aggregate as (name, arity) that have a sign in the set signs
     """
@@ -266,7 +279,7 @@ def aggregate_predicate(agg: AST, signs: set[Sign]) -> Iterator[SignedPredicate]
                 yield from literal_predicate(cond, signs)
 
 
-def disjunction_predicate(head: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def disjunction_predicate(head: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the disjunction head as (name, arity) that have a sign in the set signs
     """
@@ -275,7 +288,7 @@ def disjunction_predicate(head: AST, signs: set[Sign]) -> Iterator[SignedPredica
             yield from conditional_literal_predicate(lit, signs)
 
 
-def head_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def head_predicates(rule: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     yields all predicates used in the rule head as (name, arity) that have a sign in the set signs
     """
@@ -287,7 +300,7 @@ def head_predicates(rule: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
         yield from disjunction_predicate(head, signs)
 
 
-def __get_preds_from_literal_in_conditional(condition: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def __get_preds_from_literal_in_conditional(condition: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     assert condition.ast_type == ASTType.ConditionalLiteral
     yield from literal_predicate(condition.literal, signs)
 
@@ -313,7 +326,7 @@ def headderivable_predicates(rule: AST) -> Iterator[SignedPredicate]:
                 yield from __get_preds_from_literal_in_conditional(lit, positive)
 
 
-def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
+def predicates(ast: AST, signs: SignSetType = SIGNS) -> Iterator[SignedPredicate]:
     """
     yields all predicates in ast that have a sign in the set signs
     """
@@ -324,6 +337,7 @@ def predicates(ast: AST, signs: set[Sign]) -> Iterator[SignedPredicate]:
     yield from disjunction_predicate(ast, signs)
     yield from conditional_literal_predicate(ast, signs)
     yield from body_predicates(ast, signs)
+    yield from minimize_predicates(ast, signs)
 
 
 def has_interval(ast: AST) -> bool:
