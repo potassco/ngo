@@ -30,6 +30,16 @@ a(X,Y) :- b(X,Y).""",
         (
             """
 b(X,Y) :- dom(X), dom(Y), X+Y > 42.
+a(X,Y) :- b(X,Y), dom(X), not dom(Y).
+            """,
+            [Predicate("dom", 1)],
+            """#program base.
+b(X,Y) :- dom(X); dom(Y); (X+Y) > 42.
+a(X,Y) :- b(X,Y); not dom(Y).""",
+        ),
+        (
+            """
+b(X,Y) :- dom(X), dom(Y), X+Y > 42.
 b(X,Y) :- dom(X), dom(Y), X+Y < 23.
 a(X,Y) :- b(X,Y), dom(X), dom(Y).
             """,
@@ -37,6 +47,18 @@ a(X,Y) :- b(X,Y), dom(X), dom(Y).
             """#program base.
 b(X,Y) :- dom(X); dom(Y); (X+Y) > 42.
 b(X,Y) :- dom(X); dom(Y); (X+Y) < 23.
+a(X,Y) :- b(X,Y).""",
+        ),
+        (
+            """
+b(X,Y) :- dom(X), dom(Y), X+Y > 42, not foo(X).
+b(X,Y) :- dom(X), dom(Y), X+Y < 23, not foo(X).
+a(X,Y) :- b(X,Y), dom(X), dom(Y), not foo(X).
+            """,
+            [Predicate("dom", 1)],
+            """#program base.
+b(X,Y) :- dom(X); dom(Y); (X+Y) > 42; not foo(X).
+b(X,Y) :- dom(X); dom(Y); (X+Y) < 23; not foo(X).
 a(X,Y) :- b(X,Y).""",
         ),
         (

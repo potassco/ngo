@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from itertools import permutations
 from typing import Iterator, Optional
 
-from clingo.ast import AST, ASTType
+from clingo.ast import AST, ASTType, Sign
 
-from ngo.utils.ast import Predicate, headderivable_predicates, predicates
+from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates, predicates
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("cleanup")
@@ -24,7 +24,7 @@ class Mapping:
     """
 
     head_pred: Predicate
-    body_pred: Predicate
+    body_pred: SignedPredicate
     var_map: tuple[int, ...]
 
 
@@ -61,7 +61,11 @@ class CleanupTranslator:
                     if arg in head_symbol.arguments:
                         var_map.append(head_symbol.arguments.index(arg))
                 if len(var_map) == len(body_symbol.arguments):
-                    yield Mapping(head_pred, Predicate(body_symbol.name, len(body_symbol.arguments)), tuple(var_map))
+                    yield Mapping(
+                        head_pred,
+                        SignedPredicate(cond.sign, Predicate(body_symbol.name, len(body_symbol.arguments))),
+                        tuple(var_map),
+                    )
 
     @staticmethod
     def _collect_top_level_body_symbols(body: Iterator[AST]) -> Iterator[AST]:
@@ -127,7 +131,7 @@ class CleanupTranslator:
             new_relations = set()
             for lhs in closure:
                 for rhs in closure:
-                    if lhs.body_pred == rhs.head_pred:
+                    if lhs.body_pred.sign == Sign.NoSign and lhs.body_pred.pred == rhs.head_pred:
                         var_map = [lhs.var_map[m] for m in rhs.var_map]
                         new_relations.add(Mapping(lhs.head_pred, rhs.body_pred, tuple(var_map)))
             closure_until_now = closure | new_relations
@@ -167,6 +171,7 @@ class CleanupTranslator:
             lhs.ast_type != ASTType.Literal
             or lhs.atom.ast_type != ASTType.SymbolicAtom
             or lhs.atom.symbol.ast_type != ASTType.Function
+            or lhs.sign != Sign.NoSign
         ):
             return False
         if (
@@ -180,7 +185,7 @@ class CleanupTranslator:
         rhs_symbol = rhs.atom.symbol
         rhs_pred = Predicate(rhs_symbol.name, len(rhs_symbol.arguments))
         for m in self.superseeds:
-            if m.head_pred == lhs_pred and m.body_pred == rhs_pred:
+            if m.head_pred == lhs_pred and m.body_pred.pred == rhs_pred and m.body_pred.sign == rhs.sign:
                 fits = True
                 for rhs_index, lhs_index in enumerate(m.var_map):
                     if rhs_symbol.arguments[rhs_index] != lhs_symbol.arguments[lhs_index]:
