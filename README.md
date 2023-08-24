@@ -2,21 +2,23 @@
 
 ## Installation
 
+You can install the current development version using pip
+
 ```shell
-pip install ngo
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ngo
 ```
 
 ## Usage
 ngo converts an encoding read from stdin to an optimized encoding.
 
 ```shell
-cat encoding.lp | ngo > new_encoding.lp
+cat encoding.lp | ngo --input-predicates=auto > new_encoding.lp
 ```
 
 To get a better view of what ngo did to your encoding compare the two files
 ```shell
 cat encoding.lp | ngo --enable none > orig_encoding.lp
-cat encoding.lp | ngo > optimized_encoding.lp
+cat encoding.lp | ngo --input-predicates=auto > optimized_encoding.lp
 ```
 Now use any diff viewer on the two new files.
 
@@ -36,8 +38,10 @@ The option enable support several traits that can be added, like
 ```shell
 cat encoding.lp | ngo --enable equality summinmax_chains
 ```
+By default this setting is set to `all`, which enables all traits.
+To just rewrite your program into std clingo.ast form, use `none` to disable any optimizations.
 
-The following traits are available:src/ngo/literal_duplication.py
+The following traits are available:
 
 **cleanup**
 
@@ -135,7 +139,6 @@ pre-commit install
 
 This checks the source code whenever `git commit` is used.
 
-[doc]: https://potassco.org/clingo/python-api/current/
 [nox]: https://nox.thea.codes/en/stable/index.html
 [pre]: https://pre-commit.com/
 [black]: https://black.readthedocs.io/en/stable/

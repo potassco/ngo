@@ -1,6 +1,9 @@
+0.0.2:
+ - https://test.pypi.org/ packages available
 0.0.1:
  - initial commit and refactoring
  - adds equality trait
  - adds summinmax_chains trait
  - add symmetry trait
  - add duplication trait
+ - add cleanup trait
