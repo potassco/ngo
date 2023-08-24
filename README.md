@@ -2,8 +2,10 @@
 
 ## Installation
 
+You can install the current development version using pip
+
 ```shell
-pip install ngo
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ngo
 ```
 
 ## Usage
