@@ -47,7 +47,10 @@ class CleanupTranslator:
             all_preds.update([pred.pred for pred in predicates(stm)])
             derivable_preds.update([pred.pred for pred in headderivable_predicates(stm)])
 
-        return list(sorted(all_preds - derivable_preds))
+        input_ = list(sorted(all_preds - derivable_preds))
+        for pred in input_:
+            log.warning(f"Detected input predicate: {pred.name}/{pred.arity}")
+        return input_
 
     @staticmethod
     def _create_mappings(head_symbol: AST, body_lits: Iterator[AST]) -> Iterator[Mapping]:
@@ -201,6 +204,7 @@ class CleanupTranslator:
             fix = True
             for lhs, rhs in permutations(body, 2):
                 if self._superseeded(lhs, rhs):
+                    log.warning(f"Remove {rhs} from rule, as it is superseeded by {lhs}.")
                     body.remove(rhs)
                     updated = True
                     fix = False
