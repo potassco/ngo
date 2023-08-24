@@ -4,3 +4,4 @@
  - adds summinmax_chains trait
  - add symmetry trait
  - add duplication trait
+ - add cleanup trait
