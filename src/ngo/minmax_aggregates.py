@@ -5,6 +5,7 @@
 """
 
 from collections import defaultdict
+from functools import cache
 from itertools import chain
 from typing import Any, Callable, Iterable, Iterator, Optional
 
@@ -34,7 +35,7 @@ from clingo.ast import (
 )
 from clingo.symbol import Infimum, Supremum
 
-from ngo.dependency import DOM_STR, DomainPredicates, RuleDependency
+from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import (
     LOC,
     BodyAggAnalytics,
@@ -44,6 +45,7 @@ from ngo.utils.ast import (
     potentially_unifying_sequence,
     predicates,
 )
+from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("summinmax_chains")
@@ -93,7 +95,8 @@ class MinMaxAggregator:
 
     MinMaxPred = tuple[int, Translation, int]
 
-    def __init__(self, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
+    def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
+        self.unique_names = unique_names
         self.rule_dependency = rule_dependency
         self.domain_predicates = domain_predicates
         # list of ({AggregateFunction.Max, AggregateFunction.Min}, Translation, index)
@@ -202,7 +205,7 @@ class MinMaxAggregator:
         if agg.atom.function == AggregateFunction.Max:
             minmax_pred = self.domain_predicates.min_predicate(new_predicate, 0)
 
-        chain_name = f"{CHAIN_STR}{new_predicate[0]}"
+        chain_name = self._chain(new_predicate[0])
         next_pred = self.domain_predicates.next_predicate(new_predicate, 0)
 
         aux_head = Literal(
@@ -413,6 +416,12 @@ class MinMaxAggregator:
         self._store_aggregate_head(agg.atom.function, rule.head, rest_vars, max_var, new_name)
         return ret
 
+    # important that this is called only once per input.
+    # TODO: breaks in multithreading
+    @cache  # pylint: disable=method-cache-max-size-none
+    def _chain(self, name: str) -> str:
+        return self.unique_names.new_predicate(f"{CHAIN_STR}{name}", 2).name
+
     def _create_replacement(
         self,
         minmaxpred: MinMaxPred,
@@ -447,7 +456,7 @@ class MinMaxAggregator:
         #  __next_0__dom___max_0_0_11(__PREV,__NEXT)
         weight = negate_if(BinaryOperation(LOC, BinaryOperator.Minus, next_, prev))
         newpred = translation.newpred
-        chain_name = f"{CHAIN_STR}{newpred[0]}"
+        chain_name = self._chain(newpred[0])
         new_terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(terms)
 
         newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
@@ -459,7 +468,7 @@ class MinMaxAggregator:
             Sign.NoSign,
             SymbolicAtom(Function(LOC, chain_name, newargs, False)),  # type: ignore
         )
-        dompred = Predicate(f"{DOM_STR}{newpred[0]}", 1)
+        dompred = self.domain_predicates.dom_named_predicate(newpred.name, 1)
         nextpred = Literal(
             LOC,
             Sign.NoSign,

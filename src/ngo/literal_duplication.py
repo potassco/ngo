@@ -29,7 +29,6 @@ from ngo.utils.logger import singleton_factory_logger
 log = singleton_factory_logger("literal_duplication")
 
 AUX_VAR = "__AUX_"
-AUX_FUNC = "__aux_"
 
 
 def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
@@ -226,11 +225,11 @@ class LiteralCollector:
                     continue
                 # create new aux predicate
                 min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
-                aux_name = unique_names.function_name(AUX_FUNC)
                 bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
+                aux_pred = unique_names.new_auxpredicate(len(bound))
                 new_rule = Rule(
                     location=LOC,
-                    head=Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_name, bound, False))),
+                    head=Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, aux_pred.name, bound, False))),
                     body=literal_set,
                 )
                 self.additional_rules[min_index].append(new_rule)
@@ -241,7 +240,7 @@ class LiteralCollector:
                     changed_rules.add(rule_builder.ruleid)
                     rule = self.prg[rule_builder.ruleid]
                     reverted_bound = unanonymize_variables(bound, rule_builder.newvars2oldvars)
-                    new_body = self.rebuild(rule_builder, aux_name, reverted_bound)
+                    new_body = self.rebuild(rule_builder, aux_pred.name, reverted_bound)
                     if new_body:
                         new_rule = rule.update(body=new_body)  # should work for rules and minimize statements
                         self.prg[rule_builder.ruleid] = new_rule

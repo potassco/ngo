@@ -4,6 +4,7 @@ from clingo.ast import AST, Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates, PositivePredicateDependency
 from ngo.utils.ast import Predicate, SignedPredicate, body_predicates, head_predicates
+from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -295,7 +296,8 @@ def test_domain_predicates(
     non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    dp = DomainPredicates(ast)
+    unique = UniqueNames(ast)
+    dp = DomainPredicates(unique, ast)
     for pred in static:
         assert dp.is_static(pred)
     for pred in notstatic:
@@ -349,7 +351,8 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
     """test computation of non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    dp = DomainPredicates(ast)
+    unique = UniqueNames(ast)
+    dp = DomainPredicates(unique, ast)
     for pred in hasnodomain:
         assert not dp.has_domain(pred)
 
@@ -581,7 +584,8 @@ def test_domain_predicates_condition(prg: str, predicates: list[Predicate], doma
     """test domain computation on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    dp = DomainPredicates(ast)
+    unique = UniqueNames(ast)
+    dp = DomainPredicates(unique, ast)
     strlist: list[str] = []
     for pred in predicates:
         if dp.has_domain(pred):
@@ -595,13 +599,16 @@ def test_domain_predicates_exceptions() -> None:
     ast: list[AST] = []
     parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
     with pytest.raises(Exception):
-        dp = DomainPredicates(ast)
+        unique = UniqueNames(ast)
+        dp = DomainPredicates(unique, ast)
         list(dp.create_domain(Predicate("a", 1)))
 
     with pytest.raises(Exception):
-        dp = DomainPredicates(ast)
+        unique = UniqueNames(ast)
+        dp = DomainPredicates(unique, ast)
         list(dp.create_nextpred_for_domain(Predicate("a", 1), 0))
 
     with pytest.raises(Exception):
-        dp = DomainPredicates(ast)
+        unique = UniqueNames(ast)
+        dp = DomainPredicates(unique, ast)
         list(dp.create_nextpred_for_domain(Predicate("c", 1), 1))

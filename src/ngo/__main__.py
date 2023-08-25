@@ -33,8 +33,8 @@ def main() -> None:
     ### create general tooling and analyzing classes
     rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)
-    dp = DomainPredicates(prg)
-    unique_names = UniqueNames()
+    unique_names = UniqueNames(prg)
+    dp = DomainPredicates(unique_names, prg)
     if args.input_predicates == "auto":
         args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
 
@@ -59,7 +59,7 @@ def main() -> None:
             prg = list(chain(map(eq, prg)))
 
         if "summinmax_chains" in args.enable:
-            mma = MinMaxAggregator(rdp, dp)
+            mma = MinMaxAggregator(unique_names, rdp, dp)
             prg = mma.execute(prg)
 
         if prg == old:
