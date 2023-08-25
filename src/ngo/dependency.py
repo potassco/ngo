@@ -3,6 +3,7 @@ A module for all predicate dependencies in the AST
 """
 from collections import defaultdict
 from copy import deepcopy
+from functools import cache
 from itertools import chain, product
 from typing import Iterable, Iterator, Mapping
 
@@ -38,6 +39,7 @@ from ngo.utils.ast import (
     literal_predicate,
     transform_ast,
 )
+from ngo.utils.globals import UniqueNames
 
 MIN_STR = "__min_"
 MAX_STR = "__max_"
@@ -119,7 +121,8 @@ class DomainPredicates:
     Also computes domain predicates, min/max elements and chains.
     """
 
-    def __init__(self, prg: Iterable[AST]):
+    def __init__(self, unique_names: UniqueNames, prg: Iterable[AST]):
+        self.unique_names = unique_names
         self._not_static: set[Predicate] = set()  # set of predicates that is not already a domain predicate
 
         prg: list[AST] = list(prg)  # type: ignore
@@ -190,23 +193,35 @@ class DomainPredicates:
             return pred
         return self.domains[pred]
 
+    # important that this is called only once per input.
+    # TODO: breaks in multithreading
+    @cache  # pylint: disable=method-cache-max-size-none
+    def _predicate(self, name: str, arity: int) -> Predicate:
+        return self.unique_names.new_predicate(name, arity)
+
     def min_predicate(self, pred: Predicate, position: int) -> Predicate:
         """
         returns min_domain predicate of pred
         """
-        return Predicate(f"{MIN_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return self._predicate(f"{MIN_STR}{position}" + self.domain_predicate(pred)[0], 1)
 
     def max_predicate(self, pred: Predicate, position: int) -> Predicate:
         """
         returns max_domain predicate of pred
         """
-        return Predicate(f"{MAX_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return self._predicate(f"{MAX_STR}{position}" + self.domain_predicate(pred)[0], 1)
 
     def next_predicate(self, pred: Predicate, position: int) -> Predicate:
-        """p
+        """
         returns next_domain predicate of pred
         """
-        return Predicate(f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
+        return self._predicate(f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
+
+    def dom_named_predicate(self, name: str, arity: int) -> Predicate:
+        """
+        returns domain named predicate of name/arity
+        """
+        return self._predicate(DOM_STR + name, arity)
 
     def __create_domain_for_condition(self, node: AST) -> Iterator[AST]:
         """yield all domain rules for all symbolic atoms in node"""
@@ -488,9 +503,8 @@ class DomainPredicates:
                     cond = transform_ast(cond, "SymbolicAtom", replace_domain)
                 new_conditions.append(copy_conditions)
             domain_rules[head] = new_conditions
-            self.domains[Predicate(head.symbol.name, len(head.symbol.arguments))] = Predicate(
-                DOM_STR + head.symbol.name,
-                len(head.symbol.arguments),
+            self.domains[Predicate(head.symbol.name, len(head.symbol.arguments))] = self.dom_named_predicate(
+                head.symbol.name, len(head.symbol.arguments)
             )
         self.domain_rules.update(domain_rules)
 

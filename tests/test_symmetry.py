@@ -4,6 +4,7 @@ from clingo.ast import AST, parse_string
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.symmetry import SymmetryTranslator
+from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -56,7 +57,8 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     rdp = RuleDependency(ast)
-    dp = DomainPredicates(ast)
+    unique_names = UniqueNames(ast)
+    dp = DomainPredicates(unique_names, ast)
     mma = SymmetryTranslator(rdp, dp)
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output
