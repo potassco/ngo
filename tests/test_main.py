@@ -9,7 +9,7 @@ import pytest
 
 from ngo.utils.ast import Predicate
 from ngo.utils.logger import singleton_factory_logger
-from ngo.utils.parser import OPTIONS, consistency_check, get_parser
+from ngo.utils.parser import OPTIONS, get_parser
 
 
 def test_logger() -> None:
@@ -31,9 +31,6 @@ def test_parser() -> None:
     parser = get_parser()
     args = parser.parse_args(["--log", "error"])
     assert args.log == logging.ERROR
-    with pytest.raises(ArgumentTypeError) as excinfo:
-        consistency_check(args)
-    assert str(excinfo.value) == "Trait `cleanup` needs the option --input-predicates to be set."
     args = parser.parse_args(["--enable", "summinmax_chains", "equalities"])
     assert "equalities" in args.enable
     assert "summinmax_chains" in args.enable

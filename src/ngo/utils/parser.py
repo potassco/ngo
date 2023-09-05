@@ -20,7 +20,7 @@ else:
 VERSION = metadata.version("ngo")
 
 
-OPTIONS = ["equalities", "summinmax_chains", "symmetry", "duplication", "cleanup"]
+OPTIONS = ["equalities", "summinmax_chains", "symmetry", "duplication", "cleanup", "unused"]
 
 
 class PredicateList(Action):
@@ -67,12 +67,6 @@ class VerifyEnable(Action):
             values = OPTIONS
 
         setattr(namespace, self.dest, values)
-
-
-def consistency_check(args: Namespace) -> None:
-    """check for argument consistency and raise ArgumentTypeError in case of inconsistency"""
-    if "cleanup" in args.enable and args.input_predicates is None:
-        raise ArgumentTypeError("Trait `cleanup` needs the option --input-predicates to be set.")
 
 
 def get_parser() -> ArgumentParser:
@@ -125,7 +119,16 @@ def get_parser() -> ArgumentParser:
         action=PredicateList,
         nargs="?",
         type=str,
+        default="auto",
         help="enter all input predicates in the form 'name/arity', like 'edge/2' as a comma seperated list.",
+    )
+    parser.add_argument(
+        "--output-predicates",
+        action=PredicateList,
+        nargs="+",
+        type=str,
+        default="",
+        help="enter all output predicates in the form 'name/arity', like 'edge/2' as a comma seperated list.",
     )
 
     parser.add_argument("--version", "-v", action="version", version=f"%(prog)s {VERSION}")

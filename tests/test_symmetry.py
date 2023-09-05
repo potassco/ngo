@@ -57,7 +57,7 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     rdp = RuleDependency(ast)
-    unique_names = UniqueNames(ast)
+    unique_names = UniqueNames(ast, [])
     dp = DomainPredicates(unique_names, ast)
     mma = SymmetryTranslator(rdp, dp)
     output = "\n".join(map(str, mma.execute(ast)))

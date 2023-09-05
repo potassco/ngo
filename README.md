@@ -12,25 +12,25 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 ngo converts an encoding read from stdin to an optimized encoding.
 
 ```shell
-cat encoding.lp | ngo --input-predicates=auto > new_encoding.lp
+cat encoding.lp | ngo > new_encoding.lp
 ```
 
 To get a better view of what ngo did to your encoding compare the two files
 ```shell
 cat encoding.lp | ngo --enable none > orig_encoding.lp
-cat encoding.lp | ngo --input-predicates=auto > optimized_encoding.lp
+cat encoding.lp | ngo > optimized_encoding.lp
 ```
 Now use any diff viewer on the two new files.
 
 ### Option --input-predicates
-For the `cleanup` trait you have to state which predicates in your logic
+For some traits you have to state which predicates in your logic
 program are considered input. This means they are provided outside of the encoding,
 for example in an instance file. You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0. 
 Example:
 ```shell
 ngo --input-predicates="edge/2, node/1"
 ```
-You can also write `--input-predicates=auto` to try to auto-detect the input predicates by screening your program for all predicates and taking the ones that do not occur in the head of any rule.
+You can also write `--input-predicates=auto` (its the default) to try to auto-detect the input predicates by screening your program for all predicates and taking the ones that do not occur in the head of any rule.
 
 ### Option --enable
 
