@@ -12,31 +12,30 @@ from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDe
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.symmetry import SymmetryTranslator
+from ngo.unused import UnusedTranslator
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
-from ngo.utils.parser import consistency_check, get_parser
+from ngo.utils.parser import get_parser
 
 
 def main() -> None:
     """
     Run the main function.
     """
-
     parser = get_parser()
     args = parser.parse_args()
-    consistency_check(args)
 
     log = singleton_factory_logger("main", args.log)
 
     prg: list[AST] = []
     parse_files(["-"], prg.append, logger=log.warn)
     ### create general tooling and analyzing classes
-    rdp = RuleDependency(prg)
-    pdg = PositivePredicateDependency(prg)
-    unique_names = UniqueNames(prg)
-    dp = DomainPredicates(unique_names, prg)
     if args.input_predicates == "auto":
         args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
+    rdp = RuleDependency(prg)
+    pdg = PositivePredicateDependency(prg)
+    unique_names = UniqueNames(prg, args.input_predicates)
+    dp = DomainPredicates(unique_names, prg)
 
     while True:
         old = list(prg)
@@ -45,6 +44,10 @@ def main() -> None:
         if "cleanup" in args.enable:
             clt = CleanupTranslator(args.input_predicates)
             prg = clt.execute(prg)
+
+        if "unused" in args.enable:
+            utr = UnusedTranslator(args.input_predicates, args.output_predicates, unique_names)
+            prg = utr.execute(prg)
 
         if "duplication" in args.enable:
             ldt = LiteralDuplicationTranslator(unique_names, dp)

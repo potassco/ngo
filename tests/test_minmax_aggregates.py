@@ -890,7 +890,7 @@ def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     rdp = RuleDependency(ast)
-    unique = UniqueNames(ast)
+    unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
     mma = MinMaxAggregator(unique, rdp, dp)
     output = "\n".join(map(str, mma.execute(ast)))

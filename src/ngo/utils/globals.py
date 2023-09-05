@@ -10,9 +10,9 @@ AUX_FUNC = "__aux_"
 class UniqueNames:
     """class to provide unique names for predicates, functions, variables"""
 
-    def __init__(self, prg: list[AST]) -> None:
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate]) -> None:
         self.auxcounter = 0
-        self.predicates: set[Predicate] = set()
+        self.predicates: set[Predicate] = set(input_predicates)
         for stm in prg:
             for spred in predicates(stm):
                 self.predicates.add(spred.pred)

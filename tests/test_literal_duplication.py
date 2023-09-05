@@ -369,9 +369,9 @@ def test_duplication(prg: str, converted_prg: str) -> None:
     """test removal of duplicate literals on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    unique = UniqueNames(ast)
+    unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
-    unique_names = UniqueNames(ast)
+    unique_names = UniqueNames(ast, [])
     ldt = LiteralDuplicationTranslator(unique_names, dp)
     output = "\n".join(map(str, ldt.execute(ast)))
     assert converted_prg == output
