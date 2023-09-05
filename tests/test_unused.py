@@ -108,6 +108,15 @@ b2 :- c(X).
 { a } :- b1.
 { a } :- b2.""",
         ),
+        (
+            """
+#false :- not 1 <= { order(T,S) } <= 1; S = (1..N); task_nr(N).
+            """,
+            [],
+            [],
+            """#program base.
+#false :- not 1 <= { order(T,S) } <= 1; S = (1..N); task_nr(N).""",
+        ),
     ),
 )
 def test_unused_translation(

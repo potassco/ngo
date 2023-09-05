@@ -5,7 +5,7 @@
 from collections import Counter, defaultdict
 from functools import partial
 from itertools import chain
-from typing import Sequence
+from typing import Sequence, Callable
 
 from clingo.ast import AST, ASTType, Sign, Variable
 
@@ -30,6 +30,15 @@ class UnusedTranslator:
         self._anon = Variable(LOC, "_")
         self.new_names: dict[tuple[Predicate, Predicate], str] = {}
 
+    @staticmethod
+    def transform_body_ast_except_aggregate(stm: AST, ast_type: str, func : Callable[[AST], AST]) -> AST:
+        """do call transform on everythin in the body except Aggregate"""
+        for index, part in enumerate(stm.body):
+            if part.ast_type == ASTType.Literal and part.atom.ast_type == ASTType.Aggregate:
+                continue
+            stm.body[index] = transform_ast(part, ast_type, func)
+        return stm
+
     def _anonymize_variables(self, prg: list[AST]) -> list[AST]:
         new_prg: list[AST] = []
 
@@ -41,7 +50,7 @@ class UnusedTranslator:
         for stm in prg:
             if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
                 var_collection = Counter(collect_ast(stm, "Variable"))
-                stm = transform_ast(stm, "Variable", partial(anom_var, var_collection))
+                stm = self.transform_body_ast_except_aggregate(stm, "Variable", partial(anom_var, var_collection))
             new_prg.append(stm)
         return new_prg
 
