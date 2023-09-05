@@ -98,6 +98,7 @@ class UnusedTranslator:
         if (orig_pred, new_pred) not in self.new_names:
             self.new_names[key] = self.unique_names.new_predicate(new_pred.name, new_pred.arity).name
             self.used.add(Predicate(self.new_names[key], new_pred.arity))
+            log.warning(f"Replaced {orig_pred.name}/{orig_pred.arity} with {self.new_names[key]}/{new_pred.arity}.")
         return self.new_names[key]
 
     def transform(self, atom: AST) -> AST:
@@ -143,6 +144,7 @@ class UnusedTranslator:
                 symbol = stm.head.atom.symbol
                 pred = Predicate(symbol.name, len(symbol.arguments))
                 if pred not in self.used:
+                    log.warning(f"Remove predicate {pred.name}/{pred.arity} completely.")
                     continue
             new_prg.append(stm)
         return new_prg
