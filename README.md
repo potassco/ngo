@@ -32,6 +32,16 @@ ngo --input-predicates="edge/2, node/1"
 ```
 You can also write `--input-predicates=auto` (its the default) to try to auto-detect the input predicates by screening your program for all predicates and taking the ones that do not occur in the head of any rule.
 
+### Option --output-predicates
+For some traits you have to state which predicates in your logic
+program are considered output. This means they are not allowed to be removed or changed by `ngo`.
+You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0. 
+Example:
+```shell
+ngo --output-predicates="path/2, cost/1"
+```
+You can also write `--output-predicates` (its the default) to leave it empty. This will remove as much predicate literals as possible. If performance is critical it makes sense to remove all kinds of output rewriting from the encoding and make a dedicated postprocessing step for it.
+
 ### Option --enable
 
 The option enable support several traits that can be added, like
@@ -60,6 +70,22 @@ a(X,Y) :- b(X,Y).
 ```
 if `dom/2` is an input predicate.
 To enter input predicates, see option `--input-predicates`.
+
+**unused**
+
+This module removes unecessary variables from predicates. It might shrink predicates down and reduce their arity.
+If a predicate is not used in a constraint not in the `--output-predicates` it might be removed completely.
+So, this program:
+```
+b(X) :- c(X).
+{ a } :- b(X).
+foo :- a.
+```
+where `c/1` is an input predicate, becomes:
+```
+b :- c(_).
+{ a } :- b.
+``````
 
 **duplication**
 

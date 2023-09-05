@@ -7,7 +7,7 @@ from functools import partial
 from itertools import chain
 from typing import Sequence
 
-from clingo.ast import AST, ASTType, Variable
+from clingo.ast import AST, ASTType, Sign, Variable
 
 from ngo.utils.ast import LOC, Predicate, collect_ast, transform_ast
 from ngo.utils.globals import UniqueNames
@@ -88,6 +88,7 @@ class UnusedTranslator:
         key = (orig_pred, new_pred)
         if (orig_pred, new_pred) not in self.new_names:
             self.new_names[key] = self.unique_names.new_predicate(new_pred.name, new_pred.arity).name
+            self.used.add(Predicate(self.new_names[key], new_pred.arity))
         return self.new_names[key]
 
     def transform(self, atom: AST) -> AST:
@@ -104,7 +105,7 @@ class UnusedTranslator:
                 return atom.update(symbol=term)
         return atom
 
-    def project_unused_stm(self, stm: AST) -> AST:
+    def _project_unused_stm(self, stm: AST) -> AST:
         """replace all literal predicates with unused positions with "smaller" predicates in the statement"""
         stm = transform_ast(stm, "SymbolicAtom", self.transform)
         return stm
@@ -112,9 +113,28 @@ class UnusedTranslator:
     def project_unused(self, prg: list[AST]) -> list[AST]:
         """replace all literal predicates with unused positions with "smaller" predicates"""
         new_prg: list[AST] = []
-
         for stm in prg:
-            stm = self.project_unused_stm(stm)
+            stm = self._project_unused_stm(stm)
+            new_prg.append(stm)
+        return new_prg
+
+    def remove_unused(self, prg: list[AST]) -> list[AST]:
+        """remove all simple rules that produce unused predicate literals
+        Currently skip disjunctions and aggregates in the heads
+        """
+        new_prg: list[AST] = []
+        for stm in prg:
+            if (
+                stm.ast_type == ASTType.Rule
+                and stm.head.ast_type == ASTType.Literal
+                and stm.head.sign == Sign.NoSign
+                and stm.head.atom.ast_type == ASTType.SymbolicAtom
+                and stm.head.atom.symbol.ast_type == ASTType.Function
+            ):
+                symbol = stm.head.atom.symbol
+                pred = Predicate(symbol.name, len(symbol.arguments))
+                if pred not in self.used:
+                    continue
             new_prg.append(stm)
         return new_prg
 
@@ -126,4 +146,5 @@ class UnusedTranslator:
         prg = self._anonymize_variables(prg)
         self.analyze_usage(prg)
         prg = self.project_unused(prg)
+        prg = self.remove_unused(prg)
         return prg
