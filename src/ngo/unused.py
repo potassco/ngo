@@ -5,7 +5,7 @@
 from collections import Counter, defaultdict
 from functools import partial
 from itertools import chain
-from typing import Sequence, Callable
+from typing import Callable, Sequence
 
 from clingo.ast import AST, ASTType, Sign, Variable
 
@@ -31,7 +31,7 @@ class UnusedTranslator:
         self.new_names: dict[tuple[Predicate, Predicate], str] = {}
 
     @staticmethod
-    def transform_body_ast_except_aggregate(stm: AST, ast_type: str, func : Callable[[AST], AST]) -> AST:
+    def transform_body_ast_except_aggregate(stm: AST, ast_type: str, func: Callable[[AST], AST]) -> AST:
         """do call transform on everythin in the body except Aggregate"""
         for index, part in enumerate(stm.body):
             if part.ast_type == ASTType.Literal and part.atom.ast_type == ASTType.Aggregate:
@@ -98,7 +98,7 @@ class UnusedTranslator:
         if (orig_pred, new_pred) not in self.new_names:
             self.new_names[key] = self.unique_names.new_predicate(new_pred.name, new_pred.arity).name
             self.used.add(Predicate(self.new_names[key], new_pred.arity))
-            log.warning(f"Replaced {orig_pred.name}/{orig_pred.arity} with {self.new_names[key]}/{new_pred.arity}.")
+            log.info(f"Replaced {orig_pred.name}/{orig_pred.arity} with {self.new_names[key]}/{new_pred.arity}.")
         return self.new_names[key]
 
     def transform(self, atom: AST) -> AST:
@@ -144,7 +144,7 @@ class UnusedTranslator:
                 symbol = stm.head.atom.symbol
                 pred = Predicate(symbol.name, len(symbol.arguments))
                 if pred not in self.used:
-                    log.warning(f"Remove predicate {pred.name}/{pred.arity} completely.")
+                    log.info(f"Remove predicate {pred.name}/{pred.arity} completely.")
                     continue
             new_prg.append(stm)
         return new_prg

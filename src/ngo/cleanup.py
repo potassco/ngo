@@ -49,11 +49,11 @@ class CleanupTranslator:
 
         input_ = list(sorted(all_preds - derivable_preds))
         for pred in input_:
-            log.warning(f"Detected input predicate: {pred.name}/{pred.arity}")
+            log.info(f"Detected input predicate: {pred.name}/{pred.arity}")
         return input_
 
     @staticmethod
-    def _create_mappings(head_symbol: AST, body_lits: Iterator[AST]) -> Iterator[Mapping]:
+    def _create_mappings(head_symbol: AST, body_lits: list[AST]) -> Iterator[Mapping]:
         head_pred = Predicate(head_symbol.name, len(head_symbol.arguments))
         for cond in body_lits:
             assert cond.ast_type == ASTType.Literal
@@ -115,7 +115,7 @@ class CleanupTranslator:
                     head_symbols.append(symbol)
                     local_superseed.update(set(x for x in self._create_mappings(symbol, element.condition)))
         # add all body elements to all heads according to they variables
-        body_literals = self._collect_top_level_body_symbols(rule.body)
+        body_literals = list(self._collect_top_level_body_symbols(rule.body))
         for symbol in head_symbols:
             local_superseed.update(set(x for x in self._create_mappings(symbol, body_literals)))
         return local_superseed
@@ -167,6 +167,7 @@ class CleanupTranslator:
             self.superseeds.update(superseed)
         # 3. superseeded is transitive, make it explicit
         self.superseeds = self.transitive_closure(self.superseeds)
+        log.info(self.superseeds)
 
     def _superseeded(self, lhs: AST, rhs: AST) -> bool:
         """use the mappings to check if lhs Literal superseeds rhs literal"""
@@ -204,7 +205,7 @@ class CleanupTranslator:
             fix = True
             for lhs, rhs in permutations(body, 2):
                 if self._superseeded(lhs, rhs):
-                    log.warning(f"Remove {rhs} from rule, as it is superseeded by {lhs}.")
+                    log.info(f"Remove {rhs} from rule, as it is superseeded by {lhs}.")
                     body.remove(rhs)
                     updated = True
                     fix = False

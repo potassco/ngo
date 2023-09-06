@@ -166,6 +166,18 @@ a :- 42 {c : b(X,Y), dom(X), dom(Y)}.
 b(X,Y) :- dom(X); dom(Y); (X+Y) > 42.
 a :- 42 <= { c: b(X,Y) }.""",
         ),
+        (  # technicly not wrong but weird,
+            # if there is a seed to seq this is broken except it superseeds task/1 too, like
+            # seq(T,0) :- task(T). It is still valid to remove task from the last rule, as its only source is task
+            """
+foo(T,S) :- seq(T,S).                                                  
+seq(T,(S+1)) :- task(T); foo(T,S).
+            """,
+            [],
+            """#program base.
+foo(T,S) :- seq(T,S).
+seq(T,(S+1)) :- foo(T,S).""",
+        ),
     ),
 )
 def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: str) -> None:
