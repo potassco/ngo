@@ -167,7 +167,6 @@ class CleanupTranslator:
             self.superseeds.update(superseed)
         # 3. superseeded is transitive, make it explicit
         self.superseeds = self.transitive_closure(self.superseeds)
-        log.info(self.superseeds)
 
     def _superseeded(self, lhs: AST, rhs: AST) -> bool:
         """use the mappings to check if lhs Literal superseeds rhs literal"""

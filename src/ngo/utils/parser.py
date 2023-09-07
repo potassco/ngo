@@ -2,13 +2,13 @@
 The command line parser for the project.
 """
 
-import logging
 import sys
 from argparse import Action, ArgumentParser, ArgumentTypeError, Namespace
 from textwrap import dedent
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from ngo.utils.ast import Predicate
+from ngo.utils.logger import LEVELS
 
 __all__ = ["get_parser"]
 
@@ -83,26 +83,12 @@ def get_parser() -> ArgumentParser:
         ),
     )
 
-    levels = [
-        ("error", logging.ERROR),
-        ("warning", logging.WARNING),
-        ("info", logging.INFO),
-        ("debug", logging.DEBUG),
-    ]
-
-    def get(levels: list[tuple[str, int]], name: str) -> Optional[int]:
-        for key, val in levels:
-            if key == name:
-                return val
-        return None  # nocoverage
-
     parser.add_argument(
         "--log",
         default="warning",
-        choices=[val for _, val in levels],
-        metavar=f"{{{','.join(key for key, _ in levels)}}}",
+        choices=LEVELS.keys(),
+        metavar=f"{{{','.join(LEVELS.keys())}}}",
         help="set log level [%(default)s]",
-        type=cast(Any, lambda name: get(levels, name)),
     )
 
     parser.add_argument(

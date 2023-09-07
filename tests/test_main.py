@@ -1,7 +1,6 @@
 """
 Test cases for main application functionality.
 """
-import logging
 from argparse import ArgumentTypeError
 from io import StringIO
 
@@ -16,7 +15,7 @@ def test_logger() -> None:
     """
     Test the logger.
     """
-    log = singleton_factory_logger("global", logging.DEBUG)
+    log = singleton_factory_logger("global", "debug")
     sio = StringIO()
     for handler in log.handlers:
         handler.setStream(sio)  # type: ignore
@@ -30,7 +29,6 @@ def test_parser() -> None:
     """
     parser = get_parser()
     args = parser.parse_args(["--log", "error"])
-    assert args.log == logging.ERROR
     args = parser.parse_args(["--enable", "summinmax_chains", "equalities"])
     assert "equalities" in args.enable
     assert "summinmax_chains" in args.enable

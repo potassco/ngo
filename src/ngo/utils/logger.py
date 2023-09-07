@@ -15,6 +15,12 @@ COLORS = {
     "NORMAL": "\033[0m",
 }
 
+LEVELS = {
+    "error" : logging.ERROR,
+    "warning" : logging.WARNING,
+    "info" : logging.INFO,
+    "debug" : logging.DEBUG,
+}
 
 class SingleLevelFilter(logging.Filter):
     """
@@ -59,17 +65,17 @@ def _setup_logger(name: str) -> logging.Logger:
     return logger
 
 
-def singleton_factory_logger(name: str, level: Optional[int] = None) -> logging.Logger:
+def singleton_factory_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     """
     get or create a new logger with a specific name
     use level to set the global level of all loggers
     """
     singleton_factory_logger.logger.setdefault(name, _setup_logger(name))  # type: ignore
     if level is not None:
-        singleton_factory_logger.level = level  # type: ignore
+        singleton_factory_logger.level = LEVELS[level]  # type: ignore
     if singleton_factory_logger.level is not None:  # type: ignore
         for logger in singleton_factory_logger.logger.values():  # type: ignore
-            logger.setLevel(level)
+            logger.setLevel(singleton_factory_logger.level) # type: ignore
     return singleton_factory_logger.logger[name]  # type: ignore
 
 
