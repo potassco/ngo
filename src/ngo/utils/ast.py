@@ -417,7 +417,10 @@ def _collect_binding_information_conditions(conditions: Iterable[AST]) -> tuple[
     bound_variables: set[AST] = set()
     unbound_variables: set[AST] = set()
     for condition in conditions:
-        bound, unbound = _collect_binding_information_simple_literal(condition)
+        if condition.ast_type == ASTType.Comparison:
+            bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)
+        else:
+            bound, unbound = _collect_binding_information_simple_literal(condition)
         bound_variables.update(bound)
         unbound_variables.update(unbound)
     unbound_variables -= bound_variables

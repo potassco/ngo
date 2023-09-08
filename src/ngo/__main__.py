@@ -40,7 +40,6 @@ def main() -> None:
     while True:
         old = list(prg)
         ### call transformers
-        ### call transformers
         if "cleanup" in args.enable:
             clt = CleanupTranslator(args.input_predicates)
             prg = clt.execute(prg)

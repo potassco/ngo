@@ -16,11 +16,12 @@ COLORS = {
 }
 
 LEVELS = {
-    "error" : logging.ERROR,
-    "warning" : logging.WARNING,
-    "info" : logging.INFO,
-    "debug" : logging.DEBUG,
+    "error": logging.ERROR,
+    "warning": logging.WARNING,
+    "info": logging.INFO,
+    "debug": logging.DEBUG,
 }
+
 
 class SingleLevelFilter(logging.Filter):
     """
@@ -75,7 +76,7 @@ def singleton_factory_logger(name: str, level: Optional[str] = None) -> logging.
         singleton_factory_logger.level = LEVELS[level]  # type: ignore
     if singleton_factory_logger.level is not None:  # type: ignore
         for logger in singleton_factory_logger.logger.values():  # type: ignore
-            logger.setLevel(singleton_factory_logger.level) # type: ignore
+            logger.setLevel(singleton_factory_logger.level)  # type: ignore
     return singleton_factory_logger.logger[name]  # type: ignore
 
 
