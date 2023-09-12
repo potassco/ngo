@@ -68,7 +68,7 @@ becomes
 b(X,Y) :- dom(X), dom(Y), X+Y < 42.
 a(X,Y) :- b(X,Y).
 ```
-if `dom/2` is an input predicate.
+if `dom/1` is an input predicate.
 To enter input predicates, see option `--input-predicates`.
 
 **unused**
@@ -92,7 +92,7 @@ b :- c(_).
 This module replaces sets of literals that occur in multiple rules
  with an extra predicate that is derived only once.
 ```
-foo :-a, b, c.
+foo :- a, b, c.
 bar :- a, b, d.
 foobar :- {e : a, b}.
 ```
@@ -109,6 +109,14 @@ foobar :- { e: __aux_1 }.
 This modtrait replaces bodys with symmetry breaking rules of the form X1 != X2
 with X1 < X2 if this preserves semantics. This can reduce the number of grounded
 rules by half for this rule, but has no effect on solving.
+
+```
+:- slot(J1,M,T); slot(J2,M,T); J1 != J2.
+```
+gets replaced by
+```
+:- slot(J1,M,T); slot(J2,M,T); J1 < J2.
+```
 
 **equality**
 

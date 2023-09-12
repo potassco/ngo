@@ -503,6 +503,9 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
                 bound, unbound = _collect_binding_information_conditions(stm.condition)
                 unbound_variables.update(unbound)
                 unbound_variables.update(term_vars - bound)
+            elif stm.ast_type == ASTType.Comparison:
+                # TODO: can be improved for binding equalities
+                unbound_variables.update(set(collect_ast(stm, ast_name="Variable")))
         unbound_variables -= bound_variables
         bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
         bound_variables.update(bound)
