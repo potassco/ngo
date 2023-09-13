@@ -124,6 +124,14 @@ Replace `X = #agg {}, X > Y` assignments with actual borders `Y < #agg {}`.
 Replace `X != #agg {}` with `not X = #agg {}` if possible.
 This can reduce grounding drastically but usually has no effect on solving.
 
+```
+:- X = #count { J: perm(J,_) }; #count { J: job(J) } > Y; Y = X.
+```
+becomes
+```
+:- Y = #count { J: perm(J,_) }; Y < #count { J: job(J) }.
+```
+
 **summinmax_chains**
 
 Replaces min/max aggregates with a chain encoding.
