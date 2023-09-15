@@ -138,34 +138,21 @@ class MinMaxAggregator:
             if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
                 self._minmax_preds.append((function, translation, i))
 
-    def _translatable_element(self, loc: Location, elem: AST) -> bool:
-        """check if this element of a minmax aggregate is currently translatable
-        this functions can be shrunk down in the future if we lift restrictions
+    def _translatable_element(self, elem: AST) -> bool:
+        """check if this element of a minmax aggregate is currently worth translating
+        return false if the element is static
         """
-        # TODO: create a new domain if several conditions are used, also create next_ for this domain, issue #9
-        if len(elem.condition) > 1:
-            log.info(
-                f"Cannot translate {loc2str(loc)} as multiple conditions are currently not supported."
-            )  # nocoverage
-            return False  # nocoverage
-        # TODO: lift restrictions, currently only needed to get some domain
-        # NOTE: this could also be Comparisons, see issue #9
-        if elem.condition[0].ast_type != ASTType.Literal or elem.condition[0].atom.ast_type != ASTType.SymbolicAtom:
-            log.info(
-                f"Cannot translate {loc2str(loc)} as only SymbolicAtoms as conditions " "are currently not supported."
-            )  # nocoverage
-            return False  # nocoverage
-        condition_pred = Predicate(
-            elem.condition[0].atom.symbol.name,
-            len(elem.condition[0].atom.symbol.arguments),
-        )
-        if not self.domain_predicates.has_domain(condition_pred):
-            log.info(f"Cannot translate {loc2str(loc)} as I cannot infer the domain of {condition_pred}.")
-            return False  # NOTE: issue #9, this check needs to be done for all conditions
-        # also reject if aggregate is too easy and not worth translating
-        if self.domain_predicates.is_static(condition_pred):
-            return False
-        return True
+
+        def static(cond: AST) -> bool:
+            if cond.ast_type == ASTType.Literal and cond.atom.ast_type == ASTType.SymbolicAtom:
+                condition_pred = Predicate(
+                    cond.atom.symbol.name,
+                    len(cond.atom.symbol.arguments),
+                )
+                return self.domain_predicates.is_static(condition_pred)
+            return True
+
+        return not all(map(static, elem.condition))
 
     def _minmax_agg(self, rule: AST) -> Optional[AST]:
         """
@@ -328,7 +315,7 @@ class MinMaxAggregator:
         # collect all literals outside that aggregate that use the same variables as inside it
         elem = agg.atom.elements[0]
 
-        if not self._translatable_element(agg.atom.location, elem):
+        if not self._translatable_element(elem):
             return [rule]  # nocoverage, #issue9
 
         number_of_aggregate = 0
@@ -370,9 +357,8 @@ class MinMaxAggregator:
             log.info(
                 f"Cannot translate {loc2str(agg.location)} as I cannot infer "
                 "a domain for {[list(chain(elem.condition, lits_with_vars))]}."
-            )  # nocoverage
-            # NOTE: issue #9, this should become an assert
-            return [rule]  # nocoverage
+            )
+            return [rule]
 
         ret = self._create_aggregate_replacement(agg, elem, rest_vars, new_predicate, lits_with_vars)
 
