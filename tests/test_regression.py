@@ -55,6 +55,13 @@ __chain__max_0_0_13(__PREV) :- __aux_1(_,__PREV).
 :~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain__max_0_0_13(__PREV,__NEXT)]
 :~ __chain__max_0_0_13(__NEXT); __min_0__dom___max_0_0_13(__NEXT). [__NEXT@0,__chain__max_0_0_13(#sup,__NEXT)]""",
         ),
+        (
+            """
+{max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
+         """,  # currently not handled but in future, see #9
+            """#program base.
+{ max } :- person(_); random(_).""",
+        ),
     ),
 )
 def test_all(lhs: str, rhs: str) -> None:

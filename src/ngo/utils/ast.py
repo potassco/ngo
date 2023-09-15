@@ -485,7 +485,7 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
                 bound, unbound = _collect_binding_information_simple_literal(stm)
                 bound_variables.update(bound)
                 unbound_variables.update(unbound)
-                if stm.atom.ast_type == ASTType.BodyAggregate:
+                if stm.atom.ast_type == ASTType.BodyAggregate and stm.atom.left_guard is not None:
                     if stm.sign == Sign.NoSign and stm.atom.left_guard.comparison == ComparisonOperator.Equal:
                         bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
                     else:

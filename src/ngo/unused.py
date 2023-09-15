@@ -34,7 +34,7 @@ class UnusedTranslator:
     def transform_body_ast_except_aggregate(stm: AST, ast_type: str, func: Callable[[AST], AST]) -> AST:
         """do call transform on everythin in the body except Aggregate"""
         for index, part in enumerate(stm.body):
-            if part.ast_type == ASTType.Literal and part.atom.ast_type == ASTType.Aggregate:
+            if part.ast_type == ASTType.Literal and part.atom.ast_type in (ASTType.Aggregate, ASTType.BodyAggregate):
                 continue
             stm.body[index] = transform_ast(part, ast_type, func)
         return stm

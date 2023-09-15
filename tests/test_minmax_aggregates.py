@@ -918,6 +918,13 @@ __max_0_0_11(P,__PREV) :- __chain__max_0_0_11(P,__PREV); not __chain__max_0_0_11
 __max_0_0_11(P,#inf) :- __min_0__dom___max_0_0_11(X); not __chain__max_0_0_11(P,X); person(P).
 max(P,X) :- __max_0_0_11(P,X); random(Y).""",
         ),
+        (
+            """
+{max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
+         """,  # currently not supported to have several elements inside an aggregate
+            """#program base.
+{ max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23: #true }; person(P); random(Y).""",
+        ),
     ],
 )
 def test_minmax_aggregates(prg: str, converted_prg: str) -> None:

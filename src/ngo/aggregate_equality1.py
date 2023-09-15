@@ -151,15 +151,15 @@ class EqualVariable(Transformer):
             if cont:
                 continue
             bcomp = BoundComputer(agg_info.equal_variable_bound[0])
-            for key, blit in enumerate(rule.body):
-                if key == i:
-                    continue
+            for blit in [blit for key, blit in enumerate(rule.body) if key != i]:
                 bcomp.compute_bounds(blit)
             if not bcomp.too_complicated:
                 bcomp.bounds = [b.guards[0] for b in bcomp.bounds]
                 bcomp.bounds.extend(agg_info.bounds)
+                if len(bcomp.bounds) == 0:
+                    return rule.update(body=bcomp.rest)
                 if len(bcomp.bounds) <= 2:
-                    sign = rule.body[i].sign  # currently not used, this is wrong
+                    sign = rule.body[i].sign
                     agg = rule.body[i].atom
                     agg = agg.update(left_guard=None, right_guard=None)
                     if len(bcomp.bounds) >= 1:

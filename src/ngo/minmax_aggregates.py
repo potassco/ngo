@@ -163,15 +163,10 @@ class MinMaxAggregator:
             assert isinstance(blit, AST)
             if blit.ast_type == ASTType.Literal:
                 atom = blit.atom
-                if (
-                    atom.ast_type == ASTType.BodyAggregate
-                    and atom.function
-                    in {
-                        AggregateFunction.Max,
-                        AggregateFunction.Min,
-                    }
-                    and len(atom.elements) == 1  # TODO: lift this restriction, could add constants and other literals
-                ):
+                if atom.ast_type == ASTType.BodyAggregate and atom.function in {
+                    AggregateFunction.Max,
+                    AggregateFunction.Min,
+                }:
                     return blit
         return None
 
@@ -315,6 +310,12 @@ class MinMaxAggregator:
         # collect all literals outside that aggregate that use the same variables as inside it
         elem = agg.atom.elements[0]
 
+        if len(agg.atom.elements) > 1:
+            log.info(
+                f"Cannot translate {loc2str(agg.location)} as multiple elements "
+                "inside min/max aggregate are not yet supported. See #9."
+            )
+            return [rule]
         if not self._translatable_element(elem):
             return [rule]  # nocoverage, #issue9
 
