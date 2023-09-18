@@ -20,7 +20,7 @@ else:
 VERSION = metadata.version("ngo")
 
 
-OPTIONS = ["equalities", "summinmax_chains", "symmetry", "duplication", "cleanup", "unused"]
+OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused"]
 
 
 class PredicateList(Action):

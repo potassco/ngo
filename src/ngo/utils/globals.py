@@ -2,13 +2,35 @@
 
 from clingo.ast import AST
 
-from ngo.utils.ast import Predicate, predicates
+from ngo.utils.ast import Predicate, collect_ast, predicates
 
 AUX_FUNC = "__aux_"
 
 
+class UniqueVariables:
+    """class to provide unique names for variables in a rule"""
+
+    def __init__(self, rule: AST) -> None:
+        self._allvars: list[AST] = collect_ast(rule, "Variable")
+
+    def make_unique(self, var: AST) -> AST:
+        """return itself if not already present in rule, otherwise
+        add a counter to it to make it unique
+        also make it known so that it stays unique"""
+        if var not in self._allvars:
+            self._allvars.append(var)
+            return var
+        count = 0
+        while True:
+            newvar = var.update(name=var.name + str(count))
+            if newvar not in self._allvars:
+                self._allvars.append(newvar)
+                return newvar
+            count += 1
+
+
 class UniqueNames:
-    """class to provide unique names for predicates, functions, variables"""
+    """class to provide unique names for predicates, functions"""
 
     def __init__(self, prg: list[AST], input_predicates: list[Predicate]) -> None:
         self.auxcounter = 0

@@ -1,6 +1,8 @@
 0.0.4:
  - bugfixes
  - allow any length conditions in aggregates for summinmax_chains trait
+ - renamed summinmax_chains to minmax_chains
+ - added bounded minmax translation into minmax_chains trait
 0.0.3:
  - add unused trait
 0.0.2:

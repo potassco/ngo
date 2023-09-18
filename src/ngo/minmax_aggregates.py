@@ -41,11 +41,13 @@ from ngo.utils.ast import (
     BodyAggAnalytics,
     Predicate,
     collect_ast,
+    global_vars,
     loc2str,
     potentially_unifying_sequence,
     predicates,
+    transform_ast,
 )
-from ngo.utils.globals import UniqueNames
+from ngo.utils.globals import UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("summinmax_chains")
@@ -294,41 +296,58 @@ class MinMaxAggregator:
         ret.append(Rule(LOC, head, body))
         return ret
 
-    def _process_rule(self, rule: AST) -> list[AST]:
-        """returns a list of rules to replace this rule"""
+    def _simple_translation(self, rule: AST, agg: AST) -> list[AST]:
+        """translate a min/max aggregate that has a <,<=,>,>= comparison in the same
+        direction to a simple set of rules"""
+        assert agg.atom.right_guard is None
+        assert agg.sign == Sign.NoSign
+        assert (
+            agg.atom.function == AggregateFunction.Min
+            and agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
+        ) or (
+            agg.atom.function == AggregateFunction.Max
+            and agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
+        )
+        ret = []
+        gvars = global_vars(rule.body)
+        uv = UniqueVariables(rule)
+        body = rule.body
+        body.remove(agg)
+        for elem in agg.atom.elements:
+            lvars = set(collect_ast(elem, "Variable")) - gvars
+            old2new = {oldvar: uv.make_unique(oldvar) for oldvar in lvars}
 
-        # TODO: currently only one aggregate is translated, create loop
-        #  lift this restriction, could have more than one agg,
-        # but the number needs to go into the chain name
-        agg = self._minmax_agg(rule)
-        if agg is None:
-            return [rule]
+            elem = transform_ast(elem, "Variable", lambda x, old2new=old2new: old2new.setdefault(x, x))  # type: ignore
+            newlits = elem.condition
+            newlits.append(
+                Literal(
+                    LOC,
+                    Sign.NoSign,
+                    Comparison(agg.atom.left_guard.term, [Guard(agg.atom.left_guard.comparison, elem.terms[0])]),
+                )
+            )
+            rule = rule.update(body=list(body) + list(newlits))
+            ret.append(rule)
+        return ret
 
-        ### currently only support one element, but this is simply due to laziness of implementation
-        # TODO: also number of which element needs to go into the chain name,
-        # see _minmax_agg function
-        # collect all literals outside that aggregate that use the same variables as inside it
-        elem = agg.atom.elements[0]
-
+    def _chain_translation(self, rule: AST, agg: AST) -> list[AST]:
+        """translate a single elemented min/max aggregate to chaining rules"""
         if len(agg.atom.elements) > 1:
             log.info(
                 f"Cannot translate {loc2str(agg.location)} as multiple elements "
                 "inside min/max aggregate are not yet supported. See #9."
             )
             return [rule]
-        if not self._translatable_element(elem):
-            return [rule]  # nocoverage, #issue9
-
         number_of_aggregate = 0
-        number_of_element = 0
+        assert len(agg.atom.elements) == 1
+        elem = agg.atom.elements[0]
         weight = elem.terms[0]
-
-        # 1. create a new domain for the complete elem.condition + lits_with_vars
-
         direction = "min"
         if agg.atom.function == AggregateFunction.Max:
             direction = "max"
-        new_name = f"__{direction}_{number_of_aggregate}_{number_of_element}_{str(rule.location.begin.line)}"
+
+        # 1. create a new domain for the complete elem.condition + lits_with_vars
+        new_name = f"__{direction}_{number_of_aggregate}_{str(rule.location.begin.line)}"
         new_predicate = Predicate(new_name, 1)
 
         head = SymbolicAtom(Function(LOC, new_name, [weight], False))
@@ -402,6 +421,34 @@ class MinMaxAggregator:
 
         self._store_aggregate_head(agg.atom.function, rule.head, rest_vars, max_var, new_name)
         return ret
+
+    def _process_rule(self, rule: AST) -> list[AST]:
+        """returns a list of rules to replace this rule"""
+
+        # TODO: currently only one aggregate is translated, create loop
+        #  lift this restriction, could have more than one agg,
+        # but the number needs to go into the chain name
+        agg = self._minmax_agg(rule)
+        if agg is None:
+            return [rule]
+
+        if not any(map(self._translatable_element, agg.atom.elements)):
+            return [rule]  # nocoverage, #issue9
+
+        if (  # pylint: disable=too-many-boolean-expressions
+            agg.sign == Sign.NoSign
+            and agg.atom.right_guard is None
+            and (
+                agg.atom.function == AggregateFunction.Min
+                and agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
+            )
+            or (
+                agg.atom.function == AggregateFunction.Max
+                and agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
+            )
+        ):
+            return self._simple_translation(rule, agg)
+        return self._chain_translation(rule, agg)
 
     # important that this is called only once per input.
     # TODO: breaks in multithreading

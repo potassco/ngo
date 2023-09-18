@@ -46,7 +46,7 @@ You can also write `--output-predicates` (its the default) to leave it empty. Th
 
 The option enable support several traits that can be added, like
 ```shell
-cat encoding.lp | ngo --enable equality summinmax_chains
+cat encoding.lp | ngo --enable equality minmax_chains
 ```
 By default this setting is set to `all`, which enables all traits.
 To just rewrite your program into std clingo.ast form, use `none` to disable any optimizations.
@@ -132,10 +132,11 @@ becomes
 :- Y = #count { J: perm(J,_) }; Y < #count { J: job(J) }.
 ```
 
-**summinmax_chains**
+**minmax_chains**
 
 Replaces min/max aggregates with a chain encoding.
 Replaces the result of min/max aggregates with chains in optimize statements and in sum aggregates.
+Also replaces simple bounded min/max aggregates with simple rules.
 
 
 ## Development

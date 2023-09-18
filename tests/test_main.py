@@ -29,9 +29,9 @@ def test_parser() -> None:
     """
     parser = get_parser()
     args = parser.parse_args(["--log", "error"])
-    args = parser.parse_args(["--enable", "summinmax_chains", "equalities"])
+    args = parser.parse_args(["--enable", "minmax_chains", "equalities"])
     assert "equalities" in args.enable
-    assert "summinmax_chains" in args.enable
+    assert "minmax_chains" in args.enable
     args = parser.parse_args(["--enable", "all"])
     assert OPTIONS == args.enable
 

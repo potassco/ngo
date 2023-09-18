@@ -60,7 +60,7 @@ def main() -> None:
             eq = EqualVariable(pdg)
             prg = list(chain(map(eq, prg)))
 
-        if "summinmax_chains" in args.enable:
+        if "minmax_chains" in args.enable:
             mma = MinMaxAggregator(unique_names, rdp, dp)
             prg = mma.execute(prg)
 
