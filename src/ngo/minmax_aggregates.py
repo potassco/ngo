@@ -50,7 +50,7 @@ from ngo.utils.ast import (
 from ngo.utils.globals import UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("summinmax_chains")
+log = singleton_factory_logger("minmax_chains")
 
 CHAIN_STR = "__chain"
 NEXT = Variable(LOC, "__NEXT")
