@@ -32,7 +32,6 @@ def main() -> None:
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
         args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
-    rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)
     unique_names = UniqueNames(prg, args.input_predicates)
     dp = DomainPredicates(unique_names, prg)
@@ -53,6 +52,7 @@ def main() -> None:
             prg = ldt.execute(prg)
 
         if "symmetry" in args.enable:
+            rdp = RuleDependency(prg)
             trans = SymmetryTranslator(rdp, dp)
             prg = trans.execute(prg)
 
@@ -61,6 +61,7 @@ def main() -> None:
             prg = list(chain(map(eq, prg)))
 
         if "minmax_chains" in args.enable:
+            rdp = RuleDependency(prg)
             mma = MinMaxAggregator(unique_names, rdp, dp)
             prg = mma.execute(prg)
 

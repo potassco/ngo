@@ -38,7 +38,7 @@ from clingo.symbol import Infimum, Supremum
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import (
     LOC,
-    BodyAggAnalytics,
+    AggAnalytics,
     Predicate,
     collect_ast,
     global_vars,
@@ -386,7 +386,7 @@ class MinMaxAggregator:
         head = rule.head
         body = []
 
-        analytics = BodyAggAnalytics(agg.atom)
+        analytics = AggAnalytics(agg.atom)
         max_var = Variable(LOC, f"__VAR{new_name}")
         if analytics.equal_variable_bound:
             max_var = Variable(LOC, analytics.equal_variable_bound.pop(0))

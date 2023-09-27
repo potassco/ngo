@@ -10,7 +10,7 @@ from clingo.ast import AST, ASTType, BodyAggregate, Comparison, ComparisonOperat
 from ngo.dependency import PositivePredicateDependency
 from ngo.utils.ast import (
     LOC,
-    BodyAggAnalytics,
+    AggAnalytics,
     contains_ast,
     contains_variable,
     loc2str,
@@ -118,11 +118,11 @@ class EqualVariable(Transformer):
     def __init__(self, dependency: PositivePredicateDependency):
         self.dependency = dependency
 
-    def _create_analytics_from_body(self, body: list[AST]) -> dict[int, BodyAggAnalytics]:
-        analytics: dict[int, BodyAggAnalytics] = {}
+    def _create_analytics_from_body(self, body: list[AST]) -> dict[int, AggAnalytics]:
+        analytics: dict[int, AggAnalytics] = {}
         for i, blit in enumerate(body):
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate:
-                agg_info = BodyAggAnalytics(blit.atom)
+                agg_info = AggAnalytics(blit.atom)
                 analytics[i] = agg_info
         return analytics
 

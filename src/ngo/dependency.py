@@ -34,7 +34,6 @@ from ngo.utils.ast import (
     body_predicates,
     collect_ast,
     collect_bound_variables,
-    head_predicates,
     headderivable_predicates,
     literal_predicate,
     transform_ast,
@@ -51,18 +50,24 @@ class RuleDependency:
     """get information about heads and body dependencies"""
 
     def __init__(self, prg: Iterable[AST]):
-        self.deps: dict[Predicate, list[AST]] = defaultdict(list)
+        self.head2bodies: dict[Predicate, list[AST]] = defaultdict(list)
+        self.head2rules: dict[Predicate, list[AST]] = defaultdict(list)
         for stm in prg:
             if stm.ast_type == ASTType.Rule:
                 for head in map(
                     lambda x: x.pred,
-                    head_predicates(stm, {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}),
+                    headderivable_predicates(stm),
                 ):
-                    self.deps[head].append(stm.body)
+                    self.head2bodies[head].append(stm.body)
+                    self.head2rules[head].append(stm)
 
     def get_bodies(self, head: Predicate) -> list[AST]:
         """return all bodies of head predicate"""
-        return self.deps[head]
+        return self.head2bodies[head]
+
+    def get_rules_that_derive(self, head: Predicate) -> list[AST]:
+        """return all rules that could derive head predicate"""
+        return self.head2rules[head]
 
 
 # TODO: refactor all graphs
@@ -147,21 +152,19 @@ class DomainPredicates:
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
                         self._not_static.add(lit.pred)
                 elif head.ast_type == ASTType.HeadAggregate:
-                    for elem in head.elements:
-                        if elem.ast_type == ASTType.HeadAggregateElement:
-                            cond = elem.condition
-                            assert cond.ast_type == ASTType.ConditionalLiteral
-                            lit = list(literal_predicate(cond.literal, SIGNS))[0]
+                    for elem in filter(lambda x: x.ast_type == ASTType.HeadAggregateElement, head.elements):
+                        cond = elem.condition
+                        assert cond.ast_type == ASTType.ConditionalLiteral
+                        for lit in literal_predicate(cond.literal, SIGNS):
                             self._not_static.add(lit.pred)
 
         graph = _create_graph_from_prg(prg, SIGNS)
         cycle_free_pdg = graph.copy()
         ### remove predicates in cycles
-        for scc in nx.strongly_connected_components(graph):
-            if len(scc) > 1:
-                self._not_static.update(scc)
-                cycle_free_pdg.remove_nodes_from(scc)
-                self._too_complex.update(scc)
+        for scc in filter(lambda x: len(x) > 1, nx.strongly_connected_components(graph)):
+            self._not_static.update(scc)
+            cycle_free_pdg.remove_nodes_from(scc)
+            self._too_complex.update(scc)
         for scc in nx.selfloop_edges(graph):
             self._not_static.add(scc[0])
             cycle_free_pdg.remove_nodes_from([scc[0]])
@@ -512,30 +515,37 @@ class DomainPredicates:
         """compute self.domain_rules with atom as key and a list of conditions"""
         domain_rules = defaultdict(list)
         ### collect conditions for the head
-        for rule in chain.from_iterable([x.unpool(condition=True) for x in prg]):
-            if rule.ast_type == ASTType.Rule:
-                head = rule.head
-                body = rule.body
-                if (
-                    head.ast_type == ASTType.Literal
-                    and head.sign == Sign.NoSign
-                    and head.atom.ast_type == ASTType.SymbolicAtom
+        for rule in filter(
+            lambda rule: rule.ast_type == ASTType.Rule, chain.from_iterable([x.unpool(condition=True) for x in prg])
+        ):
+            head = rule.head
+            body = rule.body
+            if (
+                head.ast_type == ASTType.Literal
+                and head.sign == Sign.NoSign
+                and head.atom.ast_type == ASTType.SymbolicAtom
+            ):
+                domain_rules[head.atom].append(body)
+            elif head.ast_type == ASTType.Disjunction:
+                for elem in head.elements:
+                    assert elem.ast_type == ASTType.ConditionalLiteral
+                    condition = elem.condition
+                    if elem.literal.sign == Sign.NoSign and elem.literal.atom.ast_type == ASTType.SymbolicAtom:
+                        domain_rules[elem.literal.atom].append(list(chain(condition, body)))
+            elif head.ast_type == ASTType.HeadAggregate:
+                for elem in filter(
+                    lambda elem: elem.condition.literal.sign == Sign.NoSign
+                    and elem.condition.literal.atom.ast_type == ASTType.SymbolicAtom,
+                    head.elements,
                 ):
-                    domain_rules[head.atom].append(body)
-                elif head.ast_type == ASTType.Disjunction:
-                    for elem in head.elements:
-                        assert elem.ast_type == ASTType.ConditionalLiteral
-                        condition = elem.condition
-                        if elem.literal.sign == Sign.NoSign:
-                            domain_rules[elem.literal.atom].append(list(chain(condition, body)))
-                elif head.ast_type == ASTType.HeadAggregate:
-                    for elem in head.elements:
-                        assert elem.condition.literal.sign == Sign.NoSign
-                        domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition.condition, body)))
-                elif head.ast_type == ASTType.Aggregate:
-                    for elem in head.elements:
-                        assert elem.literal.sign == Sign.NoSign
-                        domain_rules[elem.literal.atom].append(list(chain(elem.condition, body)))
+                    domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition.condition, body)))
+            elif head.ast_type == ASTType.Aggregate:
+                for elem in filter(
+                    lambda elem: elem.literal.sign == Sign.NoSign
+                    and elem.literal.atom.ast_type == ASTType.SymbolicAtom,
+                    head.elements,
+                ):
+                    domain_rules[elem.literal.atom].append(list(chain(elem.condition, body)))
         for atom, bodies in domain_rules.items():
             pred = Predicate(atom.symbol.name, len(atom.symbol.arguments))
             if not self.is_static(pred):
