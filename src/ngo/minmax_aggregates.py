@@ -5,7 +5,6 @@
 """
 
 from collections import defaultdict
-from functools import cache
 from itertools import chain
 from typing import Any, Callable, Iterable, Iterator, Optional
 
@@ -39,6 +38,7 @@ from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import (
     LOC,
     AggAnalytics,
+    AnnotatedPredicate,
     Predicate,
     collect_ast,
     global_vars,
@@ -47,14 +47,10 @@ from ngo.utils.ast import (
     predicates,
     transform_ast,
 )
-from ngo.utils.globals import UniqueNames, UniqueVariables
+from ngo.utils.globals import NEXT, PREV, UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("minmax_chains")
-
-CHAIN_STR = "__chain"
-NEXT = Variable(LOC, "__NEXT")
-PREV = Variable(LOC, "__PREV")
 
 
 def _characteristic_variables(term: AST) -> Iterator[AST]:
@@ -183,14 +179,16 @@ class MinMaxAggregator:
         weight = elem.terms[0]
 
         ret = list(self.domain_predicates.create_domain(new_predicate))
-        ret.extend(self.domain_predicates.create_nextpred_for_domain(new_predicate, 0))
+        anon = AnnotatedPredicate(new_predicate, tuple(range(0, new_predicate.arity)))
+        ret.extend(self.domain_predicates.create_next_pred_for_annotated_pred(anon, 0))
+        # create my own chaining rules
 
-        minmax_pred = self.domain_predicates.max_predicate(new_predicate, 0)
+        minmax_pred = self.domain_predicates.max_anon_predicate(anon, 0)
         if agg.atom.function == AggregateFunction.Max:
-            minmax_pred = self.domain_predicates.min_predicate(new_predicate, 0)
+            minmax_pred = self.domain_predicates.min_anon_predicate(anon, 0)
 
-        chain_name = self._chain(new_predicate[0])
-        next_pred = self.domain_predicates.next_predicate(new_predicate, 0)
+        chain_name = self.domain_predicates.chain_pred(anon, 0, agg.atom.function == AggregateFunction.Max).name
+        next_pred = self.domain_predicates.next_anon_predicate(anon, 0)
 
         aux_head = Literal(
             LOC,
@@ -450,12 +448,6 @@ class MinMaxAggregator:
             return self._simple_translation(rule, agg)
         return self._chain_translation(rule, agg)
 
-    # important that this is called only once per input.
-    # TODO: breaks in multithreading
-    @cache  # pylint: disable=method-cache-max-size-none
-    def _chain(self, name: str) -> str:
-        return self.unique_names.new_predicate(f"{CHAIN_STR}{name}", 2).name
-
     def _create_replacement(
         self,
         minmaxpred: MinMaxPred,
@@ -490,7 +482,9 @@ class MinMaxAggregator:
         #  __next_0__dom___max_0_0_11(__PREV,__NEXT)
         weight = negate_if(BinaryOperation(LOC, BinaryOperator.Minus, next_, prev))
         newpred = translation.newpred
-        chain_name = self._chain(newpred[0])
+        chain_name = self.domain_predicates.chain_pred(
+            AnnotatedPredicate(Predicate(newpred.name, 1), (0,)), 0, aggtype == AggregateFunction.Max
+        ).name
         new_terms = [Function(LOC, chain_name, [PREV, NEXT], False)] + list(terms)
 
         newargs = translation.translate_parameters(oldmax.atom.symbol.arguments)
@@ -503,13 +497,14 @@ class MinMaxAggregator:
             SymbolicAtom(Function(LOC, chain_name, newargs, False)),  # type: ignore
         )
         dompred = self.domain_predicates.dom_named_predicate(newpred.name, 1)
+        anon = AnnotatedPredicate(dompred, tuple(range(0, dompred.arity)))
         nextpred = Literal(
             LOC,
             Sign.NoSign,
             SymbolicAtom(
                 Function(
                     LOC,
-                    self.domain_predicates.next_predicate(dompred, 0).name,
+                    self.domain_predicates.next_anon_predicate(anon, 0).name,
                     [PREV, NEXT],
                     False,
                 )
@@ -524,9 +519,9 @@ class MinMaxAggregator:
         weight = negate_if(next_)
         new_terms = [Function(LOC, chain_name, [SymbolicTerm(LOC, infsup), next_], False)] + list(terms)
         if aggtype == AggregateFunction.Max:
-            name = self.domain_predicates.min_predicate(dompred, 0).name
+            name = self.domain_predicates.min_anon_predicate(anon, 0).name
         else:
-            name = self.domain_predicates.max_predicate(dompred, 0).name
+            name = self.domain_predicates.max_anon_predicate(anon, 0).name
         minmaxlit = Literal(
             LOC,
             Sign.NoSign,

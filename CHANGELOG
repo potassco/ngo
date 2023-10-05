@@ -1,4 +1,5 @@
 0.0.5:
+ - add sum_chains trait
 0.0.4:
  - bugfixes
  - allow any length conditions in aggregates for summinmax_chains trait

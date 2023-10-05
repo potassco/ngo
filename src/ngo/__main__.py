@@ -11,6 +11,7 @@ from ngo.cleanup import CleanupTranslator
 from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
 from ngo.utils.globals import UniqueNames
@@ -64,6 +65,11 @@ def main() -> None:
             rdp = RuleDependency(prg)
             mma = MinMaxAggregator(unique_names, rdp, dp)
             prg = mma.execute(prg)
+
+        if "sum_chains" in args.enable:
+            rdp = RuleDependency(prg)
+            sagg = SumAggregator(unique_names, rdp, dp, prg)
+            prg = sagg.execute(prg)
 
         if prg == old:
             break

@@ -31,6 +31,16 @@ SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predic
 SignSetType = frozenset[Sign] | set[Sign]
 
 
+@dataclass(frozen=True, order=True, eq=True)
+class AnnotatedPredicate:
+    """predicate with a list of numbers of position
+    ProjectedPred(foo/4), [0,3] represents something like foo(X,_,_,Y)
+    also contains the line number of creation"""
+
+    pred: Predicate
+    annotated_positions: tuple[int, ...]
+
+
 def negate_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
     """reverse clingo.ast.ComparisonOperator"""
     return {
