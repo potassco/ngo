@@ -110,7 +110,7 @@ def test_sum_aggregates_bound_detection(
     rdp = RuleDependency(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
-    mma = SumAggregator(unique, rdp, dp, ast)
+    mma = SumAggregator(unique, [], rdp, dp, ast)
     assert sorted(mma.at_most_one_predicates()) == at_most_one
     assert sorted(mma.at_least_one_predicates()) == at_least_one
 
@@ -354,6 +354,6 @@ def test_sum_aggregates_output(prg: str, converted_prg: str) -> None:
     rdp = RuleDependency(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
-    mma = SumAggregator(unique, rdp, dp, ast)
+    mma = SumAggregator(unique, [], rdp, dp, ast)
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output

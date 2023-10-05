@@ -43,11 +43,13 @@ class SumAggregator:
     def __init__(
         self,
         unique_names: UniqueNames,
+        input_predicates: list[Predicate],
         rule_dependency: RuleDependency,
         domain_predicates: DomainPredicates,
         prg: list[AST],
     ):
         self.unique_names = unique_names
+        self.input_predicates: set[Predicate] = set(input_predicates)
         self.rule_dependency = rule_dependency
         self.domain_predicates = domain_predicates
         # list of ({AggregateFunction.Max, AggregateFunction.Min}, Translation, index)
@@ -107,7 +109,7 @@ class SumAggregator:
             unprojected: list[int] = []
             for index, arg in enumerate(sa.arguments):
                 local_vars = set(collect_ast(arg, "Variable"))
-                if not local_vars.issubset(global_vars):
+                if not global_vars or not local_vars.issubset(global_vars):
                     unprojected.append(index)
             preds.add(AnnotatedPredicate(p, tuple(unprojected)))
 
@@ -126,6 +128,7 @@ class SumAggregator:
         global_preds: set[Predicate] = set()
         for stm in prg:
             global_preds.update([spred.pred for spred in predicates(stm)])
+        global_preds -= self.input_predicates
         for pred in global_preds:
             rules = self.rule_dependency.get_rules_that_derive(pred)
             if len(rules) != 1:

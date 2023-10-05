@@ -68,7 +68,7 @@ def main() -> None:
 
         if "sum_chains" in args.enable:
             rdp = RuleDependency(prg)
-            sagg = SumAggregator(unique_names, rdp, dp, prg)
+            sagg = SumAggregator(unique_names, args.input_predicates, rdp, dp, prg)
             prg = sagg.execute(prg)
 
         if prg == old:
