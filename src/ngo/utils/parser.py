@@ -85,7 +85,7 @@ def get_parser() -> ArgumentParser:
 
     parser.add_argument(
         "--log",
-        default="warning",
+        default="info",
         choices=LEVELS.keys(),
         metavar=f"{{{','.join(LEVELS.keys())}}}",
         help="set log level [%(default)s]",

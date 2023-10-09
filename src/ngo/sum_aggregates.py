@@ -222,6 +222,7 @@ class SumAggregator:
                     newelements.append(elem)
                     continue
                 trigger_lit, trigger_index, trigger_anon_pred = trigger
+                log.info(f"Replace {trigger_anon_pred.pred.name}/{trigger_anon_pred.pred.arity} inside an aggregate.")
 
                 old_condition = elem.condition
                 old_condition.remove(trigger_lit)
@@ -319,6 +320,7 @@ class SumAggregator:
         if trigger is None:
             return [minimize]
         trigger_lit, trigger_index, trigger_anon_pred = trigger
+        log.info(f"Replace {trigger_anon_pred.pred.name}/{trigger_anon_pred.pred.arity} inside an objective function.")
 
         old_condition = minimize.body
         old_condition.remove(trigger_lit)
