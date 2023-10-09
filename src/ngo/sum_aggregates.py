@@ -3,7 +3,8 @@
  with an order encoding, if part of the predicate that is used inside the aggregate
  as an at most one restriction somewhere else in the program.
 """
-from typing import Optional
+from collections import defaultdict
+from typing import Optional, cast
 
 from clingo.ast import (
     AST,
@@ -29,6 +30,8 @@ from ngo.utils.ast import (
     Predicate,
     collect_ast,
     collect_binding_information,
+    loc2str,
+    potentially_unifying_sequence,
     predicates,
 )
 from ngo.utils.globals import PREV, UniqueNames
@@ -57,6 +60,19 @@ class SumAggregator:
         self._atmost_preds: list[AnnotatedPredicate]
         self._atleast_preds: list[AnnotatedPredicate]
         self._atmost_preds, self._atleast_preds = self._calc_at_most(prg)
+        self.objectives: dict[tuple[AST, ...], list[AST]] = defaultdict(list)
+        self._collect_objectives(prg)
+
+    def _collect_objectives(self, prg: list[AST]) -> None:
+        for rule in prg:
+            if rule.ast_type == ASTType.Minimize:
+                self.objectives[
+                    (
+                        rule.weight,
+                        rule.priority,
+                        *rule.terms,
+                    )
+                ].append(rule)
 
     def _calc_at_most_on_rule(self, rule: AST) -> tuple[list[AnnotatedPredicate], list[AnnotatedPredicate]]:
         ret: tuple[list[AnnotatedPredicate], list[AnnotatedPredicate]] = ([], [])
@@ -170,25 +186,36 @@ class SumAggregator:
                         return (lit, trigger_index, next_anon_pred)
         return None
 
+    @staticmethod
+    def _element_passes(elem: AST, elements: list[AST]) -> bool:
+        """True if element in sum aggregate is simple enough to be replaced inside chaining"""
+        if elem.terms[0].ast_type != ASTType.Variable:  # only this variable as weight is allowed
+            return False
+        others = []
+        for term in elem.terms[1:]:
+            others.extend(collect_ast(term, "Variable"))
+        for cond in elem.condition:
+            others.extend(collect_ast(cond, "Variable"))
+        if others.count(elem.terms[0]) != 1:
+            return False
+        if elem.condition is None:  # nocoverage # gringo optimizes this away
+            return False
+        for other in elements:
+            if other == elem:
+                continue
+            if potentially_unifying_sequence(elem.terms, other.terms):
+                return False
+        return True
+
     def _replace_elements(self, elements: list[AST], prg: list[AST]) -> list[AST]:
         newelements = []
         for elem in elements:
             assert elem.ast_type == ASTType.BodyAggregateElement
             if elem.terms and len(elem.terms) > 0:
-                if elem.terms[0].ast_type != ASTType.Variable:  # only this variable as weight is allowed
+                if not self._element_passes(elem, elements):
                     newelements.append(elem)
                     continue
-                others = []
-                for term in elem.terms[1:]:
-                    others.extend(collect_ast(term, "Variable"))
-                for cond in elem.condition:
-                    others.extend(collect_ast(cond, "Variable"))
-                if others.count(elem.terms[0]) != 1:
-                    newelements.append(elem)
-                    continue
-                if elem.condition is None:  # nocoverage # gringo optimizes this away
-                    newelements.append(elem)
-                    continue
+
                 trigger = self._get_trigger(elem.terms[0], elem.condition)
 
                 if trigger is None:
@@ -228,6 +255,10 @@ class SumAggregator:
                 )
                 new_terms = list(elem.terms)
                 new_terms[0] = BinaryOperation(LOC, BinaryOperator.Minus, elem.terms[0], PREV)
+                var_global_flat_without_anon = [Variable(LOC, "none") if x.name == "_" else x for x in var_global_flat]
+                new_terms.append(
+                    Function(LOC, next_anotated_pred.name, var_global_flat_without_anon + [PREV, var_l], False)
+                )
                 newelements.append(elem.update(condition=new_condition, terms=new_terms))
                 new_condition = list(old_condition)
                 new_condition.append(
@@ -240,30 +271,42 @@ class SumAggregator:
                     )
                 )
                 new_terms[0] = elem.terms[0]
+                new_terms.pop()
+                new_terms.append(Function(LOC, next_anotated_pred.name, var_global_flat_without_anon + [var_l], False))
                 newelements.append(elem.update(condition=new_condition, terms=new_terms))
 
         return newelements
+
+    def _get_var(self, minimize: AST) -> Optional[AST]:
+        """Returns the weight variable inside the minimization statement
+        or none if the statement can not easily be replaced"""
+        if minimize.body is None:
+            return None  # nocoverage # gringo hides this from me
+        unsafe: list[AST] = []
+        for terms_, objective in self.objectives.items():
+            if potentially_unifying_sequence(terms_, [minimize.weight, minimize.priority, *minimize.terms]):
+                unsafe.extend([x for x in objective if x != minimize])
+        if unsafe:
+            log.info(f"Cannot optimize {loc2str(minimize.location)} as the tuple is not globally unique.")
+            return None
+        if minimize.weight.ast_type == ASTType.Variable:
+            return cast(AST, minimize.weight)
+        if (
+            minimize.weight.ast_type == ASTType.UnaryOperation
+            and minimize.weight.operator_type == UnaryOperator.Minus
+            and minimize.weight.argument.ast_type == ASTType.Variable
+        ):
+            return cast(AST, minimize.weight.argument)
+        return None
 
     def _replace_optimize(self, minimize: AST) -> list[AST]:
         ### very similar to bodyagg, but only one element.
         # Therefore we have body_literals instead of literals in the condition
         assert minimize.ast_type == ASTType.Minimize
-        if minimize.body is None:
-            return [minimize]  # nocoverage # gringo hides this from me
-        simple_weight: None | bool = None
-        minimize_var: AST
-        if minimize.weight.ast_type == ASTType.Variable:
-            minimize_var = minimize.weight
-            simple_weight = True
-        elif (
-            minimize.weight.ast_type == ASTType.UnaryOperation
-            and minimize.weight.operator_type == UnaryOperator.Minus
-            and minimize.weight.argument.ast_type == ASTType.Variable
-        ):
-            minimize_var = minimize.weight.argument
-            simple_weight = False
-        if simple_weight is None:
+        minimize_var = self._get_var(minimize)
+        if minimize_var is None:
             return [minimize]
+
         others = []
         for term in [minimize.priority] + list(minimize.terms):
             others.extend(collect_ast(term, "Variable"))
@@ -309,9 +352,12 @@ class SumAggregator:
         # new_terms = list(elem.terms)
         # new_terms[0] = BinaryOperation(LOC, BinaryOperator.Minus, elem.terms[0], PREV)
         weight = BinaryOperation(LOC, BinaryOperator.Minus, minimize_var, PREV)
-        if not simple_weight:
+        if minimize.weight.ast_type != ASTType.Variable:
             weight = UnaryOperation(LOC, UnaryOperator.Minus, weight)
-        prg.append(minimize.update(weight=weight, body=new_condition))
+        terms: list[AST] = list(minimize.terms)
+        var_global_flat_without_anon = [Variable(LOC, "none") if x.name == "_" else x for x in var_global_flat]
+        terms.append(Function(LOC, next_anotated_pred.name, var_global_flat_without_anon + [PREV, var_l], False))
+        prg.append(minimize.update(weight=weight, terms=terms, body=new_condition))
         new_condition = list(old_condition)
         new_condition.append(
             Literal(
@@ -322,7 +368,9 @@ class SumAggregator:
                 ),
             )
         )
-        prg.append(minimize.update(body=new_condition))
+        terms.pop()
+        terms.append(Function(LOC, next_anotated_pred.name, var_global_flat_without_anon + [var_l], False))
+        prg.append(minimize.update(terms=terms, body=new_condition))
         return prg
 
     def execute(self, prg: list[AST]) -> list[AST]:

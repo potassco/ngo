@@ -141,8 +141,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-a(X) :- X = #sum { (L-__PREV),D: __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
- L,D: __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }.""",
+a(X) :- X = #sum { (L-__PREV),D,__next_1_1__dom_shift(D,__PREV,L):\
+ __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
+ L,D,__next_1_1__dom_shift(D,L): __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }.""",
         ),
         (
             """
@@ -160,8 +161,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-a(X) :- X = #sum { (L-__PREV),D: __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
- L,D: __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }; day(D).""",
+a(X) :- X = #sum { (L-__PREV),D,__next_1_1__dom_shift(D,__PREV,L):\
+ __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
+ L,D,__next_1_1__dom_shift(D,L): __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }; day(D).""",
         ),
         (
             """
@@ -179,8 +181,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-:~ __chain_1_1__max___dom_shift(D,L); __next_1_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D]
-:~ __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [L@0,D]""",
+:~ __chain_1_1__max___dom_shift(D,L);\
+ __next_1_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D,__next_1_1__dom_shift(D,__PREV,L)]
+:~ __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [L@0,D,__next_1_1__dom_shift(D,L)]""",
         ),
         (
             """
@@ -198,8 +201,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-:~ __chain_1_1__max___dom_shift(D,L); __next_1_1__dom_shift(D,__PREV,L). [-(L-__PREV)@0,D]
-:~ __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [-L@0,D]""",
+:~ __chain_1_1__max___dom_shift(D,L);\
+ __next_1_1__dom_shift(D,__PREV,L). [-(L-__PREV)@0,D,__next_1_1__dom_shift(D,__PREV,L)]
+:~ __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [-L@0,D,__next_1_1__dom_shift(D,L)]""",
         ),
         (
             """
@@ -233,8 +237,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-:~ #true; __chain_1_1__max___dom_shift(D,L); __next_1_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D]
-:~ #true; __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [L@0,D]""",
+:~ #true; __chain_1_1__max___dom_shift(D,L);\
+ __next_1_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D,__next_1_1__dom_shift(D,__PREV,L)]
+:~ #true; __chain_1_1__max___dom_shift(D,L); not __next_1_1__dom_shift(D,_,L). [L@0,D,__next_1_1__dom_shift(D,L)]""",
         ),
         (
             """
@@ -252,8 +257,9 @@ __next_1_1__dom_shift(G0,G2,P,N) :- __next_1_1__dom_shift(G0,G2,_,P); __dom_shif
  not __dom_shift(G0,B,G2): __dom_shift(G0,B,G2), P < B < N.
 __chain_1_1__max___dom_shift(G0,G2,P) :- shift(G0,P,G2).
 __chain_1_1__max___dom_shift(G0,G2,P) :- __chain_1_1__max___dom_shift(G0,G2,N); __next_1_1__dom_shift(G0,G2,P,N).
-:~ __chain_1_1__max___dom_shift(D,_,L); __next_1_1__dom_shift(D,_,__PREV,L). [(L-__PREV)@0,D]
-:~ __chain_1_1__max___dom_shift(D,_,L); not __next_1_1__dom_shift(D,_,_,L). [L@0,D]""",
+:~ __chain_1_1__max___dom_shift(D,_,L);\
+ __next_1_1__dom_shift(D,_,__PREV,L). [(L-__PREV)@0,D,__next_1_1__dom_shift(D,none,__PREV,L)]
+:~ __chain_1_1__max___dom_shift(D,_,L); not __next_1_1__dom_shift(D,_,_,L). [L@0,D,__next_1_1__dom_shift(D,none,L)]""",
         ),
         (
             """
@@ -271,8 +277,9 @@ __next_1_2_1__dom_shift(G0,P,N) :- __next_1_2_1__dom_shift(G0,_,P); __dom_shift(
  not __dom_shift(G0,B,_): __dom_shift(G0,B,_), P < B < N.
 __chain_1_2_1__max___dom_shift(G0,P) :- shift(G0,P,_).
 __chain_1_2_1__max___dom_shift(G0,P) :- __chain_1_2_1__max___dom_shift(G0,N); __next_1_2_1__dom_shift(G0,P,N).
-:~ __chain_1_2_1__max___dom_shift(D,L); __next_1_2_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D]
-:~ __chain_1_2_1__max___dom_shift(D,L); not __next_1_2_1__dom_shift(D,_,L). [L@0,D]""",
+:~ __chain_1_2_1__max___dom_shift(D,L);\
+ __next_1_2_1__dom_shift(D,__PREV,L). [(L-__PREV)@0,D,__next_1_2_1__dom_shift(D,__PREV,L)]
+:~ __chain_1_2_1__max___dom_shift(D,L); not __next_1_2_1__dom_shift(D,_,L). [L@0,D,__next_1_2_1__dom_shift(D,L)]""",
         ),
         (
             """
@@ -308,8 +315,9 @@ __next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N
  not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
 __chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
 __chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
-a(X) :- X = #sum { (L-__PREV),D: __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
- L,D: __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }.""",
+a(X) :- X = #sum { (L-__PREV),D,__next_1_1__dom_shift(D,__PREV,L):\
+ __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
+ L,D,__next_1_1__dom_shift(D,L): __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) }.""",
         ),
         (
             """
@@ -339,11 +347,31 @@ a(X) :- X = #sum { 1 }.""",
         (
             """
 { shift(D,L) : pshift(D,L) } 1 :- day(D).
-a(X) :- X = #sum { 1; V: bla(V); Y }, some(Y).
+a(X) :- X = #sum { 1,extra; V: bla(V); Y,foo,bar }, some(Y).
          """,
             """#program base.
 1 >= { shift(D,L): pshift(D,L) } :- day(D).
-a(X) :- X = #sum { 1; V: bla(V); Y }; some(Y).""",
+a(X) :- X = #sum { 1,extra; V: bla(V); Y,foo,bar }; some(Y).""",
+        ),
+        (  # non unique tuple problem
+            """
+{ shift(D,L) : pshift(D,L) } 1 :- day(D).
+#minimize {L,D : shift(D,L)}.
+#minimize {1,a : #true}.
+         """,
+            """#program base.
+1 >= { shift(D,L): pshift(D,L) } :- day(D).
+:~ shift(D,L). [L@0,D]
+:~ #true. [1@0,a]""",
+        ),
+        (  # non unique tuple in sums
+            """
+{ shift(D,L) : pshift(D,L) } 1 :- day(D).
+a(X) :- X = #sum {L,D : shift(D,L); 1,a : #true}.
+         """,
+            """#program base.
+1 >= { shift(D,L): pshift(D,L) } :- day(D).
+a(X) :- X = #sum { L,D: shift(D,L); 1,a: #true }.""",
         ),
     ],
 )
