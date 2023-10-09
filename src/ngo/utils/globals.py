@@ -1,10 +1,17 @@
 """ general util functions and classes """
 
-from clingo.ast import AST
+from clingo.ast import AST, Variable
 
-from ngo.utils.ast import Predicate, collect_ast, predicates
+from ngo.utils.ast import LOC, Predicate, collect_ast, predicates
 
 AUX_FUNC = "__aux_"
+CHAIN_STR = "__chain"
+MIN_STR = "__min_"
+MAX_STR = "__max_"
+NEXT_STR = "__next_"
+DOM_STR = "__dom_"
+NEXT = Variable(LOC, "__NEXT")
+PREV = Variable(LOC, "__PREV")
 
 
 class UniqueVariables:

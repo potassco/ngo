@@ -11,6 +11,7 @@ from ngo.cleanup import CleanupTranslator
 from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
 from ngo.utils.globals import UniqueNames
@@ -32,7 +33,6 @@ def main() -> None:
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
         args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
-    rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)
     unique_names = UniqueNames(prg, args.input_predicates)
     dp = DomainPredicates(unique_names, prg)
@@ -53,6 +53,7 @@ def main() -> None:
             prg = ldt.execute(prg)
 
         if "symmetry" in args.enable:
+            rdp = RuleDependency(prg)
             trans = SymmetryTranslator(rdp, dp)
             prg = trans.execute(prg)
 
@@ -61,8 +62,14 @@ def main() -> None:
             prg = list(chain(map(eq, prg)))
 
         if "minmax_chains" in args.enable:
+            rdp = RuleDependency(prg)
             mma = MinMaxAggregator(unique_names, rdp, dp)
             prg = mma.execute(prg)
+
+        if "sum_chains" in args.enable:
+            rdp = RuleDependency(prg)
+            sagg = SumAggregator(unique_names, args.input_predicates, rdp, dp, prg)
+            prg = sagg.execute(prg)
 
         if prg == old:
             break

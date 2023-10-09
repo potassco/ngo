@@ -4,6 +4,7 @@ from functools import partial
 from itertools import product
 from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
+from clingo import SymbolType
 from clingo.ast import (
     AST,
     ASTType,
@@ -28,6 +29,16 @@ Predicate = NamedTuple("Predicate", [("name", str), ("arity", int)])
 SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predicate)])
 
 SignSetType = frozenset[Sign] | set[Sign]
+
+
+@dataclass(frozen=True, order=True, eq=True)
+class AnnotatedPredicate:
+    """predicate with a list of numbers of position
+    ProjectedPred(foo/4), [0,3] represents something like foo(X,_,_,Y)
+    also contains the line number of creation"""
+
+    pred: Predicate
+    annotated_positions: tuple[int, ...]
 
 
 def negate_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
@@ -55,14 +66,15 @@ def rhs2lhs_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
 
 
 # TODO: refactor, not make it specific for equal variables, do not have names and guards as different bounds etc...
+# also extend to HeadAggBounds as used in (or done manually) in sum_aggregates.py
 @dataclass
-class BodyAggAnalytics:
+class AggAnalytics:
     """class to analyze a body aggregate and capture its bounds"""
 
     def __init__(self, node: AST):
-        assert node.ast_type == ASTType.BodyAggregate
-        self.equal_variable_bound = []  # list of all equal variables as bounds
-        self.bounds = []  # all non equal variable bounds as right guards
+        assert node.ast_type in (ASTType.BodyAggregate, ASTType.HeadAggregate, ASTType.Aggregate)
+        self.equal_variable_bound: list[str] = []  # list of all equal variables as variable names
+        self.bounds: list[AST] = []  # all non equal variable bounds as right guards
 
         if node.left_guard and node.left_guard.ast_type == ASTType.Guard:
             guard = node.left_guard
@@ -77,6 +89,26 @@ class BodyAggAnalytics:
                 self.equal_variable_bound.append(guard.term.name)
             else:
                 self.bounds.append(guard)
+
+    def guaranteed_leq(self, number: int) -> bool:
+        """return True if it can be identified that the upper bound of the aggregate is leq number (or below)"""
+        for bound in self.bounds:
+            if bound.term.ast_type == ASTType.SymbolicTerm and bound.term.symbol.type == SymbolType.Number:
+                if bound.comparison in (ComparisonOperator.LessEqual, ComparisonOperator.Equal):
+                    return int(bound.term.symbol.number) <= number
+                if bound.comparison == ComparisonOperator.LessThan:
+                    return int(bound.term.symbol.number) - 1 <= number
+        return False
+
+    def guaranteed_geq(self, number: int) -> bool:
+        """return True if it can be identified that the lower bound of the aggregate is geq number (or above)"""
+        for bound in self.bounds:
+            if bound.term.ast_type == ASTType.SymbolicTerm and bound.term.symbol.type == SymbolType.Number:
+                if bound.comparison in (ComparisonOperator.GreaterEqual, ComparisonOperator.Equal):
+                    return int(bound.term.symbol.number) >= number
+                if bound.comparison == ComparisonOperator.GreaterThan:
+                    return int(bound.term.symbol.number) + 1 >= number
+        return False
 
 
 class GeneralVisitor(Transformer):
@@ -307,7 +339,7 @@ def __get_preds_from_literal_in_conditional(condition: AST, signs: SignSetType) 
 
 def headderivable_predicates(rule: AST) -> Iterator[SignedPredicate]:
     """
-    yields all predicates used in the rule head that are derivable as (name, arity)
+    yields all predicates used in the rule head that are derivable
     """
 
     positive = {Sign.NoSign}

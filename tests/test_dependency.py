@@ -3,7 +3,7 @@ import pytest
 from clingo.ast import AST, Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates, PositivePredicateDependency
-from ngo.utils.ast import Predicate, SignedPredicate, body_predicates, head_predicates
+from ngo.utils.ast import AnnotatedPredicate, Predicate, SignedPredicate, body_predicates, head_predicates
 from ngo.utils.globals import UniqueNames
 
 
@@ -606,9 +606,9 @@ def test_domain_predicates_exceptions() -> None:
     with pytest.raises(Exception):
         unique = UniqueNames(ast, [])
         dp = DomainPredicates(unique, ast)
-        list(dp.create_nextpred_for_domain(Predicate("a", 1), 0))
+        list(dp.create_next_pred_for_annotated_pred(AnnotatedPredicate(Predicate("a", 1), (0,)), 0))
 
     with pytest.raises(Exception):
         unique = UniqueNames(ast, [])
         dp = DomainPredicates(unique, ast)
-        list(dp.create_nextpred_for_domain(Predicate("c", 1), 1))
+        list(dp.create_next_pred_for_annotated_pred(AnnotatedPredicate(Predicate("c", 1), (0,)), 1))

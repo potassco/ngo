@@ -138,6 +138,22 @@ Replaces min/max aggregates with a chain encoding.
 Replaces the result of min/max aggregates with chains in optimize statements and in sum aggregates.
 Also replaces simple bounded min/max aggregates with simple rules.
 
+**sum_chains**
+
+Detects partial predicates that under an at_most one restriction.
+Replaces these predicates in sum aggregates/optimization statements with a chain encoding.
+
+```
+{ shift(D,L) : pshift(D,L) } 1 :- day(D).
+a(X) :- X = #sum {L,D : shift(D,L)}.
+```
+In this example only one shift length per day can exists.
+Therefore the shift length is computed using chaining and then the
+parts of the chain are used inside the #sum aggregate.
+This can reduce grounding and solving time.
+Depending on the domain of the weight Variable (L in this case here)
+the computation of the ordered domain can cause problems in grounding.
+
 
 ## Development
 

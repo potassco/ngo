@@ -8,7 +8,6 @@ from itertools import chain, product
 from typing import Iterable, Iterator, Mapping
 
 import networkx as nx
-from clingo import ast
 from clingo.ast import (
     AST,
     AggregateFunction,
@@ -21,6 +20,7 @@ from clingo.ast import (
     Function,
     Guard,
     Literal,
+    Rule,
     Sign,
     SymbolicAtom,
     Variable,
@@ -29,40 +29,41 @@ from clingo.ast import (
 from ngo.utils.ast import (
     LOC,
     SIGNS,
+    AnnotatedPredicate,
     Predicate,
     SignSetType,
     body_predicates,
     collect_ast,
     collect_bound_variables,
-    head_predicates,
     headderivable_predicates,
     literal_predicate,
     transform_ast,
 )
-from ngo.utils.globals import UniqueNames
-
-MIN_STR = "__min_"
-MAX_STR = "__max_"
-NEXT_STR = "__next_"
-DOM_STR = "__dom_"
+from ngo.utils.globals import CHAIN_STR, DOM_STR, MAX_STR, MIN_STR, NEXT_STR, UniqueNames
 
 
 class RuleDependency:
     """get information about heads and body dependencies"""
 
     def __init__(self, prg: Iterable[AST]):
-        self.deps: dict[Predicate, list[AST]] = defaultdict(list)
+        self.head2bodies: dict[Predicate, list[AST]] = defaultdict(list)
+        self.head2rules: dict[Predicate, list[AST]] = defaultdict(list)
         for stm in prg:
             if stm.ast_type == ASTType.Rule:
                 for head in map(
                     lambda x: x.pred,
-                    head_predicates(stm, {Sign.NoSign, Sign.Negation, Sign.DoubleNegation}),
+                    headderivable_predicates(stm),
                 ):
-                    self.deps[head].append(stm.body)
+                    self.head2bodies[head].append(stm.body)
+                    self.head2rules[head].append(stm)
 
     def get_bodies(self, head: Predicate) -> list[AST]:
         """return all bodies of head predicate"""
-        return self.deps[head]
+        return self.head2bodies[head]
+
+    def get_rules_that_derive(self, head: Predicate) -> list[AST]:
+        """return all rules that could derive head predicate"""
+        return self.head2rules[head]
 
 
 # TODO: refactor all graphs
@@ -147,21 +148,19 @@ class DomainPredicates:
                         lit = list(literal_predicate(cond.literal, SIGNS))[0]
                         self._not_static.add(lit.pred)
                 elif head.ast_type == ASTType.HeadAggregate:
-                    for elem in head.elements:
-                        if elem.ast_type == ASTType.HeadAggregateElement:
-                            cond = elem.condition
-                            assert cond.ast_type == ASTType.ConditionalLiteral
-                            lit = list(literal_predicate(cond.literal, SIGNS))[0]
+                    for elem in filter(lambda x: x.ast_type == ASTType.HeadAggregateElement, head.elements):
+                        cond = elem.condition
+                        assert cond.ast_type == ASTType.ConditionalLiteral
+                        for lit in literal_predicate(cond.literal, SIGNS):
                             self._not_static.add(lit.pred)
 
         graph = _create_graph_from_prg(prg, SIGNS)
         cycle_free_pdg = graph.copy()
         ### remove predicates in cycles
-        for scc in nx.strongly_connected_components(graph):
-            if len(scc) > 1:
-                self._not_static.update(scc)
-                cycle_free_pdg.remove_nodes_from(scc)
-                self._too_complex.update(scc)
+        for scc in filter(lambda x: len(x) > 1, nx.strongly_connected_components(graph)):
+            self._not_static.update(scc)
+            cycle_free_pdg.remove_nodes_from(scc)
+            self._too_complex.update(scc)
         for scc in nx.selfloop_edges(graph):
             self._not_static.add(scc[0])
             cycle_free_pdg.remove_nodes_from([scc[0]])
@@ -199,29 +198,52 @@ class DomainPredicates:
     def _predicate(self, name: str, arity: int) -> Predicate:
         return self.unique_names.new_predicate(name, arity)
 
-    def min_predicate(self, pred: Predicate, position: int) -> Predicate:
+    def min_anon_predicate(self, anon_pred: AnnotatedPredicate, position: int) -> Predicate:
         """
-        returns min_domain predicate of pred
+        returns min_domain predicate of annotated pred
         """
-        return self._predicate(f"{MIN_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return self._predicate(
+            f"{MIN_STR}{'_'.join(str(pos) for pos in anon_pred.annotated_positions)}_{position}"
+            + self.domain_predicate(anon_pred.pred).name,
+            anon_pred.pred.arity - len(anon_pred.annotated_positions) + 1,
+        )
 
-    def max_predicate(self, pred: Predicate, position: int) -> Predicate:
+    def max_anon_predicate(self, anon_pred: AnnotatedPredicate, position: int) -> Predicate:
         """
-        returns max_domain predicate of pred
+        returns max_domain predicate of annotated pred
         """
-        return self._predicate(f"{MAX_STR}{position}" + self.domain_predicate(pred)[0], 1)
+        return self._predicate(
+            f"{MAX_STR}{'_'.join(str(pos) for pos in anon_pred.annotated_positions)}_{position}"
+            + self.domain_predicate(anon_pred.pred).name,
+            anon_pred.pred.arity - len(anon_pred.annotated_positions) + 1,
+        )
 
-    def next_predicate(self, pred: Predicate, position: int) -> Predicate:
+    def next_anon_predicate(self, anon_pred: AnnotatedPredicate, position: int) -> Predicate:
         """
-        returns next_domain predicate of pred
+        returns next_domain predicate of annotated pred
         """
-        return self._predicate(f"{NEXT_STR}{position}" + self.domain_predicate(pred)[0], 2)
+        return self._predicate(
+            f"{NEXT_STR}{'_'.join(str(pos) for pos in anon_pred.annotated_positions)}_{position}"
+            + self.domain_predicate(anon_pred.pred).name,
+            anon_pred.pred.arity - len(anon_pred.annotated_positions) + 2,
+        )
 
     def dom_named_predicate(self, name: str, arity: int) -> Predicate:
         """
         returns domain named predicate of name/arity
         """
         return self._predicate(DOM_STR + name, arity)
+
+    def chain_pred(self, anon_pred: AnnotatedPredicate, position: int, maximum: bool) -> Predicate:
+        """
+        Given an annotated predicate and a position, return the chain predicate
+        """
+        return self._predicate(
+            f"{CHAIN_STR}_{'_'.join(str(pos) for pos in anon_pred.annotated_positions)}_{position}"
+            + (MAX_STR if maximum else MIN_STR)
+            + self.domain_predicate(anon_pred.pred).name,
+            anon_pred.pred.arity - len(anon_pred.annotated_positions) + 1,
+        )
 
     def __create_domain_for_condition(self, node: AST) -> Iterator[AST]:
         """yield all domain rules for all symbolic atoms in node"""
@@ -251,8 +273,8 @@ class DomainPredicates:
             if atom.symbol.name != pred[0] or len(atom.symbol.arguments) != pred[1]:
                 continue
             for conditions in bodies:
-                newatom = ast.SymbolicAtom(
-                    ast.Function(
+                newatom = SymbolicAtom(
+                    Function(
                         LOC,
                         self.domain_predicate(pred)[0],
                         atom.symbol.arguments,
@@ -261,45 +283,117 @@ class DomainPredicates:
                 )
                 for cond in conditions:
                     yield from self.__create_domain_for_condition(cond)
-                yield ast.Rule(LOC, newatom, conditions)
+                yield Rule(LOC, newatom, conditions)
 
-    def create_nextpred_for_domain(self, pred: Predicate, position: int) -> Iterator[AST]:
+    @staticmethod
+    def _create_projected_lit(pred: Predicate, variables: Mapping[int, AST], sign: Sign = Sign.NoSign) -> AST:
+        """
+        Given a predicate pred, create a literal with only projected variables at certain positions.
+        Given p/3, {1 : Variable(LOC, "X"), 2: Variable(LOC, "Y")} create Literal p(_,X,Y)
+        """
+        vars_ = [variables[i] if i in variables else Variable(LOC, "_") for i in range(0, pred.arity)]
+        return Literal(
+            LOC,
+            sign,
+            SymbolicAtom(
+                Function(
+                    LOC,
+                    pred[0],
+                    vars_,
+                    False,
+                )
+            ),
+        )
+
+    @staticmethod
+    def _var_map(vars_: list[AST]) -> dict[int, AST]:
+        return dict(enumerate(vars_))
+
+    def create_chain_pred_for_annotated_pred(
+        self, anon_pred: AnnotatedPredicate, position: int, maximum: bool
+    ) -> Iterator[AST]:
+        """creating chaining rules from a simple predicate where position points to the arity with the number"""
+        pred = anon_pred.pred
+        assert position in anon_pred.annotated_positions
+        var_p: AST = Variable(LOC, "P")
+        var_n: AST = Variable(LOC, "N")
+        var_global_map: dict[int, AST] = {
+            i: Variable(LOC, f"G{i}") for i in range(0, pred.arity) if i not in anon_pred.annotated_positions
+        }
+        var_global_flat = [
+            Variable(LOC, f"G{i}") for i in range(0, pred.arity) if i not in anon_pred.annotated_positions
+        ]
+        next_pred = self.next_anon_predicate(anon_pred, position)
+
+        # chain(G1,G2,P) :- orig(G1,G2,_,_,P).
+        chain_pred = self.chain_pred(anon_pred, position, maximum)
+        yield Rule(
+            LOC,
+            self._create_projected_lit(chain_pred, self._var_map(var_global_flat + [var_p])),
+            [self._create_projected_lit(pred, var_global_map | {position: var_p})],
+        )
+
+        prev_agg = var_n
+        next_agg = var_p
+        if maximum:
+            prev_agg = var_p
+            next_agg = var_n
+
+        # chain(G1,G2,P) :- chain(G1,G2,L3,L4), __next_dom(G1,G2,P,N).
+        yield Rule(
+            LOC,
+            self._create_projected_lit(chain_pred, self._var_map(var_global_flat + [prev_agg])),
+            [
+                self._create_projected_lit(chain_pred, self._var_map(var_global_flat + [next_agg])),
+                self._create_projected_lit(next_pred, self._var_map(var_global_flat + [var_p, var_n])),
+            ],
+        )
+
+    def create_next_pred_for_annotated_pred(self, anon_pred: AnnotatedPredicate, position: int) -> Iterator[AST]:
         """
         given a predicate, yield a list of ast
-        that represent rules to create a next predicate for self.domain(pred) in the logic program
+        that represent rules to create a next predicate for the domain of the annotated predicate in the logic program
         includes min/max predicates
         The next predicate is created for the 'position's variable in the predicate, starting with 0
+        The annotated variables are assumed to be unique to the non annotated variables
+        The position is assumed to be annotated
         """
+        # I have global vars, that need to stay the same for the domain next
+        #     G1, G2
+        # next(G1,G2, 1, 3)
+        # next(G1,G2, 3, 10)
+        # next(G1,G2, 10, 11)
+
+        # and I also need local Variables that are unique to the single values
+        # but not in grounding, so local (annotated) positions may not appear in the next predicates
+
+        # So try to figure out rules to create them
+        #     V is the value I try to create the chaining for
+        # dom(G1, G2, L1, ..., Ln), 1 < position < n, Lpos=V
+
+        # The global vars are compressed in the next predicates and local variables are simply ommited
+        # __min_dom(G1,G2,X) :- X = #min { V: dom(G1,G2,_,_,V) }, dom(G1,G2,_,_,_).
+        # __next_dom(G1,G2,P,N) :- __min_dom(G1,G2,P); dom(G1,G2,_,_,P); dom(G1,G2,_,_,N); N > P;
+        #                                      not dom(G1,G2,_,_,B): dom(G1,G2,__,B), P < B < N.
+        # __next_dom(G1,G2,P,N) :- __next_dom_(G1,G2,_,_,_,_,P); dom(G1,G2,_,_,N); N > P;
+        #                                      not dom(G1,G2,_,_,B): dom(G1,G2,__,B), P < B < N.
+        # chain(G1,G2,N) :- orig(G1,G2,L1,L2,N).
+        # chain(G1,G2,P) :- chain(G1,G2,N), __next_dom(G1,G2,P,N).
+
+        pred = anon_pred.pred
+
+        # TODO: maybe I can combine this function with the old simple function now that it does not use locals anymore ?
         if not self.has_domain(pred):
             raise RuntimeError(f"Can not create order encoding for {pred}. Unable to create domain.")
-        if position >= pred[1]:
+        if position >= pred.arity:
             raise RuntimeError(
                 f"Can not create order encoding for position {position} for {pred}."
                 " Position exceeds arity, starting with 0."
             )
 
-        def _create_projected_lit(pred: Predicate, variables: Mapping[int, AST], sign: Sign = Sign.NoSign) -> AST:
-            """
-            Given a predicate pred, create a literal with only projected variables at certain positions.
-            Given p/3, {1 : Variable(LOC, "X"), 2: Variable(LOC, "Y")} create Literal p(_,X,Y)
-            """
-            vars_ = [variables[i] if i in variables else Variable(LOC, "_") for i in range(0, pred[1])]
-            return Literal(
-                LOC,
-                sign,
-                SymbolicAtom(
-                    Function(
-                        LOC,
-                        pred[0],
-                        vars_,
-                        False,
-                    )
-                ),
-            )
-
-        min_pred = self.min_predicate(pred, position)
-        max_pred = self.max_predicate(pred, position)
-        next_pred = self.next_predicate(pred, position)
+        min_pred = self.min_anon_predicate(anon_pred, position)
+        max_pred = self.max_anon_predicate(anon_pred, position)
+        next_pred = self.next_anon_predicate(anon_pred, position)
         dom_pred = self.domain_predicate(pred)
 
         var_x: AST = Variable(LOC, "X")
@@ -307,50 +401,84 @@ class DomainPredicates:
         var_p: AST = Variable(LOC, "P")
         var_n: AST = Variable(LOC, "N")
         var_b: AST = Variable(LOC, "B")
-        dom_lit_l: AST = _create_projected_lit(dom_pred, {position: var_l})
 
-        min_body: AST = Literal(
-            LOC,
-            Sign.NoSign,
-            BodyAggregate(
+        var_global_flat = [
+            Variable(LOC, f"G{i}") for i in range(0, pred.arity) if i not in anon_pred.annotated_positions
+        ]
+
+        var_global_map: dict[int, AST] = {
+            i: Variable(LOC, f"G{i}") for i in range(0, pred.arity) if i not in anon_pred.annotated_positions
+        }
+
+        min_body: list[AST] = [
+            Literal(
                 LOC,
-                Guard(ComparisonOperator.Equal, var_x),
-                AggregateFunction.Min,
-                [BodyAggregateElement([var_l], [dom_lit_l])],
-                None,
+                Sign.NoSign,
+                BodyAggregate(
+                    LOC,
+                    Guard(ComparisonOperator.Equal, var_x),
+                    AggregateFunction.Min,
+                    [
+                        BodyAggregateElement(
+                            [var_l], [self._create_projected_lit(dom_pred, var_global_map | {position: var_l})]
+                        )
+                    ],
+                    None,
+                ),
             ),
-        )
-        ### __min_0__dom_c(X) :- X = #min { L: __dom_c(X) }.
-        yield ast.Rule(
+            self._create_projected_lit(dom_pred, var_global_map),
+        ]
+        ### __min_0__dom_c(G1,G2,X) :- X = #min { L: dom(G1,G2,_,_L) }, dom(G1,G2,_._,_).
+        yield Rule(
             LOC,
-            _create_projected_lit(min_pred, {0: var_x}),
-            [min_body],
-        )
-        max_body: AST = Literal(
-            LOC,
-            Sign.NoSign,
-            BodyAggregate(
-                LOC,
-                Guard(ComparisonOperator.Equal, var_x),
-                AggregateFunction.Max,
-                [BodyAggregateElement([var_l], [dom_lit_l])],
-                None,
-            ),
-        )
-        ### __max_0__dom_c(X) :- X = #max { L: __dom_c(X) }.
-        yield ast.Rule(
-            LOC,
-            _create_projected_lit(max_pred, {0: var_x}),
-            [max_body],
+            self._create_projected_lit(min_pred, self._var_map(var_global_flat + [var_x])),
+            min_body,
         )
 
-        ### __next_0__dom_c(P,N) :- __min_0__dom_c(P); __dom_c(N); N > P; not __dom_c(N): __dom_c(N), P < N < N.
-        yield ast.Rule(
+        max_body: list[AST] = [
+            Literal(
+                LOC,
+                Sign.NoSign,
+                BodyAggregate(
+                    LOC,
+                    Guard(ComparisonOperator.Equal, var_x),
+                    AggregateFunction.Max,
+                    [
+                        BodyAggregateElement(
+                            [var_l], [self._create_projected_lit(dom_pred, var_global_map | {position: var_l})]
+                        )
+                    ],
+                    None,
+                ),
+            ),
+            self._create_projected_lit(dom_pred, var_global_map),
+        ]
+        ### __max_0__dom_c(G1,G2,X) :- X = #max { L: dom(G1,G2,_,_L) }, dom(G1,G2,_._,_).
+        yield Rule(
             LOC,
-            _create_projected_lit(next_pred, {0: var_p, 1: var_n}),
+            self._create_projected_lit(max_pred, self._var_map(var_global_flat + [var_x])),
+            max_body,
+        )
+
+        var_all_p: list[AST] = []
+        for i in range(anon_pred.pred.arity):
+            if i not in anon_pred.annotated_positions:
+                var_all_p.append(Variable(LOC, f"G{i}"))
+            else:
+                if i == position:
+                    var_all_p.append(var_p)
+                else:
+                    var_all_p.append(Variable(LOC, f"L{i}"))
+
+        # __next_dom(G1,G2,P,N) :- __min_dom(G1,G2,P); dom(G1,G2,N); N > P;
+        #                                      not dom(G1,G2,_,_,B): dom(G1,G2,__,B), P < B < N.
+
+        yield Rule(
+            LOC,
+            self._create_projected_lit(next_pred, self._var_map(var_global_flat + [var_p, var_n])),
             [
-                _create_projected_lit(min_pred, {0: var_p}),
-                _create_projected_lit(dom_pred, {position: var_n}),
+                self._create_projected_lit(min_pred, self._var_map(var_global_flat + [var_p])),
+                self._create_projected_lit(dom_pred, var_global_map | {position: var_n}),
                 Literal(
                     LOC,
                     Sign.NoSign,
@@ -358,9 +486,9 @@ class DomainPredicates:
                 ),
                 ConditionalLiteral(
                     LOC,
-                    _create_projected_lit(dom_pred, {position: var_b}, Sign.Negation),
+                    self._create_projected_lit(dom_pred, var_global_map | {position: var_b}, Sign.Negation),
                     [
-                        _create_projected_lit(dom_pred, {position: var_b}),
+                        self._create_projected_lit(dom_pred, var_global_map | {position: var_b}),
                         Comparison(
                             var_p,
                             [
@@ -373,13 +501,18 @@ class DomainPredicates:
             ],
         )
 
-        ### __next_0__dom_c(P,N) :- __next_0__dom_c(_,P); __dom_c(N); N > P; not __dom_c(N): __dom_c(N), P < N < N.
-        yield ast.Rule(
+        # __next_dom(G1,G2,P,N) :- __next_dom_(G1,G2,_,P); dom(G1,G2,_,_,N); N > P;
+        #                                      not dom(G1,G2,_,_,B): dom(G1,G2,__,B), P < B < N.
+
+        yield Rule(
             LOC,
-            _create_projected_lit(next_pred, {0: var_p, 1: var_n}),
+            self._create_projected_lit(next_pred, self._var_map(var_global_flat + [var_p, var_n])),
             [
-                _create_projected_lit(next_pred, {1: var_p}),
-                _create_projected_lit(dom_pred, {position: var_n}),
+                self._create_projected_lit(
+                    next_pred,
+                    self._var_map(var_global_flat + [Variable(LOC, "_"), var_p]),
+                ),
+                self._create_projected_lit(dom_pred, var_global_map | {position: var_n}),
                 Literal(
                     LOC,
                     Sign.NoSign,
@@ -387,9 +520,9 @@ class DomainPredicates:
                 ),
                 ConditionalLiteral(
                     LOC,
-                    _create_projected_lit(dom_pred, {position: var_b}, Sign.Negation),
+                    self._create_projected_lit(dom_pred, var_global_map | {position: var_b}, Sign.Negation),
                     [
-                        _create_projected_lit(dom_pred, {position: var_b}),
+                        self._create_projected_lit(dom_pred, var_global_map | {position: var_b}),
                         Comparison(
                             var_p,
                             [
@@ -512,30 +645,37 @@ class DomainPredicates:
         """compute self.domain_rules with atom as key and a list of conditions"""
         domain_rules = defaultdict(list)
         ### collect conditions for the head
-        for rule in chain.from_iterable([x.unpool(condition=True) for x in prg]):
-            if rule.ast_type == ASTType.Rule:
-                head = rule.head
-                body = rule.body
-                if (
-                    head.ast_type == ASTType.Literal
-                    and head.sign == Sign.NoSign
-                    and head.atom.ast_type == ASTType.SymbolicAtom
+        for rule in filter(
+            lambda rule: rule.ast_type == ASTType.Rule, chain.from_iterable([x.unpool(condition=True) for x in prg])
+        ):
+            head = rule.head
+            body = rule.body
+            if (
+                head.ast_type == ASTType.Literal
+                and head.sign == Sign.NoSign
+                and head.atom.ast_type == ASTType.SymbolicAtom
+            ):
+                domain_rules[head.atom].append(body)
+            elif head.ast_type == ASTType.Disjunction:
+                for elem in head.elements:
+                    assert elem.ast_type == ASTType.ConditionalLiteral
+                    condition = elem.condition
+                    if elem.literal.sign == Sign.NoSign and elem.literal.atom.ast_type == ASTType.SymbolicAtom:
+                        domain_rules[elem.literal.atom].append(list(chain(condition, body)))
+            elif head.ast_type == ASTType.HeadAggregate:
+                for elem in filter(
+                    lambda elem: elem.condition.literal.sign == Sign.NoSign
+                    and elem.condition.literal.atom.ast_type == ASTType.SymbolicAtom,
+                    head.elements,
                 ):
-                    domain_rules[head.atom].append(body)
-                elif head.ast_type == ASTType.Disjunction:
-                    for elem in head.elements:
-                        assert elem.ast_type == ASTType.ConditionalLiteral
-                        condition = elem.condition
-                        if elem.literal.sign == Sign.NoSign:
-                            domain_rules[elem.literal.atom].append(list(chain(condition, body)))
-                elif head.ast_type == ASTType.HeadAggregate:
-                    for elem in head.elements:
-                        assert elem.condition.literal.sign == Sign.NoSign
-                        domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition.condition, body)))
-                elif head.ast_type == ASTType.Aggregate:
-                    for elem in head.elements:
-                        assert elem.literal.sign == Sign.NoSign
-                        domain_rules[elem.literal.atom].append(list(chain(elem.condition, body)))
+                    domain_rules[elem.condition.literal.atom].append(list(chain(elem.condition.condition, body)))
+            elif head.ast_type == ASTType.Aggregate:
+                for elem in filter(
+                    lambda elem: elem.literal.sign == Sign.NoSign
+                    and elem.literal.atom.ast_type == ASTType.SymbolicAtom,
+                    head.elements,
+                ):
+                    domain_rules[elem.literal.atom].append(list(chain(elem.condition, body)))
         for atom, bodies in domain_rules.items():
             pred = Predicate(atom.symbol.name, len(atom.symbol.arguments))
             if not self.is_static(pred):

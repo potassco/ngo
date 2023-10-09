@@ -44,16 +44,17 @@ time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D) }.
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
 __dom_slot(T) :- dur(_,M,_); machine(M); time(T).
 __dom___max_0_13(T) :- __dom_slot(T).
-__min_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }.
-__next_0__dom___max_0_13(P,N) :- __min_0__dom___max_0_13(P); __dom___max_0_13(N); N > P;\
+__min_0_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }; __dom___max_0_13(_).
+__next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
-__next_0__dom___max_0_13(P,N) :- __next_0__dom___max_0_13(_,P); __dom___max_0_13(N); N > P;\
+__next_0_0__dom___max_0_13(P,N) :- __next_0_0__dom___max_0_13(_,P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
-__chain__max_0_13(T) :- slot(_,_,T).
-__aux_1(__AUX_0,__AUX_1) :- __chain__max_0_13(__AUX_0); __next_0__dom___max_0_13(__AUX_1,__AUX_0).
-__chain__max_0_13(__PREV) :- __aux_1(_,__PREV).
-:~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain__max_0_13(__PREV,__NEXT)]
-:~ __chain__max_0_13(__NEXT); __min_0__dom___max_0_13(__NEXT). [__NEXT@0,__chain__max_0_13(#sup,__NEXT)]""",
+__chain_0_0__max___dom___max_0_13(T) :- slot(_,_,T).
+__aux_1(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
+__chain_0_0__max___dom___max_0_13(__PREV) :- __aux_1(_,__PREV).
+:~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain_0_0__max___dom___max_0_13(__PREV,__NEXT)]
+:~ __chain_0_0__max___dom___max_0_13(__NEXT);\
+ __min_0_0__dom___max_0_13(__NEXT). [__NEXT@0,__chain_0_0__max___dom___max_0_13(#sup,__NEXT)]""",
         ),
         (
             """

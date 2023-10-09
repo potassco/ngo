@@ -20,7 +20,7 @@ else:
 VERSION = metadata.version("ngo")
 
 
-OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused"]
+OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains"]
 
 
 class PredicateList(Action):
@@ -85,7 +85,7 @@ def get_parser() -> ArgumentParser:
 
     parser.add_argument(
         "--log",
-        default="warning",
+        default="info",
         choices=LEVELS.keys(),
         metavar=f"{{{','.join(LEVELS.keys())}}}",
         help="set log level [%(default)s]",
