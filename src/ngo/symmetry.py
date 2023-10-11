@@ -3,6 +3,7 @@
  with X1 < X2 if this preserves semantics.
 """
 
+from collections import defaultdict
 from itertools import chain, combinations
 from typing import Collection, Iterable, Iterator, Optional, TypeVar
 
@@ -114,22 +115,25 @@ class SymmetryTranslator:
         symmetric = True
         used_inequalities: dict[AST, tuple[AST, AST]] = {}
         for pair in equalities:
-            for lhs, rhs in zip(pair[0].atom.symbol.arguments, pair[1].atom.symbol.arguments):
+            # find the position inside the predicate that has the most inequalities
+            used_inequalities_indexed: dict[int, dict[AST, tuple[AST, AST]]] = defaultdict(dict)
+            for pos, (lhs, rhs) in enumerate(zip(pair[0].atom.symbol.arguments, pair[1].atom.symbol.arguments)):
                 # 1. both sides are equal
                 if SymmetryTranslator._equal(body, lhs, rhs):
                     continue
                 # 2. both sides are inequal
                 for lit, var1, var2 in inequalities:
                     if (lhs == var1 and rhs == var2) or (lhs == var2 and rhs == var1):
-                        used_inequalities[lit] = (lhs, rhs)
+                        used_inequalities_indexed[pos][lit] = (lhs, rhs)
                         break
-                if (lhs, rhs) in used_inequalities.values():
+                if (lhs, rhs) in used_inequalities_indexed[pos].values():
                     continue
                 symmetric = False
                 break
+            used_inequalities.update(max(used_inequalities_indexed.items(), key=lambda x: len(x[1]))[1])
         if symmetric:
             newbody = [b for b in body if b not in used_inequalities]
-            for lhs, rhs in used_inequalities.values():
+            for lhs, rhs in sorted(set(used_inequalities.values())):
                 newbody.append(Literal(LOC, Sign.NoSign, Comparison(lhs, [Guard(ComparisonOperator.LessThan, rhs)])))
             return Rule(LOC, head, newbody)
         return None

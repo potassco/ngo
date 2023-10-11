@@ -28,7 +28,7 @@ from ngo.utils.globals import UniqueNames
         ),
         (
             "f(X) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y,V1); player(P2,X,Y,V2); P1 < P2; V1 < V2.",
+            "#program base.\nf(X) :- node(X); player(P1,X,Y,V1); player(P2,X,Y,V2); V1 != V2; P1 < P2.",
         ),
         (
             "f(V1) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
