@@ -2,6 +2,7 @@
  - add sum_chains trait
  - set log output to info by default
  - fix error in symmetry trait
+ - improve symmetry trait
 0.0.4:
  - bugfixes
  - allow any length conditions in aggregates for summinmax_chains trait

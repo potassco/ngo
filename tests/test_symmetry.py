@@ -50,6 +50,10 @@ from ngo.utils.globals import UniqueNames
             "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
             "#program base.\n#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); T < U.",
         ),
+        (
+            "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
+            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); player(P3,X,Y); P1 < P2; P2 < P3.",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
