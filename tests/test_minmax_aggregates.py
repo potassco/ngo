@@ -9,7 +9,7 @@ from ngo.utils.globals import UniqueNames
 
 # diable line too long warnings
 # ruff: noqa: E501
-# pylint: disable=C0301
+# pylint: disable=line-too-long,too-many-lines
 
 
 @pytest.mark.parametrize(
@@ -806,7 +806,7 @@ skill(a, ("knitting",1..10), 100);
 skill(b, t("cooking",1..10), 10);
 skill(b, t("knitting",1..10), 1)
 }.
-:- 42 < #max {V, ID : skill(P, ID, V)}, person(P).
+:- 42 = #max {V, ID : skill(P, ID, V)}, person(P).
 """,
             """#program base.
 { person(a); person(b) }.
@@ -828,7 +828,7 @@ __chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
 __chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
-#false :- __max_0_11(P,__VAR__max_0_11); __VAR__max_0_11 > 42.""",
+#false :- __max_0_11(P,__VAR__max_0_11); __VAR__max_0_11 = 42.""",
         ),
         (
             """
@@ -869,12 +869,12 @@ __max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom__
             """
 {person(a);person(b)}.
 c(X) :- X = #sum{Y : person(Y)}.
-:- 42 < #max {X : c(X)}, person(P).
+:- 42 = #max {X : c(X)}, person(P).
 """,
             """#program base.
 { person(a); person(b) }.
 c(X) :- X = #sum { Y: person(Y) }.
-#false :- 42 < #max { X: c(X) }; person(P).""",
+#false :- 42 = #max { X: c(X) }; person(P).""",
         ),
         (
             """
@@ -929,8 +929,35 @@ max(P,X) :- __max_0_11(P,X); random(Y).""",
         ),
         (
             """
+{foo(X,bar) : dom(X)}.
+a :- b, 14 > #min {X : foo(X,_)}.
+         """,
+            """#program base.
+{ foo(X,bar): dom(X) }.
+a :- b; foo(X0,_); 14 > X0.""",
+        ),
+        (
+            """
 {foo(X) : dom(X)}.
-a :- b, 14 < #min {X : foo(X)}.
+a :- b, 14 > #min {X : foo(X)}.
+         """,
+            """#program base.
+{ foo(X): dom(X) }.
+a :- b; foo(X0); 14 > X0.""",
+        ),
+        (
+            """
+{foo(X) : dom(X)}.
+a :- b, not 14 < #min {X : foo(X)}.
+         """,
+            """#program base.
+{ foo(X): dom(X) }.
+a :- b; foo(X0); not 14 < X0.""",
+        ),
+        (
+            """
+{foo(X) : dom(X)}.
+a :- b, 14 < #max {X : foo(X)}.
          """,
             """#program base.
 { foo(X): dom(X) }.
@@ -939,14 +966,35 @@ a :- b; foo(X0); 14 < X0.""",
         (
             """
 {foo(X) : dom(X)}.
+a :- b, not 14 > #max {X : foo(X)}.
+         """,
+            """#program base.
+{ foo(X): dom(X) }.
+a :- b; foo(X0); not 14 > X0.""",
+        ),
+        (
+            """
+{foo(X) : dom(X)}.
 {bar(X) : dom(X)}.
-a :- b, 14 < #min {X : foo(X); X,bar : bar(X), X*X=24}.
+a :- b, 14 > #min {X : foo(X); X,bar : bar(X), X*X=24}.
          """,
             """#program base.
 { foo(X): dom(X) }.
 { bar(X): dom(X) }.
-a :- b; foo(X0); 14 < X0.
-a :- b; bar(X1); (X1*X1) = 24; 14 < X1.""",
+a :- b; foo(X0); 14 > X0.
+a :- b; bar(X1); (X1*X1) = 24; 14 > X1.""",
+        ),
+        (
+            """
+{foo(X) : dom(X)}.
+{bar(X) : dom(X)}.
+a :- b, not 14 < #min {X : foo(X); X,bar : bar(X), X*X=24}.
+         """,
+            """#program base.
+{ foo(X): dom(X) }.
+{ bar(X): dom(X) }.
+a :- b; foo(X0); not 14 < X0.
+a :- b; bar(X1); (X1*X1) = 24; not 14 < X1.""",
         ),
     ],
 )

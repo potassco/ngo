@@ -297,15 +297,6 @@ class MinMaxAggregator:
     def _simple_translation(self, rule: AST, agg: AST) -> list[AST]:
         """translate a min/max aggregate that has a <,<=,>,>= comparison in the same
         direction to a simple set of rules"""
-        assert agg.atom.right_guard is None
-        assert agg.sign == Sign.NoSign
-        assert (
-            agg.atom.function == AggregateFunction.Min
-            and agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
-        ) or (
-            agg.atom.function == AggregateFunction.Max
-            and agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
-        )
         ret = []
         gvars = global_vars(rule.body)
         uv = UniqueVariables(rule)
@@ -320,7 +311,7 @@ class MinMaxAggregator:
             newlits.append(
                 Literal(
                     LOC,
-                    Sign.NoSign,
+                    agg.sign,
                     Comparison(agg.atom.left_guard.term, [Guard(agg.atom.left_guard.comparison, elem.terms[0])]),
                 )
             )
@@ -374,7 +365,7 @@ class MinMaxAggregator:
         if not self.domain_predicates.has_domain(new_predicate):
             log.info(
                 f"Cannot translate {loc2str(agg.location)} as I cannot infer "
-                "a domain for {[list(chain(elem.condition, lits_with_vars))]}."
+                f"a domain for {[str(x) for x in list(chain(elem.condition, lits_with_vars))]}."
             )
             return [rule]
 
@@ -433,19 +424,23 @@ class MinMaxAggregator:
         if not any(map(self._translatable_element, agg.atom.elements)):
             return [rule]  # nocoverage, #issue9
 
-        if (  # pylint: disable=too-many-boolean-expressions
-            agg.sign == Sign.NoSign
-            and agg.atom.right_guard is None
-            and (
-                agg.atom.function == AggregateFunction.Min
-                and agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
-            )
-            or (
-                agg.atom.function == AggregateFunction.Max
-                and agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
-            )
-        ):
-            return self._simple_translation(rule, agg)
+        if not agg.atom.right_guard:
+            lt = agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
+            gt = agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
+            if ( # pylint: disable=too-many-boolean-expressions
+                agg.sign == Sign.NoSign
+                and (
+                    (agg.atom.function == AggregateFunction.Max and lt)
+                    or (agg.atom.function == AggregateFunction.Min and gt)
+                )
+            ) or (
+                agg.sign == Sign.Negation
+                and (
+                    (agg.atom.function == AggregateFunction.Min and lt)
+                    or (agg.atom.function == AggregateFunction.Max and gt)
+                )
+            ):
+                return self._simple_translation(rule, agg)
         return self._chain_translation(rule, agg)
 
     def _create_replacement(

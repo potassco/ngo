@@ -24,6 +24,8 @@ class UniqueVariables:
         """return itself if not already present in rule, otherwise
         add a counter to it to make it unique
         also make it known so that it stays unique"""
+        if var.name == "_":
+            return var
         if var not in self._allvars:
             self._allvars.append(var)
             return var

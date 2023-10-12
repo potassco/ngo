@@ -3,6 +3,8 @@
  - set log output to info by default
  - fix error in symmetry trait
  - improve symmetry trait
+ - fix bug with anonymous variables in aggregate replacement
+ - fix bug in minmax_chains
 0.0.4:
  - bugfixes
  - allow any length conditions in aggregates for summinmax_chains trait
