@@ -54,6 +54,10 @@ from ngo.utils.globals import UniqueNames
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
             "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); player(P3,X,Y); P1 < P2; P2 < P3.",
         ),
+        (
+            ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
+            "#program base.\n#false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
