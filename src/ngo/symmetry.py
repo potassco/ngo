@@ -7,7 +7,7 @@ from collections import defaultdict
 from itertools import chain, combinations, pairwise
 from typing import Collection, Iterable, Iterator, Optional, TypeVar
 
-from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Rule, Sign
+from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Sign
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import LOC, Predicate, collect_ast, comparison2comparisonlist
@@ -99,7 +99,7 @@ class SymmetryTranslator:
     def _equal(body: Iterable[AST], sides: list[AST]) -> bool:
         """return true if all elements in sides are equal wrt. body"""
         if not sides:
-            return True # nocoverage
+            return True  # nocoverage
         equals: list[AST] = []
         unknown = list(sides[1:])
         equals.append(sides[0])
@@ -125,13 +125,12 @@ class SymmetryTranslator:
 
     def _process_inequalities(
         self,
-        head: AST,
         body: list[AST],
         inequalities: Collection[tuple[AST, AST, AST]],
         equalities: list[tuple[AST, ...]],
-    ) -> Optional[AST]:
+    ) -> Optional[list[AST]]:
         """given a set of inequalities for variables and equalities in predicates
-        create a new rule breaking inequalities or return None"""
+        create a new body breaking inequalities or return None"""
 
         # all positions in the eq_list must be either equal or an inequality
         symmetric = True
@@ -175,14 +174,64 @@ class SymmetryTranslator:
         if symmetric:
             newbody = [b for b in body if b not in used_inequalities]
             newbody.extend(sorted(new_inequalities))
-            return Rule(LOC, head, newbody)
+            return newbody
         return None
+
+    def _process_aggregate(self, aggregate_lit: AST, body: list[AST], head: AST) -> AST:
+        """process aggregate and replace symmetries inside it"""
+        assert aggregate_lit.ast_type == ASTType.Literal
+        aggregate: AST = aggregate_lit.atom
+        if aggregate.ast_type == ASTType.BodyAggregate:
+            new_elements: list[AST] = []
+            for elem in aggregate.elements:
+                inequalities = SymmetryTranslator._inequalities(elem.condition)
+                # 1. For the largest subset of inequalities
+                for inequality_subset in SymmetryTranslator.largest_subset(inequalities):
+                    # remove all literals from the body that do not have the unequal variables
+                    variables = set()
+                    rest = body + [head]
+                    rest.remove(aggregate_lit)
+                    rest.extend(elem.condition)
+                    for lit, var1, var2 in inequality_subset:
+                        variables.add(var1)
+                        variables.add(var2)
+                        if lit in rest:
+                            rest.remove(lit)
+                    rest = [b for b in rest if len(set(collect_ast(b, "Variable")) & variables) > 0]
+
+                    # compute all lists of equal predicates
+                    equalities = list(SymmetryTranslator._all_equal_symbols(elem.condition))
+                    for lit in set(x for equals in equalities for x in equals):
+                        if lit in rest:
+                            rest.remove(lit)
+
+                    # not applicable due to variable usage outside the predicates
+                    if rest or not equalities:
+                        continue
+                    ret = self._process_inequalities(elem.condition, inequality_subset, equalities)
+                    if ret is not None:
+                        elem = elem.update(condition=ret)
+                        break
+                new_elements.append(elem)
+            return aggregate.update(elements=new_elements)
+        return aggregate
 
     def _process_rule(self, rule: AST) -> AST:
         """replace X1 != X2 with X2 < X2 if possible"""
         assert rule.ast_type == ASTType.Rule
         head: AST = rule.head
         body: list[AST] = list(rule.body)
+
+        # 0. process aggregates inside the rule first
+        newbody: list[AST] = []
+        for lit in body:
+            if lit.ast_type == ASTType.Literal and lit.atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+                newbody.append(lit.update(atom=self._process_aggregate(lit, body, head)))
+            else:
+                newbody.append(lit)
+        rule = rule.update(body=newbody)
+        body = list(rule.body)
+
         inequalities = SymmetryTranslator._inequalities(body)
 
         # 1. For the largest subset of inequalities
@@ -205,9 +254,9 @@ class SymmetryTranslator:
             # not applicable due to variable usage outside the predicates
             if rest or not equalities:
                 continue
-            ret = self._process_inequalities(head, body, inequality_subset, equalities)
+            ret = self._process_inequalities(body, inequality_subset, equalities)
             if ret is not None:
-                return ret
+                return rule.update(body=ret)
         return rule
 
     def execute(self, prg: list[AST]) -> list[AST]:

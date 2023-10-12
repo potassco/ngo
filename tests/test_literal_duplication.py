@@ -363,6 +363,13 @@ foobar :- __aux_1; { e: __aux_2 }.""",
 1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(O) }.
 #false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(O) }.""",
         ),
+        (
+            """
+#false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.
+            """,
+            """#program base.
+#false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.""",
+        ),
     ),
 )
 def test_duplication(prg: str, converted_prg: str) -> None:

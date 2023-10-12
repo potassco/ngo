@@ -223,6 +223,9 @@ class LiteralCollector:
             if len(rulebuilding) > 1:
                 if any(map(lambda rb: rb.ruleid in changed_rules, rulebuilding)):
                     continue
+                # check for overlaps and ignore if nothing is left
+                if len({(b.ruleid, b.sub_ast, b.sub_sub_ast) for b in rulebuilding}) <= 1:
+                    continue
                 # create new aux predicate
                 min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
                 bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
