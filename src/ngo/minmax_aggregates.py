@@ -427,7 +427,7 @@ class MinMaxAggregator:
         if not agg.atom.right_guard:
             lt = agg.atom.left_guard.comparison in (ComparisonOperator.LessThan, ComparisonOperator.LessEqual)
             gt = agg.atom.left_guard.comparison in (ComparisonOperator.GreaterThan, ComparisonOperator.GreaterEqual)
-            if ( # pylint: disable=too-many-boolean-expressions
+            if (  # pylint: disable=too-many-boolean-expressions
                 agg.sign == Sign.NoSign
                 and (
                     (agg.atom.function == AggregateFunction.Max and lt)
