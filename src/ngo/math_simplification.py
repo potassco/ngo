@@ -2,7 +2,7 @@
 from typing import Callable, Optional, cast
 
 from clingo import SymbolType
-from clingo.ast import AST, ASTType, BinaryOperator, ComparisonOperator, Sign, UnaryOperator
+from clingo.ast import AST, AggregateFunction, ASTType, BinaryOperator, ComparisonOperator, Sign, UnaryOperator
 from sympy import (
     Abs,
     AtomicExpr,
@@ -38,9 +38,9 @@ class Groebner:
     }
 
     def __init__(self) -> None:
-        self.fo_vars: list[tuple[Symbol, AST]] = []
-        self.help_neq_vars: list[Symbol] = []
-        self.agg_vars: list[Symbol] = []
+        self._fo_vars: list[tuple[Symbol, AST]] = []
+        self._help_neq_vars: list[Symbol] = []
+        self._sym2agg: dict[Symbol, AST] = {}
         # self.to_keep: list[Symbol] = []
 
     def _to_sympy_term(self, t: AST) -> Optional[AtomicExpr]:
@@ -49,7 +49,7 @@ class Groebner:
         if t.ast_type == ASTType.Variable:
             name = str(t)
             s = Symbol(name, integer=True)
-            self.fo_vars.append((s, t))
+            self._fo_vars.append((s, t))
             return s
         if t.ast_type == ASTType.SymbolicTerm:  # constants
             symbol = t.symbol
@@ -110,14 +110,37 @@ class Groebner:
             return None
         return op(lhs, rhs)
 
+    def _to_sympy_bodyaggregate(self, agg: AST) -> Optional[list[Relational]]:
+        assert agg.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)
+        assert agg.left_guard is not None
+        ret = []
+        nonnegative = None
+        if agg.ast_type == ASTType.BodyAggregate and agg.function == AggregateFunction.SumPlus:
+            nonnegative = True
+        dummy = Symbol(f"__agg{agg.location.begin.column}", integer=True, nonnegative=nonnegative)
+        op: Callable[[AtomicExpr, AtomicExpr], Relational] = self.ast2sympy_op[agg.left_guard.comparison]
+        lhs = self._to_sympy_term(agg.left_guard.term)
+        if lhs is None:
+            return None
+        ret.append(op(lhs, dummy))
+        if agg.right_guard is not None:
+            op = self.ast2sympy_op[agg.right_guard.comparison]
+            rhs = self._to_sympy_term(agg.right_guard.term)
+            if rhs is None:
+                return None
+            ret.append(op(rhs, dummy))  # type: ignore[no-untyped-call]
+        self._sym2agg[dummy] = agg
+        return ret
+
     def to_sympy(self, ast: AST) -> Optional[list[Relational]]:
         """transform a literal into a list of sympy (in)equalities
         or None if too complex"""
         if ast.ast_type == ASTType.Literal:
             sign = ast.sign
             atom = ast.atom
+            ret: Optional[list[Relational]]
             if atom.ast_type == ASTType.Comparison:
-                ret: list[Relational] = []
+                ret = []
                 cl = comparison2comparisonlist(atom)
                 for c in cl:
                     rel = self._to_sympy_comparison(c)
@@ -128,6 +151,11 @@ class Groebner:
                     else:
                         ret.append(rel)
                 return ret
+            if atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+                ret = self._to_sympy_bodyaggregate(atom)
+                if ret is None:
+                    return None
+                return [rel.negated if sign == Sign.Negation else rel for rel in ret]
         # Dummy,
         return None
 

@@ -38,9 +38,17 @@ fx = Symbol("f(X)", integer=True)
         (":- X < 2&Y.", [None]),
         (":- X < 2 >= Y != Z.", [[x < 2, GreaterThan(2, y), Unequality(y, z)]]),
         (":- not X < 2 >= Y != Z.", [[x >= 2, StrictLessThan(2, y), Equality(y, z)]]),
+        (":- X < #sum{1,a}.", [[x < Symbol("__agg4", integer=True)]]),
+        (":- #sum{1,a} < X.", [[x > Symbol("__agg4", integer=True)]]),
+        (":- -3 < #sum+{1,a}.", [[True]]),
+        (":- -3 < #sum{1,a}.", [["-3 < __agg4"]]),
+        (":- -3 < #sum{1,a} > Y.", [["-3 < __agg4", "Y > __agg4"]]),
+        (":- X < {a}.", [[x < Symbol("__agg4", integer=True)]]),
+        (':- "a" < #sum{1,a}.', [None]),
+        (':- 1 < #sum{1,a} != "a".', [None]),
     ],
 )
-def test_to_sympy(rule: str, sympy: list[Optional[Relational]]) -> None:
+def test_to_sympy(rule: str, sympy: list[Optional[list[Relational]]]) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
@@ -49,4 +57,16 @@ def test_to_sympy(rule: str, sympy: list[Optional[Relational]]) -> None:
     for r in prg:
         if r.ast_type == ASTType.Rule:
             for index, blit in enumerate(r.body):
-                assert sympy[index] == gb.to_sympy(blit)
+                sublist = sympy[index]  # for mypy
+                if sublist is None:
+                    assert sublist == gb.to_sympy(blit)
+                    continue
+                res = gb.to_sympy(blit)
+                assert isinstance(sublist, list)
+                assert res is not None
+                assert len(sublist) == len(res)
+                for given, computed in zip(sublist, res):
+                    if isinstance(given, str):
+                        assert given == str(computed)
+                    else:
+                        assert given == computed
