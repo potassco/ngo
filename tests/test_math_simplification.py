@@ -2,71 +2,80 @@
 from typing import Optional
 
 import pytest
-from clingo.ast import AST, ASTType, parse_string
-from sympy import Abs, Equality, GreaterThan, StrictLessThan, Symbol, Unequality
-from sympy.core.relational import Relational
+from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
 from ngo.math_simplification import Groebner
 
-x = Symbol("X", integer=True)
-y = Symbol("Y", integer=True)
-z = Symbol("Z", integer=True)
-fx = Symbol("f(X)", integer=True)
+to_str = {
+    ComparisonOperator.Equal: "=",
+    ComparisonOperator.GreaterEqual: ">=",
+    ComparisonOperator.GreaterThan: ">",
+    ComparisonOperator.LessEqual: "<=",
+    ComparisonOperator.LessThan: "<",
+    ComparisonOperator.NotEqual: "!=",
+}
 
 
 @pytest.mark.parametrize(
-    "rule, sympy",
+    "rule, sympy, ineqs",
     [
-        (":- a.", [None]),
-        (":- X < 2.", [[x < 2]]),
-        (":- X < -2.", [[x < -2]]),
-        (":- |X| < 2.", [[Abs(x) < 2]]),
-        (':- -("X") < 2.', [None]),
-        (":- ~X < -2.", [None]),
-        (":- f(X) < 2.", [[fx < 2]]),
-        (":- X < #sup.", [[True]]),
-        (":- X < #inf.", [[False]]),
-        (':- "X" < 2.', [None]),
-        (":- X = 1..2.", [None]),
-        (":- X < 2+Y.", [[x < 2 + y]]),
-        (":- X < 2-Y.", [[x < 2 - y]]),
-        (":- X < 2/Y.", [[x < 2 / y]]),
-        (":- X < 2\\Y.", [[x < 2 % y]]),
-        (":- X < 2*Y.", [[x < 2 * y]]),
-        (":- X < 2**Y.", [[x < 2**y]]),
-        (':- X < "2"+Y.', [None]),
-        (":- X < 2&Y.", [None]),
-        (":- X < 2 >= Y != Z.", [[x < 2, GreaterThan(2, y), Unequality(y, z)]]),
-        (":- not X < 2 >= Y != Z.", [[x >= 2, StrictLessThan(2, y), Equality(y, z)]]),
-        (":- X < #sum{1,a}.", [[x < Symbol("__agg4", integer=True)]]),
-        (":- #sum{1,a} < X.", [[x > Symbol("__agg4", integer=True)]]),
-        (":- -3 < #sum+{1,a}.", [[True]]),
-        (":- -3 < #sum{1,a}.", [["-3 < __agg4"]]),
-        (":- -3 < #sum{1,a} > Y.", [["-3 < __agg4", "Y > __agg4"]]),
-        (":- X < {a}.", [[x < Symbol("__agg4", integer=True)]]),
-        (':- "a" < #sum{1,a}.', [None]),
-        (':- 1 < #sum{1,a} != "a".', [None]),
+        (":- a.", None, None),
+        (":- X < 2.", ["-_temp + X - 2"], ["_temp < 0"]),
+        (":- X < -2.", ["-_temp + X + 2"], ["_temp < 0"]),
+        (":- |X| < 2.", ["-_temp + Abs(X) - 2"], ["_temp < 0"]),
+        (':- -("X") < 2.', None, None),
+        (":- ~X < -2.", None, None),
+        (":- f(X) < 2.", None, None),
+        (":- f = 2.", ["2 - f"], None),
+        (":- 2*f = 2.", ["2 - 2*f"], None),
+        (":- X < #sup.", ["-oo"], ["_temp < 0"]),
+        (":- X < #inf.", ["oo"], ["_temp < 0"]),
+        (':- "X" < 2.', None, None),
+        (":- X = 1..2.", None, None),
+        (":- X < 2+Y.", ["-_temp + X - Y - 2"], ["_temp < 0"]),
+        (":- X < 2-Y.", ["-_temp + X + Y - 2"], ["_temp < 0"]),
+        (":- X < 2/Y.", ["-_temp + X - 2/Y"], ["_temp < 0"]),
+        (":- X < 2\\Y.", ["-_temp + X - Mod(2, Y)"], ["_temp < 0"]),
+        (":- X < 2*Y.", ["-_temp + X - 2*Y"], ["_temp < 0"]),
+        (":- X < 2**Y.", ["-2**Y - _temp + X"], ["_temp < 0"]),
+        (':- X < "2"+Y.', None, None),
+        (":- X < 2&Y.", None, None),
+        (
+            ":- X < 2 >= Y != Z.",
+            ["-_temp + X - 2", "-_temp - Y + 2", "-_temp + Y - Z"],
+            ["_temp < 0", "_temp >= 0", "_temp != 0"],
+        ),
+        (":- not X < 2 >= Y != Z.", ["-_temp + X - 2", "-_temp - Y + 2", "-Y + Z"], ["_temp >= 0", "_temp < 0"]),
+        (":- X < #sum{1,a}.", ["-_agg4 - _temp + X"], ["_temp < 0"]),
+        (":- #sum{1,a} < X.", ["-_agg4 - _temp + X"], ["_temp > 0"]),
+        (":- -3 < #sum+{1,a}.", ["-_agg4 - _temp - 3"], ["_temp < 0"]),
+        (":- -3 < #sum{1,a}.", ["-_agg4 - _temp - 3"], ["_temp < 0"]),
+        (":- -3 < #sum{1,a} > Y.", ["-_agg4 - _temp - 3", "_agg4 - _temp - Y"], ["_temp < 0", "_temp > 0"]),
+        (":- X < {a}.", ["-_agg4 - _temp + X"], ["_temp < 0"]),
+        (':- "a" < #sum{1,a}.', None, None),
+        (':- 1 < #sum{1,a} != "a".', None, None),
     ],
 )
-def test_to_sympy(rule: str, sympy: list[Optional[list[Relational]]]) -> None:
+def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    gb = Groebner()
     print(sympy)
     for r in prg:
+        gb = Groebner()
         if r.ast_type == ASTType.Rule:
-            for index, blit in enumerate(r.body):
-                sublist = sympy[index]  # for mypy
-                if sublist is None:
-                    assert sublist == gb.to_sympy(blit)
-                    continue
-                res = gb.to_sympy(blit)
-                assert isinstance(sublist, list)
-                assert res is not None
-                assert len(sublist) == len(res)
-                for given, computed in zip(sublist, res):
-                    if isinstance(given, str):
-                        assert given == str(computed)
-                    else:
-                        assert given == computed
+            assert len(r.body) == 1
+            res = gb.to_sympy(r.body[0])
+            if sympy is None:
+                assert res is None
+                continue
+            assert res is not None
+            assert len(sympy) == len(res)
+            for given, computed in zip(sympy, res):
+                assert given == str(computed)
+            if ineqs is None:
+                assert not gb.help_neq_vars
+                continue
+            assert len(ineqs) == len(gb.help_neq_vars)
+            for (var, op), expected in zip(gb.help_neq_vars.items(), ineqs):
+                assert f"{var} {to_str[op]} 0" == expected
