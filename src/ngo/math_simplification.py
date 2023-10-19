@@ -1,32 +1,102 @@
 """ does math simplification for FO formulas and aggregates"""
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import Optional, cast
 
+import clingo
 from clingo import SymbolType
-from clingo.ast import AST, AggregateFunction, ASTType, BinaryOperator, ComparisonOperator, Sign, UnaryOperator
+from clingo.ast import (
+    AST,
+    AggregateFunction,
+    ASTType,
+    BinaryOperation,
+    BinaryOperator,
+    BodyAggregateElement,
+    Comparison,
+    ComparisonOperator,
+    Guard,
+    Literal,
+    Sign,
+    SymbolicTerm,
+    UnaryOperator,
+)
 from sympy import (
     Abs,
+    Add,
     Dummy,
     Equality,
     Expr,
     GreaterThan,
     Integer,
     LessThan,
+    Mul,
     Number,
+    S,
     StrictGreaterThan,
     StrictLessThan,
     Symbol,
     Unequality,
+    groebner,
     oo,
+    ordered,
+    solve,
 )
+from sympy.core.numbers import NegativeOne, One, Zero
 
-from ngo.utils.ast import comparison2comparisonlist, negate_comparison
+from ngo.dependency import RuleDependency
+from ngo.utils.ast import LOC, collect_ast, collect_binding_information, comparison2comparisonlist, negate_comparison, rhs2lhs_comparison
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("math_simplification")
 
 
-class Groebner:
+class SympyApi(Exception):
+    """Exception class if simplified formula is to complex or something went wrong using sympy"""
+
+
+class MathSimplification:
+    """class does math simplification on literals"""
+
+    def __init__(self, rdp: RuleDependency) -> None:
+        self._rdp = rdp
+
+    def execute(self, prg: list[AST]) -> list[AST]:
+        """return a simplified version of the program"""
+        ret: list[AST] = []
+        # TODO: cycle check for neg lits
+        for stm in prg:
+            if stm.ast_type != ASTType.Rule:
+                ret.append(stm)
+                continue
+            gb = Goebner()
+            newbody: list[AST] = []
+            for blit in stm.body:
+                expr_list = gb.to_sympy(blit)
+                if expr_list is None:
+                    newbody.append(blit)
+                    continue
+                gb.equalities[blit] = expr_list
+            # all_globals = global_vars(stm.body + [stm.head])
+            # normal_global_vars = global_vars(newbody)
+            # normal_bound, normal_unbound = collect_binding_information(newbody)
+            # math_bound, math_unbound = collect_binding_information([x for x in stm.body if x not in newbody])
+            # bound_before = collect_binding_information(stm.body)[0]
+            # bound_after, unbound_after = collect_binding_information(newbody)
+            bound, unbound = collect_binding_information(newbody)
+            needed = set(collect_ast(stm.head, "Variable"))
+            unbound |= needed - bound
+            needed = needed.union(bound, unbound)
+            try:
+                newbody.extend([Literal(LOC, Sign.NoSign, x) for x in gb.simplify_equalities(needed, unbound)])
+
+            except SympyApi as err:
+                log.info(str(err))
+                ret.append(stm)
+                continue
+            ret.append(stm.update(body=newbody))
+        return ret
+
+
+class Goebner:
     """class does groebner simplification of polynomials"""
 
     ast2sympy_op = {
@@ -39,9 +109,10 @@ class Groebner:
     }
 
     def __init__(self) -> None:
-        self._fo_vars: list[tuple[Symbol, AST]] = []
+        self._fo_vars: dict[Symbol, AST] = {}
         self.help_neq_vars: dict[Symbol, ComparisonOperator] = OrderedDict()
         self._sym2agg: dict[Symbol, AST] = {}
+        self.equalities: dict[AST, list[Expr]] = {}
         # self.to_keep: list[Symbol] = []
 
     def _to_equality(self, lhs: Expr, op: ComparisonOperator, rhs: Expr) -> Expr:
@@ -57,7 +128,7 @@ class Groebner:
         if t.ast_type == ASTType.Variable:
             name = str(t)
             s = Symbol(name, integer=True)
-            self._fo_vars.append((s, t))
+            self._fo_vars[s] = t
             return s
         if t.ast_type == ASTType.SymbolicTerm:  # constants
             symbol = t.symbol
@@ -142,7 +213,7 @@ class Groebner:
             if rhs is None:
                 return None
             ret.append(self._to_equality(dummy, op, rhs))
-        self._sym2agg[dummy] = agg
+        self._sym2agg[dummy] = agg.update(left_guard=None, right_guard=None)
         return ret
 
     def to_sympy(self, ast: AST) -> Optional[list[Expr]]:
@@ -170,14 +241,167 @@ class Groebner:
         # Dummy,
         return None
 
+    def new_sum(self, asts: list[AST]) -> AST:
+        """given a list of terms and aggregates, create the sum using clingo AST operations"""
+        assert len(asts) >= 2
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        if aggs:  # use next and iteration
+            rest = [x for x in asts if x.ast_type != ASTType.BodyAggregate]
+            collector = aggs[0]
+            newelements = list(collector.elements)
+            for index in range(1, len(aggs)):
+                for e in aggs[index].elements:
+                    newelements.append(e)
+            for term in rest:
+                newelements.append(BodyAggregateElement([term], []))
+            return collector.update(elements=newelements)
 
-# a, b, c, t, x, y, z = symbols('a, b, c, t, x, y, z', integer=True)
-# eqs = [Eq(x, a), Eq(y+1, b), Eq(x, y), Eq(z, c), Eq(y - z, t)]
-# pprint(eqs)
+        collector = asts[0]
+        index = 1
+        for index in range(1, len(asts)):
+            collector = BinaryOperation(LOC, BinaryOperator.Plus, collector, asts[index])
+        return collector
 
-# gb = groebner(eqs, [x, y, z, t, a, b, c])
-# pprint(gb)
-# unequal = S.Zero < solve(gb[3], t)[0]
-# pprint(unequal)
-# equal = Eq(0, gb[4])
-# print(equal)
+    def new_mul(self, asts: list[AST]) -> AST:
+        """given a list of terms create the multiplication using clingo AST operations"""
+        assert len(asts) >= 2
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        if aggs:  # use next and iteration
+            if len(aggs) > 1:
+                raise SympyApi("Cannot express multiplication of aggregates, skipping.")
+            collector = aggs[0]
+            if collector.function in (AggregateFunction.Min, AggregateFunction.Max):
+                raise SympyApi("Cannot express multiplication with min/max aggregate, skipping.")
+            rest = [x for x in asts if x.ast_type != ASTType.BodyAggregate]
+            newelements: list[AST] = []
+            factor: AST = rest[0]
+            for factor_index in range(1, len(rest)):
+                factor = BinaryOperation(LOC, BinaryOperator.Multiplication, factor, rest[factor_index])
+            for elem in collector.elements:
+                newelem = elem
+                if not newelem.terms:
+                    newelem = newelem.update(terms=[SymbolicTerm(LOC, clingo.Number(1))])
+                newterms = list(newelem.terms)
+                newterms[0] = BinaryOperation(LOC, BinaryOperator.Multiplication, newterms[0], factor)
+                newelements.append(newelem.update(terms=newterms))
+            return collector.update(elements=newelements)
+
+        collector = asts[0]
+        index = 1
+        for index in range(1, len(asts)):
+            collector = BinaryOperation(LOC, BinaryOperator.Multiplication, collector, asts[index])
+        return collector
+
+    def new_equality(self, asts: list[AST]) -> AST:
+        """given a list of terms create the equality using Comparison Operators clingo AST operations"""
+        assert len(asts) >= 2
+        index = 1
+        guards: list[AST] = []
+        for index in range(1, len(asts)):
+            guards.append(Guard(ComparisonOperator.Equal, asts[index]))
+        return Comparison(asts[0], guards)
+
+    def sympy2ast(self, expr: Expr) -> AST:
+        """convert a sympy expr to a clingo AST"""
+        if expr.func in (Integer, Zero, NegativeOne, One):
+            assert len(expr.args) == 0
+            return SymbolicTerm(LOC, clingo.Number(int(expr)))
+        if expr.func in (Symbol, Dummy):
+            assert isinstance(expr, Symbol)
+            if expr in self._fo_vars:
+                return self._fo_vars[expr]
+            if expr in self._sym2agg:
+                return self._sym2agg[expr]
+            assert False, "Solve for t first ?"
+
+        asts: list[AST] = [self.sympy2ast(cast(Expr, sub)) for sub in expr.args]
+        if expr.func == Equality:
+            return self.new_equality(asts)
+        if expr.func == Add:
+            return self.new_sum(asts)
+        if expr.func == Mul:
+            return self.new_mul(asts)
+        assert False, f"Not Implemented conversion {expr.func}"
+
+    def relation2ast(self, lhs: Expr, op: ComparisonOperator, rhs: Expr) -> AST:
+        """lhs is either variable for aggregate, fo_variable or constant
+        rhs is an expr"""
+        rhs_ast = self.sympy2ast(rhs)
+        if rhs_ast.ast_type == ASTType.BodyAggregate:
+            return rhs_ast.update(left_guard=Guard(op, self.sympy2ast(lhs)))
+        lhs_ast = self.sympy2ast(lhs)
+        return Comparison(lhs_ast, [Guard(op, rhs_ast)])
+
+    def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
+        """Given self.equalities, return a simplified list using the needed variables"""
+        assert need_bound.issubset(needed_vars)
+        nothing = list(self.equalities.keys())
+        inv_fo = {v: k for k, v in self._fo_vars.items()}
+        needed_vars_symbols = set()
+        for var in needed_vars:
+            if var not in inv_fo:
+                return nothing  # maybe assumption ?
+            needed_vars_symbols.add(inv_fo[var])
+        needed_bound_symbols = set()
+        for var in need_bound:
+            if var not in inv_fo:
+                return nothing  # maybe assumption ?
+            needed_bound_symbols.add(inv_fo[var])
+        varlist = []
+        varlist.extend([x for x in self._fo_vars if x not in needed_vars_symbols])
+        varlist.extend(self.help_neq_vars.keys())
+        varlist.extend(self._sym2agg.keys())
+        varlist.extend(ordered(needed_vars_symbols))
+
+        equalities: list[Expr] = []
+        for xl in self.equalities.values():
+            equalities.extend(xl)
+        if not varlist or not equalities:
+            return nothing
+        base = groebner(equalities, varlist)
+        ret: list[AST] = []
+
+        simplified_expressions = list(base)
+        # filter out formulas that have an unneeded variable on its own
+        var_stats: dict[Expr, list[Expr]] = defaultdict(list)  # for each variable, the formulas where it occurs
+        for f in simplified_expressions:
+            for v in set(f.free_symbols) & set(self._fo_vars.keys()):
+                var_stats[v].append(f)
+        for v in set(var_stats.keys()) - needed_vars_symbols:
+            if len(var_stats[v]) == 1:
+                simplified_expressions.remove(var_stats[v][0])
+
+        for expr in simplified_expressions:
+            free = set(list(expr.free_symbols))
+
+            # 1. inequality
+            neq_vars = set.intersection(free, self.help_neq_vars.keys())
+            if len(neq_vars) > 1:
+                return nothing
+            if len(neq_vars) == 1:
+                v = list(neq_vars)[0]
+                lexpr = solve(expr, v)
+                assert len(lexpr) == 1  # why a list ?????????????????
+                ret.append(self.relation2ast(S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
+                continue
+
+            # 2. Equality
+            # rearrange expr such that variable binding is ok #TODO: find a coverage of all needed variables
+            common = list(ordered(set.intersection(free, needed_vars_symbols)))
+            if common:
+                solved = False
+                for v in common:  # solve for some random need_bound_symbol
+                    if v in needed_bound_symbols:
+                        lexpr = solve(expr, v)  # solve for the first one, have to think of a valid strategy
+                        assert len(lexpr) == 1  # why a list ?????????????????
+                        ret.append(self.relation2ast(v, ComparisonOperator.Equal, lexpr[0]))
+                        needed_bound_symbols.remove(v)
+                        solved = True
+                        break
+                if not solved:
+                    ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
+            else:
+                common = list(set.intersection(free, self._fo_vars.keys()))
+                if not common:
+                    ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
+        return ret

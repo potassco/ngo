@@ -4,7 +4,8 @@ from typing import Optional
 import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
-from ngo.math_simplification import Groebner
+from ngo.dependency import RuleDependency
+from ngo.math_simplification import Goebner, MathSimplification
 
 to_str = {
     ComparisonOperator.Equal: "=",
@@ -60,9 +61,8 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    print(sympy)
     for r in prg:
-        gb = Groebner()
+        gb = Goebner()
         if r.ast_type == ASTType.Rule:
             assert len(r.body) == 1
             res = gb.to_sympy(r.body[0])
@@ -79,3 +79,95 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
             assert len(ineqs) == len(gb.help_neq_vars)
             for (var, op), expected in zip(gb.help_neq_vars.items(), ineqs):
                 assert f"{var} {to_str[op]} 0" == expected
+
+
+@pytest.mark.parametrize(
+    "rule, output",
+    [
+        (
+            """
+:- a.
+            """,
+            """#program base.
+#false :- a.""",
+        ),
+        (
+            """
+a(X) :- X=1+3.
+            """,
+            """#program base.
+a(X) :- X = 4.""",
+        ),
+        (
+            """
+a :- b(X), X=1+3.
+            """,
+            """#program base.
+a :- b(X); 0 = (-4+X).""",
+        ),
+        (
+            """
+a :- b(X), X=Y*3.
+            """,
+            """#program base.
+a :- b(X).""",
+        ),
+        (
+            """
+a :- b(X), X=X*3.
+            """,
+            """#program base.
+a :- b(X); 0 = X.""",
+        ),
+        (
+            """
+a :- b(X), X=Y=Z.
+            """,
+            """#program base.
+a :- b(X).""",
+        ),
+        (
+            """
+a :- b(X,Y,Z), X=Y=Z.
+            """,
+            """#program base.
+a :- b(X,Y,Z); 0 = (X+(-1*Z)); 0 = (Y+(-1*Z)).""",
+        ),
+        (
+            """
+a :- X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+        ),
+        (
+            """
+a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- b(X); 0 = #sum { 1,a: a; (-1*X) }; 0 = #sum { 1,b: b; -2; X }.""",
+        ),
+        (
+            """
+a :- b(X), X=#sum{1,b : b}.
+                    """,
+            """#program base.
+a :- b(X); 0 = #sum { 1,b: b; (-1*X) }.""",
+        ),
+        (
+            """
+a :- b(X), X<#sum{1,b : b}.
+                    """,
+            """#program base.
+a :- b(X); 0 > #sum { (1*-1),b: b; X }.""",
+        ),
+    ],
+)
+def test_math_simplification_execute(rule: str, output: str) -> None:
+    """test if equality variable replacement works"""
+    prg: list[AST] = []
+    parse_string(rule, prg.append)
+    rdp = RuleDependency(prg)
+    math = MathSimplification(rdp)
+    newprg = "\n".join(map(str, math.execute(prg)))
+    assert newprg == output
