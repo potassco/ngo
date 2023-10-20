@@ -217,6 +217,27 @@ a :- not a(X); Y = #sum{1,b : b}; X=Y*Y.
             """#program base.
 a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
         ),
+        (
+            """
+a :- a(X); not Y = #sum{1,b : b}, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); not 0 = #sum { (1*-1),b: b; 2; X }.""",
+        ),
+        (
+            """
+a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); not not 0 = #sum { 1,b: b; -2; (-1*X) }.""",
+        ),
+        (
+            """
+a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); b(Z); not 0 = #sum { (1*-1),b: b; 2; X }; not 0 = #sum { 1,b: b; (-1*Z) }.""",
+        ),
     ],
 )
 def test_math_simplification_execute(rule: str, output: str) -> None:

@@ -65,6 +65,17 @@ def rhs2lhs_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
     }[cmp]
 
 
+def negate_agg(agg: AST) -> AST:
+    """negate the guards of an aggregate in the body"""
+    assert agg.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)
+    agg = agg.update()
+    if agg.left_guard:
+        agg = agg.update(left_guard=agg.left_guard.update(comparison=negate_comparison(agg.left_guard.comparison)))
+    if agg.right_guard:  # nocoverage not produced by sympy
+        agg = agg.update(right_guard=agg.right_guard.update(comparison=negate_comparison(agg.right_guard.comparison)))
+    return agg
+
+
 # TODO: refactor, not make it specific for equal variables, do not have names and guards as different bounds etc...
 # also extend to HeadAggBounds as used in (or done manually) in sum_aggregates.py
 @dataclass
@@ -370,6 +381,16 @@ def predicates(ast: AST, signs: SignSetType = SIGNS) -> Iterator[SignedPredicate
     yield from conditional_literal_predicate(ast, signs)
     yield from body_predicates(ast, signs)
     yield from minimize_predicates(ast, signs)
+
+
+def conditions_of_body_agg(agg: AST) -> list[AST]:
+    """return all conditions inside an body aggregate in a list"""
+    ret: list[AST] = []
+    if agg.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+        for elem in agg.elements:
+            if elem.condition:
+                ret.extend(elem.condition)
+    return ret
 
 
 def has_interval(ast: AST) -> bool:

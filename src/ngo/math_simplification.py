@@ -49,6 +49,8 @@ from ngo.utils.ast import (
     collect_ast,
     collect_binding_information,
     comparison2comparisonlist,
+    conditions_of_body_agg,
+    negate_agg,
     negate_comparison,
     rhs2lhs_comparison,
 )
@@ -67,37 +69,54 @@ class MathSimplification:
     def __init__(self, rdp: RuleDependency) -> None:
         self._rdp = rdp
 
-    def execute(self, prg: list[AST]) -> list[AST]:
+    def execute(self, prg: list[AST]) -> list[AST]:  # pylint: disable=too-many-branches
         """return a simplified version of the program"""
         ret: list[AST] = []
-        # TODO: cycle check for neg lits
         for stm in prg:
             if stm.ast_type != ASTType.Rule:
                 ret.append(stm)
                 continue
             gb = Goebner()
             newbody: list[AST] = []
+            agg_conditions: dict[Sign, set[AST]] = defaultdict(set)
             for blit in stm.body:
                 expr_list = gb.to_sympy(blit)
                 if expr_list is None:
                     newbody.append(blit)
                     continue
+                if blit.ast_type == ASTType.Literal:
+                    agg_conditions[blit.sign].update(conditions_of_body_agg(blit.atom))
                 gb.equalities[blit] = expr_list
-            # all_globals = global_vars(stm.body + [stm.head])
-            # normal_global_vars = global_vars(newbody)
-            # normal_bound, normal_unbound = collect_binding_information(newbody)
-            # math_bound, math_unbound = collect_binding_information([x for x in stm.body if x not in newbody])
-            # bound_before = collect_binding_information(stm.body)[0]
-            # bound_after, unbound_after = collect_binding_information(newbody)
             bound, unbound = collect_binding_information(newbody)
             needed = set(collect_ast(stm.head, "Variable"))
             unbound |= needed - bound
             needed = needed.union(bound, unbound)
             try:
-                newbody.extend([Literal(LOC, Sign.NoSign, x) for x in gb.simplify_equalities(needed, unbound)])
+                new_conditions = gb.simplify_equalities(needed, unbound)
+                for cond in new_conditions:
+                    conditions = set(conditions_of_body_agg(cond))
+                    if not conditions or conditions.issubset(agg_conditions[Sign.NoSign]):
+                        newbody.append(Literal(LOC, Sign.NoSign, cond))
+                    elif conditions.issubset(agg_conditions[Sign.DoubleNegation]):
+                        newbody.append(Literal(LOC, Sign.DoubleNegation, cond))
+                    elif conditions.issubset(agg_conditions[Sign.Negation]):
+                        newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond)))
+                    else:
+                        raise SympyApi("Couldn't preserve dependency graph, skipping {stm}")  # nocoverage
 
             except SympyApi as err:
                 log.info(str(err))
+                ret.append(stm)
+                continue
+            except Exception as err:  # pylint: disable=broad-exception-caught #nocoverage
+                log.info(
+                    f"""Something went wrong with using sympy {err}.
+ Please report this to https://github.com/potassco/ngo"""
+                )
+                ret.append(stm)
+                continue
+            if collect_binding_information(newbody)[1]:
+                log.info(f"Simplification could not bind all needed variables, skipping {str(stm)}")
                 ret.append(stm)
                 continue
             ret.append(stm.update(body=newbody))
