@@ -452,7 +452,11 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
         if lit.sign == Sign.NoSign and lit.atom.symbol.ast_type == ASTType.Function:
             for arg in lit.atom.symbol.arguments:
                 variables = collect_ast(arg, "Variable")
-                if len(variables) == 1 and not has_unsafe_operation(arg):
+                if (
+                    len(variables) == 1
+                    and not has_unsafe_operation(arg)
+                    or len(collect_ast(arg, "BinaryOperation")) + len(collect_ast(arg, "UnaryOperation")) == 0
+                ):
                     bound_variables.update(variables)
                 else:
                     unbound_variables.update(variables)
@@ -527,7 +531,7 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
     """given a list of body literal
     returns a set of Variables that it binds
     returns a set of Variables that it needs to be bounded"""
-
+    # pylint: disable=too-many-nested-blocks
     bound_variables: set[AST] = set()
     unbound_variables: set[AST] = set()
     ### need to do a fixpoint computation
@@ -538,14 +542,22 @@ def collect_binding_information(stmlist: Iterable[AST]) -> tuple[set[AST], set[A
                 bound, unbound = _collect_binding_information_simple_literal(stm)
                 bound_variables.update(bound)
                 unbound_variables.update(unbound)
-                if stm.atom.ast_type == ASTType.BodyAggregate and stm.atom.left_guard is not None:
+                if stm.atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate) and stm.atom.left_guard is not None:
                     if stm.sign == Sign.NoSign and stm.atom.left_guard.comparison == ComparisonOperator.Equal:
                         bound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
                     else:
                         unbound_variables.update(collect_ast(stm.atom.left_guard, "Variable"))
                     for element in stm.atom.elements:
-                        term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
-                        bound, unbound = _collect_binding_information_conditions(element.condition)
+                        term_vars = set()
+                        if stm.atom.ast_type == ASTType.BodyAggregate:
+                            term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
+                            bound, unbound = _collect_binding_information_conditions(element.condition)
+                        if stm.atom.ast_type == ASTType.Aggregate:
+                            bound, unbound = _collect_binding_information_conditions(element.condition)
+                            boundl, unboundl = _collect_binding_information_simple_literal(element.literal)
+                            bound.update(boundl)
+                            unbound.update(unboundl)
+
                         term_vars -= bound
                         term_vars -= bound_variables
                         unbound_variables.update(term_vars)

@@ -71,7 +71,19 @@ class MathSimplification:
     def __init__(self, rdp: RuleDependency) -> None:
         self._rdp = rdp
 
-    def execute(self, prg: list[AST]) -> list[AST]:  # pylint: disable=too-many-branches
+    @staticmethod
+    def cost(body: list[AST]) -> tuple[int, int]:
+        """compute a cost for the body given number of aggregates and number of literals"""
+        numaggs = 0
+        comparisons = 0
+        for blit in body:
+            numaggs += len(collect_ast(blit, "BodyAggregate"))
+            numaggs += len(collect_ast(blit, "Aggregate"))
+            if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Comparison:
+                comparisons += len(comparison2comparisonlist(blit.atom))
+        return (numaggs, comparisons)
+
+    def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
         """return a simplified version of the program"""
         ret: list[AST] = []
         for stm in prg:
@@ -121,6 +133,8 @@ class MathSimplification:
                 log.info(f"Simplification could not bind all needed variables, skipping {str(stm)}")
                 ret.append(stm)
                 continue
+            if optimize and self.cost(newbody) >= self.cost(stm.body):
+                newbody = stm.body
             ret.append(stm.update(body=newbody))
         return ret
 
@@ -273,9 +287,9 @@ class Goebner:
     def new_sum(self, asts: list[AST]) -> AST:
         """given a list of terms and aggregates, create the sum using clingo AST operations"""
         assert len(asts) >= 2
-        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
         if aggs:  # use next and iteration
-            rest = [x for x in asts if x.ast_type != ASTType.BodyAggregate]
+            rest = [x for x in asts if x.ast_type not in (ASTType.BodyAggregate, ASTType.Aggregate)]
             collector = aggs[0]
             newelements = list(collector.elements)
             for index in range(1, len(aggs)):
@@ -295,7 +309,7 @@ class Goebner:
         """given a list of terms create the abs operation using clingo AST operations"""
         if len(asts) != 1:
             raise SympyApi("Missing Sympy specification for more than one absolute argument, skipping.")  # nocoverage
-        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
         if aggs:
             raise SympyApi("Cannot express absolute of aggregates, skipping.")
         return UnaryOperation(LOC, UnaryOperator.Absolute, asts[0])
@@ -304,7 +318,7 @@ class Goebner:
         """given a list of terms create the power operation using clingo AST operations"""
         if len(asts) != 2:
             raise SympyApi("Missing Sympy specification for more than one power argument, skipping.")  # nocoverage
-        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
         if aggs:
             raise SympyApi("Cannot express exponentiation of aggregates, skipping.")
         return BinaryOperation(LOC, BinaryOperator.Power, asts[0], asts[1])
@@ -312,6 +326,8 @@ class Goebner:
     def new_mul(self, asts: list[AST]) -> AST:
         """given a list of terms create the multiplication using clingo AST operations"""
         assert len(asts) >= 2
+        if any(map(lambda x: x.ast_type == ASTType.Aggregate, asts)):
+            raise SympyApi("Cannot express multiplication with old style aggregates, skipping.")
         aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
         if aggs:  # use next and iteration
             if len(aggs) > 1:
@@ -371,7 +387,7 @@ class Goebner:
         """lhs is either variable for aggregate, fo_variable or constant
         rhs is an expr"""
         rhs_ast = self.sympy2ast(rhs)
-        if rhs_ast.ast_type == ASTType.BodyAggregate:
+        if rhs_ast.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
             return rhs_ast.update(left_guard=Guard(op, self.sympy2ast(lhs)))
         lhs_ast = self.sympy2ast(lhs)
         return Comparison(lhs_ast, [Guard(op, rhs_ast)])

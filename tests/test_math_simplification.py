@@ -252,9 +252,206 @@ a :- b(X,Y), X=Y \\ 2.
             """#program base.
 a :- b(X,Y); X = (Y\\2).""",
         ),
+        (
+            """
+jobs(X) :- X = { job(J) }.
+            """,
+            """#program base.
+jobs(X) :- X = { job(J) }.""",
+        ),
+        (
+            """
+a :- not a(X), Y = {b}; X=Y*2.
+            """,
+            """#program base.
+a :- not a(X); Y = { b }; X = (Y*2).""",
+        ),
     ],
 )
-def test_math_simplification_execute(rule: str, output: str) -> None:
+def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
+    """test if equality variable replacement works"""
+    prg: list[AST] = []
+    parse_string(rule, prg.append)
+    rdp = RuleDependency(prg)
+    math = MathSimplification(rdp)
+    newprg = "\n".join(map(str, math.execute(prg, False)))
+    assert newprg == output
+
+
+@pytest.mark.parametrize(
+    "rule, output",
+    [
+        (
+            """
+:- a.
+            """,
+            """#program base.
+#false :- a.""",
+        ),
+        (
+            """
+a(X) :- X=1+3.
+            """,
+            """#program base.
+a(X) :- X = (1+3).""",
+        ),
+        (
+            """
+a :- b(X), X=1+3.
+            """,
+            """#program base.
+a :- b(X); X = (1+3).""",
+        ),
+        (
+            """
+a :- b(X), X=Y*3.
+            """,
+            """#program base.
+a :- b(X).""",
+        ),
+        (
+            """
+a :- b(X), X=X*3.
+            """,
+            """#program base.
+a :- b(X); X = (X*3).""",
+        ),
+        (
+            """
+a :- b(X), X=Y=Z.
+            """,
+            """#program base.
+a :- b(X).""",
+        ),
+        (
+            """
+a :- b(X,Y,Z), X=Y=Z.
+            """,
+            """#program base.
+a :- b(X,Y,Z); X = Y = Z.""",
+        ),
+        (
+            """
+a :- X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+        ),
+        (
+            """
+a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- b(X); 0 = #sum { 1,a: a; (-1*X) }; 0 = #sum { 1,b: b; -2; X }.""",
+        ),
+        (
+            """
+a :- b(X), X=#sum{1,b : b}.
+                    """,
+            """#program base.
+a :- b(X); X = #sum { 1,b: b }.""",
+        ),
+        (
+            """
+a :- b(X), X<#sum{1,b : b}.
+                    """,
+            """#program base.
+a :- b(X); X < #sum { 1,b: b }.""",
+        ),
+        (  # unbounded global
+            """
+a(X) :- 3<#sum{1,b : b}.
+                    """,
+            """#program base.
+a(X) :- 3 < #sum { 1,b: b }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); 0 = #sum { 1,b: b; ((-3*Y)*Z) }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b: b; (-1*Z) }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #max{1,b : b}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); X = #max { 1,b: b }; Z = ((3*Y)*X).""",
+        ),
+        (
+            """
+a :- c(Z), X = #sum{1,b : b}; Y = #sum{1,c: c}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- c(Z); X = #sum { 1,b: b }; Y = #sum { 1,c: c }; Z = ((3*Y)*X).""",
+        ),
+        (
+            """
+a :- b(X,Y), X=Y*Y.
+            """,
+            """#program base.
+a :- b(X,Y); X = (Y*Y).""",
+        ),
+        (
+            """
+a :- not a(X); b(Y), Y = #sum{1,b : b}; Y=X*X.
+            """,
+            """#program base.
+a :- not a(X); b(Y); Y = #sum { 1,b: b }; Y = (X*X).""",
+        ),
+        (
+            """
+a :- not a(X); Y = #sum{1,b : b}; X=Y*Y.
+            """,
+            """#program base.
+a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
+        ),
+        (
+            """
+a :- a(X); not Y = #sum{1,b : b}, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); not 0 = #sum { (1*-1),b: b; 2; X }.""",
+        ),
+        (
+            """
+a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); not not 0 = #sum { 1,b: b; -2; (-1*X) }.""",
+        ),
+        (
+            """
+a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
+            """,
+            """#program base.
+a :- a(X); b(Z); not Y = #sum { 1,b: b } = Z; X = (Y-2).""",
+        ),
+        (  # sympy seems not to be able to handle abs
+            """
+a :- b(X,Y), X=|Y|.
+            """,
+            """#program base.
+a :- b(X,Y); X = |Y|.""",
+        ),
+        (
+            """
+a :- b(X,Y), X=Y \\ 2.
+            """,
+            """#program base.
+a :- b(X,Y); X = (Y\\2).""",
+        ),
+    ],
+)
+def test_math_simplification_execute_opt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
