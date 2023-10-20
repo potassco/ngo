@@ -161,6 +161,62 @@ a :- b(X), X<#sum{1,b : b}.
             """#program base.
 a :- b(X); 0 > #sum { (1*-1),b: b; X }.""",
         ),
+        (  # unbounded global
+            """
+a(X) :- 3<#sum{1,b : b}.
+                    """,
+            """#program base.
+a(X) :- 3 < #sum { 1,b: b }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); 0 = #sum { 1,b: b; ((-3*Y)*Z) }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b: b; (-1*Z) }.""",
+        ),
+        (
+            """
+a :- b(Y), c(Z), X = #max{1,b : b}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- b(Y); c(Z); X = #max { 1,b: b }; Z = ((3*Y)*X).""",
+        ),
+        (
+            """
+a :- c(Z), X = #sum{1,b : b}; Y = #sum{1,c: c}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- c(Z); X = #sum { 1,b: b }; Y = #sum { 1,c: c }; Z = ((3*Y)*X).""",
+        ),
+        (
+            """
+a :- b(X,Y), X=Y*Y.
+            """,
+            """#program base.
+a :- b(X,Y); 0 = (X+(-1*(Y**2))).""",
+        ),
+        (
+            """
+a :- not a(X); b(Y), Y = #sum{1,b : b}; Y=X*X.
+            """,
+            """#program base.
+a :- not a(X); b(Y); Y = #sum { 1,b: b }; Y = (X*X).""",
+        ),
+        (
+            """
+a :- not a(X); Y = #sum{1,b : b}; X=Y*Y.
+            """,
+            """#program base.
+a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
+        ),
     ],
 )
 def test_math_simplification_execute(rule: str, output: str) -> None:

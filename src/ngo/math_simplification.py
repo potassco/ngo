@@ -30,6 +30,7 @@ from sympy import (
     LessThan,
     Mul,
     Number,
+    Pow,
     S,
     StrictGreaterThan,
     StrictLessThan,
@@ -43,7 +44,14 @@ from sympy import (
 from sympy.core.numbers import NegativeOne, One, Zero
 
 from ngo.dependency import RuleDependency
-from ngo.utils.ast import LOC, collect_ast, collect_binding_information, comparison2comparisonlist, negate_comparison, rhs2lhs_comparison
+from ngo.utils.ast import (
+    LOC,
+    collect_ast,
+    collect_binding_information,
+    comparison2comparisonlist,
+    negate_comparison,
+    rhs2lhs_comparison,
+)
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("math_simplification")
@@ -262,6 +270,15 @@ class Goebner:
             collector = BinaryOperation(LOC, BinaryOperator.Plus, collector, asts[index])
         return collector
 
+    def new_pow(self, asts: list[AST]) -> AST:
+        """given a list of terms create the power operation using clingo AST operations"""
+        if len(asts) != 2:
+            raise SympyApi("Missing Sympy specification for more than one power argument, skipping.")  # nocoverage
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        if aggs:
+            raise SympyApi("Cannot express exponentiation of aggregates, skipping.")
+        return BinaryOperation(LOC, BinaryOperator.Power, asts[0], asts[1])
+
     def new_mul(self, asts: list[AST]) -> AST:
         """given a list of terms create the multiplication using clingo AST operations"""
         assert len(asts) >= 2
@@ -280,7 +297,9 @@ class Goebner:
             for elem in collector.elements:
                 newelem = elem
                 if not newelem.terms:
-                    newelem = newelem.update(terms=[SymbolicTerm(LOC, clingo.Number(1))])
+                    newelem = newelem.update(
+                        terms=[SymbolicTerm(LOC, clingo.Number(1))]
+                    )  # nocoverage # not able to produce with parsing
                 newterms = list(newelem.terms)
                 newterms[0] = BinaryOperation(LOC, BinaryOperator.Multiplication, newterms[0], factor)
                 newelements.append(newelem.update(terms=newterms))
@@ -291,15 +310,6 @@ class Goebner:
         for index in range(1, len(asts)):
             collector = BinaryOperation(LOC, BinaryOperator.Multiplication, collector, asts[index])
         return collector
-
-    def new_equality(self, asts: list[AST]) -> AST:
-        """given a list of terms create the equality using Comparison Operators clingo AST operations"""
-        assert len(asts) >= 2
-        index = 1
-        guards: list[AST] = []
-        for index in range(1, len(asts)):
-            guards.append(Guard(ComparisonOperator.Equal, asts[index]))
-        return Comparison(asts[0], guards)
 
     def sympy2ast(self, expr: Expr) -> AST:
         """convert a sympy expr to a clingo AST"""
@@ -315,12 +325,12 @@ class Goebner:
             assert False, "Solve for t first ?"
 
         asts: list[AST] = [self.sympy2ast(cast(Expr, sub)) for sub in expr.args]
-        if expr.func == Equality:
-            return self.new_equality(asts)
         if expr.func == Add:
             return self.new_sum(asts)
         if expr.func == Mul:
             return self.new_mul(asts)
+        if expr.func == Pow:
+            return self.new_pow(asts)
         assert False, f"Not Implemented conversion {expr.func}"
 
     def relation2ast(self, lhs: Expr, op: ComparisonOperator, rhs: Expr) -> AST:
@@ -332,56 +342,54 @@ class Goebner:
         lhs_ast = self.sympy2ast(lhs)
         return Comparison(lhs_ast, [Guard(op, rhs_ast)])
 
+    def remove_unneeded_formulas(self, formulas: list[Expr], needed_symbols: set[Symbol]) -> list[Expr]:
+        """filter out formulas that have an unneeded variable on its own"""
+        var_stats: dict[Symbol, list[Expr]] = defaultdict(list)  # for each variable, the formulas where it occurs
+        for f in formulas:
+            for v in cast(set[Symbol], set(f.free_symbols)) & set(self._fo_vars.keys()):
+                var_stats[v].append(f)
+        ret = list(formulas)
+        for v in set(var_stats.keys()) - needed_symbols:
+            if len(var_stats[v]) == 1:
+                ret.remove(var_stats[v][0])
+        return ret
+
     def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
         """Given self.equalities, return a simplified list using the needed variables"""
         assert need_bound.issubset(needed_vars)
         nothing = list(self.equalities.keys())
         inv_fo = {v: k for k, v in self._fo_vars.items()}
-        needed_vars_symbols = set()
+        needed_vars_symbols: set[Symbol] = set()
         for var in needed_vars:
             if var not in inv_fo:
                 return nothing  # maybe assumption ?
             needed_vars_symbols.add(inv_fo[var])
-        needed_bound_symbols = set()
-        for var in need_bound:
-            if var not in inv_fo:
-                return nothing  # maybe assumption ?
-            needed_bound_symbols.add(inv_fo[var])
+        needed_bound_symbols = {inv_fo[var] for var in need_bound}
         varlist = []
         varlist.extend([x for x in self._fo_vars if x not in needed_vars_symbols])
         varlist.extend(self.help_neq_vars.keys())
         varlist.extend(self._sym2agg.keys())
         varlist.extend(ordered(needed_vars_symbols))
 
-        equalities: list[Expr] = []
-        for xl in self.equalities.values():
-            equalities.extend(xl)
+        equalities: list[Expr] = [e for xl in self.equalities.values() for e in xl]
         if not varlist or not equalities:
             return nothing
         base = groebner(equalities, varlist)
         ret: list[AST] = []
 
-        simplified_expressions = list(base)
-        # filter out formulas that have an unneeded variable on its own
-        var_stats: dict[Expr, list[Expr]] = defaultdict(list)  # for each variable, the formulas where it occurs
-        for f in simplified_expressions:
-            for v in set(f.free_symbols) & set(self._fo_vars.keys()):
-                var_stats[v].append(f)
-        for v in set(var_stats.keys()) - needed_vars_symbols:
-            if len(var_stats[v]) == 1:
-                simplified_expressions.remove(var_stats[v][0])
-
+        simplified_expressions = self.remove_unneeded_formulas(list(base), needed_vars_symbols)
         for expr in simplified_expressions:
-            free = set(list(expr.free_symbols))
+            free = cast(set[Symbol], set(list(expr.free_symbols)))
 
             # 1. inequality
             neq_vars = set.intersection(free, self.help_neq_vars.keys())
             if len(neq_vars) > 1:
-                return nothing
+                return nothing  # nocoverage # hard to produce case
             if len(neq_vars) == 1:
                 v = list(neq_vars)[0]
                 lexpr = solve(expr, v)
-                assert len(lexpr) == 1  # why a list ?????????????????
+                if len(lexpr) != 1:
+                    return nothing  # nocoverage
                 ret.append(self.relation2ast(S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
                 continue
 
@@ -389,19 +397,17 @@ class Goebner:
             # rearrange expr such that variable binding is ok #TODO: find a coverage of all needed variables
             common = list(ordered(set.intersection(free, needed_vars_symbols)))
             if common:
-                solved = False
-                for v in common:  # solve for some random need_bound_symbol
-                    if v in needed_bound_symbols:
-                        lexpr = solve(expr, v)  # solve for the first one, have to think of a valid strategy
-                        assert len(lexpr) == 1  # why a list ?????????????????
-                        ret.append(self.relation2ast(v, ComparisonOperator.Equal, lexpr[0]))
-                        needed_bound_symbols.remove(v)
-                        solved = True
-                        break
-                if not solved:
+                # solve for some random needed variable
+                solve_for = next((v for v in common if v in needed_bound_symbols), None)
+                if solve_for is None:
                     ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
+                else:
+                    lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
+                    if len(lexpr) != 1:  # negative squareroots etc...
+                        return nothing
+                    ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
+                    needed_bound_symbols.remove(solve_for)
             else:
-                common = list(set.intersection(free, self._fo_vars.keys()))
-                if not common:
+                if not set.intersection(free, self._fo_vars.keys()):
                     ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
         return ret
