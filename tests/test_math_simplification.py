@@ -238,6 +238,20 @@ a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
             """#program base.
 a :- a(X); b(Z); not 0 = #sum { (1*-1),b: b; 2; X }; not 0 = #sum { 1,b: b; (-1*Z) }.""",
         ),
+        (  # sympy seems not to be able to handle abs
+            """
+a :- b(X,Y), X=|Y|.
+            """,
+            """#program base.
+a :- b(X,Y); X = |Y|.""",
+        ),
+        (
+            """
+a :- b(X,Y), X=Y \\ 2.
+            """,
+            """#program base.
+a :- b(X,Y); X = (Y\\2).""",
+        ),
     ],
 )
 def test_math_simplification_execute(rule: str, output: str) -> None:

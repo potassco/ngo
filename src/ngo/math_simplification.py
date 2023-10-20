@@ -17,6 +17,7 @@ from clingo.ast import (
     Literal,
     Sign,
     SymbolicTerm,
+    UnaryOperation,
     UnaryOperator,
 )
 from sympy import (
@@ -28,6 +29,7 @@ from sympy import (
     GreaterThan,
     Integer,
     LessThan,
+    Mod,
     Mul,
     Number,
     Pow,
@@ -108,7 +110,7 @@ class MathSimplification:
                 log.info(str(err))
                 ret.append(stm)
                 continue
-            except Exception as err:  # pylint: disable=broad-exception-caught #nocoverage
+            except Exception as err:  # pylint: disable=broad-exception-caught
                 log.info(
                     f"""Something went wrong with using sympy {err}.
  Please report this to https://github.com/potassco/ngo"""
@@ -289,6 +291,15 @@ class Goebner:
             collector = BinaryOperation(LOC, BinaryOperator.Plus, collector, asts[index])
         return collector
 
+    def new_abs(self, asts: list[AST]) -> AST:  # nocoverage # sympy does not seem to support this for polynomials
+        """given a list of terms create the abs operation using clingo AST operations"""
+        if len(asts) != 1:
+            raise SympyApi("Missing Sympy specification for more than one absolute argument, skipping.")  # nocoverage
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
+        if aggs:
+            raise SympyApi("Cannot express absolute of aggregates, skipping.")
+        return UnaryOperation(LOC, UnaryOperator.Absolute, asts[0])
+
     def new_pow(self, asts: list[AST]) -> AST:
         """given a list of terms create the power operation using clingo AST operations"""
         if len(asts) != 2:
@@ -350,7 +361,11 @@ class Goebner:
             return self.new_mul(asts)
         if expr.func == Pow:
             return self.new_pow(asts)
-        assert False, f"Not Implemented conversion {expr.func}"
+        if expr.func == Abs:  # nocoverage # sympy has problams with abs
+            return self.new_abs(asts)
+        if expr.func == Mod:  # nocoverage # sympy has problams with mod
+            raise SympyApi("Modulo not supported, skipping.")
+        raise SympyApi(f"Not Implemented conversion {expr.func}")  # nocoverage
 
     def relation2ast(self, lhs: Expr, op: ComparisonOperator, rhs: Expr) -> AST:
         """lhs is either variable for aggregate, fo_variable or constant
