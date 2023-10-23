@@ -123,10 +123,7 @@ class MathSimplification:
                 ret.append(stm)
                 continue
             except Exception as err:  # pylint: disable=broad-exception-caught
-                log.info(
-                    f"""Something went wrong with using sympy {err}.
- Please report this to https://github.com/potassco/ngo"""
-                )
+                log.info(f"""Something went wrong with using sympy {err}.""")
                 ret.append(stm)
                 continue
             if collect_binding_information(newbody)[1]:
@@ -407,13 +404,14 @@ class Goebner:
     def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
         """Given self.equalities, return a simplified list using the needed variables"""
         assert need_bound.issubset(needed_vars)
+        unbound = need_bound - set(self._fo_vars.values())
+        if unbound:
+            raise SympyApi(
+                f"Variables {unbound} seem to be unbound on line {str(next(iter(unbound)).location.begin)}"
+            )  # nocoverage
         nothing = list(self.equalities.keys())
         inv_fo = {v: k for k, v in self._fo_vars.items()}
-        needed_vars_symbols: set[Symbol] = set()
-        for var in needed_vars:
-            if var not in inv_fo:
-                return nothing  # maybe assumption ?
-            needed_vars_symbols.add(inv_fo[var])
+        needed_vars_symbols: set[Symbol] = set(inv_fo[var] for var in needed_vars if var in inv_fo)
         needed_bound_symbols = {inv_fo[var] for var in need_bound}
         varlist = []
         varlist.extend([x for x in self._fo_vars if x not in needed_vars_symbols])
