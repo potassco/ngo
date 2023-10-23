@@ -5,7 +5,8 @@ from clingo.ast import AST, ASTType, parse_string
 from ngo.utils.ast import (
     Predicate,
     SignedPredicate,
-    collect_binding_information,
+    collect_binding_information_body,
+    collect_binding_information_head,
     global_vars,
     headderivable_predicates,
     potentially_unifying,
@@ -111,6 +112,20 @@ def test_headderivable_predicates(prg: str, head_preds: list[SignedPredicate]) -
         ),
         (
             """
+:- Z = #sum {X,Y,W,V : b(VV)} = ZZ.
+    """,
+            ["Z", "ZZ"],
+            ["X", "Y", "W", "V"],
+        ),
+        (
+            """
+:- Z = #sum {X,Y,W,V : b(VV)} > ZZ.
+    """,
+            ["Z"],
+            ["X", "Y", "W", "V", "ZZ"],
+        ),
+        (
+            """
 :- Z != #sum {X,Y,W,V : b(VV)}.
     """,
             [],
@@ -160,13 +175,55 @@ def test_headderivable_predicates(prg: str, head_preds: list[SignedPredicate]) -
         ),
     ],
 )
-def test_binding_variables(prg: str, bound_vars: list[str], unbound_vars: list[str]) -> None:
-    """test minmax aggregates on whole programs"""
+def test_binding_variables_body(prg: str, bound_vars: list[str], unbound_vars: list[str]) -> None:
+    """test finding bound variables in rules"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    bound, unbound = collect_binding_information(ast[1].body)
+    bound, unbound = collect_binding_information_body(ast[1].body)
     assert set(bound_vars) == set(x.name for x in bound)
     assert set(unbound_vars) == set(x.name for x in unbound)
+
+
+@pytest.mark.parametrize(
+    "prg, need_bound, no_bound_needed",
+    [
+        (
+            """
+1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).
+""",
+            ["T"],
+            ["S", "Nr"],
+        ),
+        (
+            """
+1 <= #sum{ T,S: order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).
+""",
+            ["T"],
+            ["S", "Nr"],
+        ),
+        (
+            """
+S <= 5 :- dom(S).
+""",
+            ["S"],
+            [],
+        ),
+        (
+            """
+p(A); p(B) : dom(B) :- dom(A).
+""",
+            ["A"],
+            ["B"],
+        ),
+    ],
+)
+def test_binding_variables_head(prg: str, need_bound: list[str], no_bound_needed: list[str]) -> None:
+    """test finding bound variables in rules"""
+    ast: list[AST] = []
+    parse_string(prg, ast.append)
+    bound, unbound = collect_binding_information_head(ast[1].head)
+    assert set(need_bound) == set(x.name for x in bound)
+    assert set(no_bound_needed) == set(x.name for x in unbound)
 
 
 @pytest.mark.parametrize(
@@ -240,7 +297,7 @@ def test_binding_variables(prg: str, bound_vars: list[str], unbound_vars: list[s
         ),
     ],
 )
-def test_global_vars(prg: str, globals_: list[str]) -> None:
+def test_global_vars_body(prg: str, globals_: list[str]) -> None:
     """test minmax aggregates on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)

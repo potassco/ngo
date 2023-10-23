@@ -266,6 +266,13 @@ a :- not a(X), Y = {b}; X=Y*2.
             """#program base.
 a :- not a(X); Y = { b }; X = (Y*2).""",
         ),
+        (
+            """
+a :- not a(X), Y = {b} = X; X=Y*2.
+            """,
+            """#program base.
+a :- not a(X); 0 = { b }; X = 0.""",
+        ),
     ],
 )
 def test_math_simplification_execute_noopt(rule: str, output: str) -> None:

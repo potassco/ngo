@@ -49,7 +49,8 @@ from ngo.dependency import RuleDependency
 from ngo.utils.ast import (
     LOC,
     collect_ast,
-    collect_binding_information,
+    collect_binding_information_body,
+    collect_binding_information_head,
     comparison2comparisonlist,
     conditions_of_body_agg,
     negate_agg,
@@ -101,10 +102,10 @@ class MathSimplification:
                 if blit.ast_type == ASTType.Literal:
                     agg_conditions[blit.sign].update(conditions_of_body_agg(blit.atom))
                 gb.equalities[blit] = expr_list
-            bound, unbound = collect_binding_information(newbody)
-            needed = set(collect_ast(stm.head, "Variable"))
-            unbound |= needed - bound
-            needed = needed.union(bound, unbound)
+            need_bound, no_bound_needed = collect_binding_information_head(stm.head)
+            bound_body, unbound_body = collect_binding_information_body(newbody)
+            needed = set.union(bound_body, unbound_body, need_bound, no_bound_needed)
+            unbound = set.union(need_bound, unbound_body) - bound_body
             try:
                 new_conditions = gb.simplify_equalities(needed, unbound)
                 for cond in new_conditions:
@@ -126,7 +127,7 @@ class MathSimplification:
                 log.info(f"""Something went wrong with using sympy {err}.""")
                 ret.append(stm)
                 continue
-            if collect_binding_information(newbody)[1]:
+            if collect_binding_information_body(newbody)[1]:
                 log.info(f"Simplification could not bind all needed variables, skipping {str(stm)}")
                 ret.append(stm)
                 continue
