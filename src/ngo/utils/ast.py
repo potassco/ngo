@@ -469,11 +469,14 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
     return bound_variables, unbound_variables
 
 
-def _collect_binding_information_conditions(conditions: Iterable[AST]) -> tuple[set[AST], set[AST]]:
+def _collect_binding_information_conditions(
+    conditions: Iterable[AST], already_bound: set[AST]
+) -> tuple[set[AST], set[AST]]:
     """given a list of Literal inside a condition
     returns a set of Variables that it binds
-    returns a set of Variables that it needs to be bounded"""
-    bound_variables: set[AST] = set()
+    returns a set of Variables that it needs to be bounded
+    additional input: a set of already bound variables"""
+    bound_variables: set[AST] = set(already_bound)
     unbound_variables: set[AST] = set()
     size = -1
     while len(bound_variables) != size:
@@ -534,11 +537,12 @@ def _collect_binding_information_from_comparisons(
     return bound_variables, unbound_variables
 
 
-def collect_binding_information_head(head: AST) -> tuple[set[AST], set[AST]]:
+def collect_binding_information_head(head: AST, body: list[AST]) -> tuple[set[AST], set[AST]]:
     """given a head
     returns a set of Variables that it needs to be bounded
     returns a set of Variables that does not need to be bounded"""
     # pylint: disable=too-many-nested-blocks
+    bound_in_body = collect_binding_information_body(body)[0]
     need_bound_variables: set[AST] = set()
     no_bound_needed: set[AST] = set()
 
@@ -554,12 +558,12 @@ def collect_binding_information_head(head: AST) -> tuple[set[AST], set[AST]]:
             if head.ast_type == ASTType.HeadAggregate:
                 term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
                 term_vars.update(collect_ast(element.condition.literal, "Variable"))
-                bound, unbound = _collect_binding_information_conditions(element.condition.condition)
+                bound, unbound = _collect_binding_information_conditions(element.condition.condition, bound_in_body)
                 term_vars -= bound
                 need_bound_variables.update(term_vars)
                 need_bound_variables.update(unbound)
             if head.ast_type == ASTType.Aggregate:
-                bound, unbound = _collect_binding_information_conditions(element.condition)
+                bound, unbound = _collect_binding_information_conditions(element.condition, bound_in_body)
                 need_bound_l = set(collect_ast(element.literal, "Variable"))
                 need_bound_variables.update(need_bound_l - bound)
                 need_bound_variables.update(unbound)
@@ -567,12 +571,14 @@ def collect_binding_information_head(head: AST) -> tuple[set[AST], set[AST]]:
 
     elif head.ast_type == ASTType.Disjunction:
         for element in head.elements:
-            bound, unbound = _collect_binding_information_conditions(element.condition)
+            bound, unbound = _collect_binding_information_conditions(element.condition, bound_in_body)
             need_bound_l = set(collect_ast(element.literal, "Variable"))
             need_bound_variables.update(need_bound_l - bound)
             no_bound_needed.update(bound)
     need_bound_variables = set(filter(lambda var: var.name != "_", need_bound_variables))
     no_bound_needed = set(filter(lambda var: var.name != "_", no_bound_needed))
+    need_bound_variables -= bound_in_body
+    no_bound_needed |= bound_in_body
     return need_bound_variables, no_bound_needed
 
 
@@ -606,9 +612,9 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
                         term_vars = set()
                         if stm.atom.ast_type == ASTType.BodyAggregate:
                             term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
-                            bound, unbound = _collect_binding_information_conditions(element.condition)
+                            bound, unbound = _collect_binding_information_conditions(element.condition, bound_variables)
                         if stm.atom.ast_type == ASTType.Aggregate:
-                            bound, unbound = _collect_binding_information_conditions(element.condition)
+                            bound, unbound = _collect_binding_information_conditions(element.condition, bound_variables)
                             boundl, unboundl = _collect_binding_information_simple_literal(element.literal)
                             bound.update(boundl)
                             unbound.update(unboundl)
@@ -620,7 +626,7 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
                         unbound_variables.update(unbound)
             elif stm.ast_type == ASTType.ConditionalLiteral:
                 term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
-                bound, unbound = _collect_binding_information_conditions(stm.condition)
+                bound, unbound = _collect_binding_information_conditions(stm.condition, bound_variables)
                 unbound_variables.update(unbound)
                 unbound_variables.update(term_vars - bound)
             elif stm.ast_type == ASTType.Comparison:
@@ -672,51 +678,6 @@ def loc2str(loc: Location) -> str:
     return f"{loc.begin.filename}:{loc.begin.line}:{loc.begin.column}"
 
 
-def _global_vars_body_agg(atom: AST) -> set[AST]:
-    assert atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate, ASTType.HeadAggregate)
-    vars_: set[AST] = set()
-    if atom.left_guard:
-        vars_.update(collect_ast(atom.left_guard, "Variable"))
-    if atom.right_guard:
-        vars_.update(collect_ast(atom.right_guard, "Variable"))
-    for element in atom.elements:
-        bound, unbound = _collect_binding_information_conditions(element.condition)
-        total: set[AST] = set()
-        if atom.ast_type == ASTType.Aggregate:
-            total.update(collect_ast(element.literal, "Variable"))
-        else:
-            for term in element.terms:
-                total.update(collect_ast(term, "Variable"))
-        unbound -= bound
-        total -= bound
-        total |= unbound
-        vars_.update(total)
-    vars_ = set(filter(lambda var: var.name != "_", vars_))
-    return vars_
-
-
 def global_vars(lits: list[AST]) -> set[AST]:
     """compute all Variables that are visible within the same outer scope"""
-    vars_: set[AST] = set()
-    for lit in lits:
-        if lit.ast_type == ASTType.Literal:
-            atom = lit.atom
-            if atom.ast_type in (ASTType.Comparison, ASTType.SymbolicAtom):
-                vars_.update(collect_ast(lit, "Variable"))
-            elif atom.ast_type in (
-                ASTType.BodyAggregate,
-                ASTType.Aggregate,
-            ):
-                vars_.update(_global_vars_body_agg(atom))
-            elif atom.ast_type in (ASTType.TheoryAtom,):  # pragma: no cover
-                raise NotImplementedError("theory atom handling is not yet supported")  # pragma: no cover
-        elif lit.ast_type == ASTType.ConditionalLiteral:
-            bound, unbound = _collect_binding_information_conditions(lit.condition)
-            lbound, lunbound = _collect_binding_information_simple_literal(lit.literal)
-            total = lbound | lunbound
-            unbound -= bound
-            total -= bound
-            total |= unbound
-            vars_.update(total)
-    vars_ = set(filter(lambda var: var.name != "_", vars_))
-    return vars_
+    return set.union(*collect_binding_information_body(lits))

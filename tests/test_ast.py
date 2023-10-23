@@ -191,12 +191,26 @@ def test_binding_variables_body(prg: str, bound_vars: list[str], unbound_vars: l
             """
 1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).
 """,
+            [],
+            ["T", "S", "Nr"],
+        ),
+        (
+            """
+1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1.
+""",
             ["T"],
             ["S", "Nr"],
         ),
         (
             """
 1 <= #sum{ T,S: order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).
+""",
+            [],
+            ["T", "S", "Nr"],
+        ),
+        (
+            """
+1 <= #sum{ T,S: order(T,S): S = (1..Nr), task_nr(Nr) } <= 1.
 """,
             ["T"],
             ["S", "Nr"],
@@ -205,15 +219,29 @@ def test_binding_variables_body(prg: str, bound_vars: list[str], unbound_vars: l
             """
 S <= 5 :- dom(S).
 """,
+            [],
+            ["S"],
+        ),
+        (
+            """
+S <= 5.
+""",
             ["S"],
             [],
         ),
         (
             """
-p(A); p(B) : dom(B) :- dom(A).
+p(A); p(B) : dom(B).
 """,
             ["A"],
             ["B"],
+        ),
+        (
+            """
+1 = { sudoku(X,Y,N): N = (1..(S*S)) }.
+""",
+            ["S", "N", "X", "Y"],
+            [],
         ),
     ],
 )
@@ -221,7 +249,7 @@ def test_binding_variables_head(prg: str, need_bound: list[str], no_bound_needed
     """test finding bound variables in rules"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    bound, unbound = collect_binding_information_head(ast[1].head)
+    bound, unbound = collect_binding_information_head(ast[1].head, ast[1].body)
     assert set(need_bound) == set(x.name for x in bound)
     assert set(no_bound_needed) == set(x.name for x in unbound)
 
@@ -302,25 +330,3 @@ def test_global_vars_body(prg: str, globals_: list[str]) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     assert set(globals_) == set(map(lambda x: x.name, global_vars(ast[1].body)))
-
-
-@pytest.mark.parametrize(
-    "prg",
-    [
-        (
-            """
-:- &diff{5-4}=4.
-"""
-        ),
-    ],
-)
-def test_global_varexception(prg: str) -> None:
-    """test minmax aggregates on whole programs"""
-    ast: list[AST] = []
-    parse_string(prg, ast.append)
-    caught = False
-    try:
-        global_vars(ast[1].body)
-    except NotImplementedError:
-        caught = True
-    assert caught

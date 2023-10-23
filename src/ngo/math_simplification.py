@@ -102,7 +102,7 @@ class MathSimplification:
                 if blit.ast_type == ASTType.Literal:
                     agg_conditions[blit.sign].update(conditions_of_body_agg(blit.atom))
                 gb.equalities[blit] = expr_list
-            need_bound, no_bound_needed = collect_binding_information_head(stm.head)
+            need_bound, no_bound_needed = collect_binding_information_head(stm.head, newbody)
             bound_body, unbound_body = collect_binding_information_body(newbody)
             needed = set.union(bound_body, unbound_body, need_bound, no_bound_needed)
             unbound = set.union(need_bound, unbound_body) - bound_body
