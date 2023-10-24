@@ -10,6 +10,7 @@ from clingo.ast import (
     ASTType,
     BinaryOperation,
     BinaryOperator,
+    BodyAggregate,
     BodyAggregateElement,
     Comparison,
     ComparisonOperator,
@@ -79,17 +80,81 @@ class MathSimplification:
         comparisons = 0
         for blit in body:
             numaggs += len(collect_ast(blit, "BodyAggregate"))
-            numaggs += len(collect_ast(blit, "Aggregate"))
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Comparison:
                 comparisons += len(comparison2comparisonlist(blit.atom))
         return (numaggs, comparisons)
 
+    @staticmethod
+    def _convert_agg_to_sum(agg: AST) -> AST:
+        assert agg.ast_type == ASTType.BodyAggregate
+        new_elements: list[AST] = []
+        for old_elem in agg.elements:
+            terms: list[AST] = [SymbolicTerm(LOC, clingo.Number(1)), *old_elem.terms]
+            new_elements.append(old_elem.update(terms=terms))
+        return agg.update(function=AggregateFunction.SumPlus, elements=new_elements)
+
+    @staticmethod
+    def _convert_old_agg(agg: AST) -> AST:
+        assert agg.ast_type == ASTType.Aggregate
+        nm = {Sign.NoSign: 0, Sign.Negation: 1, Sign.DoubleNegation: 2}
+        bm = {True: 0, False: 1}
+        new_elements: list[AST] = []
+        comparison_counter = 2
+        for old_elem in agg.elements:
+            terms: list[AST] = []
+            atom = old_elem.literal.atom
+            terms.append(SymbolicTerm(LOC, clingo.Number(1)))
+            terms.append(SymbolicTerm(LOC, clingo.Number(nm[old_elem.literal.sign])))
+            if atom.ast_type == ASTType.Comparison:
+                terms.append(SymbolicTerm(LOC, clingo.Number(comparison_counter)))
+                comparison_counter += 1
+                terms.extend(sorted(collect_ast(atom, "Variable")))
+            elif atom.ast_type == ASTType.BooleanConstant:
+                terms.append(SymbolicTerm(LOC, clingo.Number(bm[atom.value])))
+                comparison_counter += 1
+            elif atom.ast_type == ASTType.SymbolicAtom:
+                terms.append(atom.symbol)
+            else:
+                assert False, f"Invalid atom {atom}"
+
+            new_elements.append(BodyAggregateElement(terms, [old_elem.literal, *old_elem.condition]))
+        return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
+
+    @staticmethod
+    def replace_old_aggregates(prg: list[AST]) -> list[AST]:
+        """replace all oldstyle Aggregate`s in the head by BodyAggregate Sum
+        Also replace count aggregates with sum aggregates with weight of 1"""
+        newprg: list[AST] = []
+        for stm in prg:
+            if stm.ast_type != ASTType.Rule:
+                newprg.append(stm)
+                continue
+            if not stm.body:
+                newprg.append(stm)
+                continue
+            newbody: list[AST] = []
+            for blit in stm.body:
+                if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Aggregate:
+                    newbody.append(blit.update(atom=MathSimplification._convert_old_agg(blit.atom)))
+                elif (
+                    blit.ast_type == ASTType.Literal
+                    and blit.atom.ast_type == ASTType.BodyAggregate
+                    and blit.atom.function == AggregateFunction.Count
+                ):
+                    newbody.append(blit.update(atom=MathSimplification._convert_agg_to_sum(blit.atom)))
+
+                else:
+                    newbody.append(blit)
+            newprg.append(stm.update(body=newbody))
+        return newprg
+
     def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
         """return a simplified version of the program"""
         ret: list[AST] = []
-        for stm in prg:
+        newprg = self.replace_old_aggregates(prg)
+        for oldstm, stm in zip(prg, newprg):
             if stm.ast_type != ASTType.Rule:
-                ret.append(stm)
+                ret.append(oldstm)
                 continue
             gb = Goebner()
             newbody: list[AST] = []
@@ -121,18 +186,18 @@ class MathSimplification:
 
             except SympyApi as err:
                 log.info(str(err))
-                ret.append(stm)
+                ret.append(oldstm)
                 continue
             except Exception as err:  # pylint: disable=broad-exception-caught
                 log.info(f"""Something went wrong with using sympy {err}.""")
-                ret.append(stm)
+                ret.append(oldstm)
                 continue
             if collect_binding_information_body(newbody)[1]:
-                log.info(f"Simplification could not bind all needed variables, skipping {str(stm)}")
-                ret.append(stm)
+                log.info(f"Simplification could not bind all needed variables, skipping {str(oldstm)}")
+                ret.append(oldstm)
                 continue
-            if optimize and self.cost(newbody) >= self.cost(stm.body):
-                newbody = stm.body
+            if optimize and self.cost(newbody) >= self.cost(oldstm.body):
+                newbody = oldstm.body
             ret.append(stm.update(body=newbody))
         return ret
 
@@ -236,7 +301,7 @@ class Goebner:
         return self._to_equality(lhs, op, rhs)
 
     def _to_sympy_bodyaggregate(self, agg: AST, neg: bool) -> Optional[list[Expr]]:
-        assert agg.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)
+        assert agg.ast_type == ASTType.BodyAggregate
         assert agg.left_guard is not None
         ret = []
         nonnegative = None
@@ -274,7 +339,7 @@ class Goebner:
                         return None
                     ret.append(rel)
                 return ret
-            if atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+            if atom.ast_type == ASTType.BodyAggregate:
                 ret = self._to_sympy_bodyaggregate(atom, sign == Sign.Negation)
                 if ret is None:
                     return None
@@ -285,17 +350,26 @@ class Goebner:
     def new_sum(self, asts: list[AST]) -> AST:
         """given a list of terms and aggregates, create the sum using clingo AST operations"""
         assert len(asts) >= 2
-        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
         if aggs:  # use next and iteration
-            rest = [x for x in asts if x.ast_type not in (ASTType.BodyAggregate, ASTType.Aggregate)]
+            rest = [x for x in asts if x.ast_type != ASTType.BodyAggregate]
             collector = aggs[0]
+            function = collector.function
+            if function in (AggregateFunction.Min, AggregateFunction.Max):
+                raise SympyApi("Cannot express addition with min/max aggregate, skipping.")
+
             newelements = list(collector.elements)
             for index in range(1, len(aggs)):
+                if aggs[index].function in (AggregateFunction.Min, AggregateFunction.Max):
+                    raise SympyApi("Cannot express addition with min/max aggregate, skipping.")  # nocoverage
+                if aggs[index].function == AggregateFunction.Sum:
+                    function = AggregateFunction.Sum
                 for e in aggs[index].elements:
                     newelements.append(e)
             for term in rest:
+                function = AggregateFunction.Sum
                 newelements.append(BodyAggregateElement([term], []))
-            return collector.update(elements=newelements)
+            return collector.update(elements=newelements, function=function)
 
         collector = asts[0]
         index = 1
@@ -307,7 +381,7 @@ class Goebner:
         """given a list of terms create the abs operation using clingo AST operations"""
         if len(asts) != 1:
             raise SympyApi("Missing Sympy specification for more than one absolute argument, skipping.")  # nocoverage
-        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
         if aggs:
             raise SympyApi("Cannot express absolute of aggregates, skipping.")
         return UnaryOperation(LOC, UnaryOperator.Absolute, asts[0])
@@ -316,7 +390,7 @@ class Goebner:
         """given a list of terms create the power operation using clingo AST operations"""
         if len(asts) != 2:
             raise SympyApi("Missing Sympy specification for more than one power argument, skipping.")  # nocoverage
-        aggs = [x for x in asts if x.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)]
+        aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
         if aggs:
             raise SympyApi("Cannot express exponentiation of aggregates, skipping.")
         return BinaryOperation(LOC, BinaryOperator.Power, asts[0], asts[1])
@@ -324,8 +398,6 @@ class Goebner:
     def new_mul(self, asts: list[AST]) -> AST:
         """given a list of terms create the multiplication using clingo AST operations"""
         assert len(asts) >= 2
-        if any(map(lambda x: x.ast_type == ASTType.Aggregate, asts)):
-            raise SympyApi("Cannot express multiplication with old style aggregates, skipping.")
         aggs = [x for x in asts if x.ast_type == ASTType.BodyAggregate]
         if aggs:  # use next and iteration
             if len(aggs) > 1:
@@ -385,7 +457,7 @@ class Goebner:
         """lhs is either variable for aggregate, fo_variable or constant
         rhs is an expr"""
         rhs_ast = self.sympy2ast(rhs)
-        if rhs_ast.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+        if rhs_ast.ast_type == ASTType.BodyAggregate:
             return rhs_ast.update(left_guard=Guard(op, self.sympy2ast(lhs)))
         lhs_ast = self.sympy2ast(lhs)
         return Comparison(lhs_ast, [Guard(op, rhs_ast)])

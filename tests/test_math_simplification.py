@@ -61,6 +61,7 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
+    prg = MathSimplification.replace_old_aggregates(prg)
     for r in prg:
         gb = Goebner()
         if r.ast_type == ASTType.Rule:
@@ -257,21 +258,63 @@ a :- b(X,Y); X = (Y\\2).""",
 jobs(X) :- X = { job(J) }.
             """,
             """#program base.
-jobs(X) :- X = { job(J) }.""",
+jobs(X) :- X = #sum { 1,0,job(J): job(J) }.""",
+        ),
+        (
+            """
+jobs(X) :- X = { job(J); #true }.
+            """,
+            """#program base.
+jobs(X) :- X = #sum { 1,0,job(J): job(J); 1,0,0: #true }.""",
         ),
         (
             """
 a :- not a(X), Y = {b}; X=Y*2.
             """,
             """#program base.
-a :- not a(X); Y = { b }; X = (Y*2).""",
+a :- not a(X); X = #sum { (1*2),0,b: b }.""",
         ),
         (
             """
 a :- not a(X), Y = {b} = X; X=Y*2.
             """,
             """#program base.
-a :- not a(X); 0 = { b }; X = 0.""",
+a :- not a(X); 0 = #sum { 1,0,b: b }; X = 0.""",
+        ),
+        (
+            """
+a :- c(Z), X = {b}; Y = {1>Z}; Z = 3 * Y * X.
+                    """,
+            """#program base.
+a :- c(Z); X = { b }; Y = { 1 > Z }; Z = ((3*Y)*X).""",
+        ),
+        (
+            """
+a.
+                    """,
+            """#program base.
+a.""",
+        ),
+        (
+            """
+a :- X=#count{a : a}, Y=#count{b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+        ),
+        (
+            """
+a :- X=#max{1,a : a}, Y=#count{b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- X = #max { 1,a: a }; Y = #count { b: b }; (X+Y) = 2.""",
+        ),
+        (
+            """
+a :- X=#count{a : a}, Y=#max{1,b: b}, X+Y=2.
+            """,
+            """#program base.
+a :- X = #count { a: a }; Y = #max { 1,b: b }; (X+Y) = 2.""",
         ),
     ],
 )
