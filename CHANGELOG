@@ -5,6 +5,7 @@
  - improve symmetry trait
  - fix bug with anonymous variables in aggregate replacement
  - fix bug in minmax_chains
+ - implement math simplification trait
 0.0.4:
  - bugfixes
  - allow any length conditions in aggregates for summinmax_chains trait

@@ -10,6 +10,7 @@ from ngo.aggregate_equality1 import EqualVariable
 from ngo.cleanup import CleanupTranslator
 from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.literal_duplication import LiteralDuplicationTranslator
+from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
@@ -70,6 +71,11 @@ def main() -> None:
             rdp = RuleDependency(prg)
             sagg = SumAggregator(unique_names, args.input_predicates, rdp, dp, prg)
             prg = sagg.execute(prg)
+
+        if "math" in args.enable:
+            rdp = RuleDependency(prg)
+            math = MathSimplification(rdp)
+            prg = math.execute(prg)
 
         if prg == old:
             break

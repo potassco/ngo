@@ -17,7 +17,7 @@ from clingo.ast import AST, ASTType, ComparisonOperator, Function, Literal, Rule
 from ngo.dependency import DomainPredicates
 from ngo.utils.ast import (
     LOC,
-    collect_binding_information,
+    collect_binding_information_body,
     global_vars,
     has_interval,
     normalize_operators,
@@ -94,7 +94,7 @@ class LiteralCollector:
     def _add_occurences_from_body(self, body: Iterable[AST], index: int) -> None:
         """add all combinations of self.size from literals from the body"""
         for original_subset in combinations(body, self.size):
-            _, unbound = collect_binding_information(original_subset)
+            _, unbound = collect_binding_information_body(original_subset)
             if not unbound:
                 new_subset, oldvars2newvars = anonymize_variables(original_subset)
                 newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
@@ -109,7 +109,7 @@ class LiteralCollector:
         for lit in body:
             if lit.ast_type == ASTType.ConditionalLiteral:
                 for original_subset in combinations(lit.condition, self.size):
-                    _, unbound = collect_binding_information(original_subset)
+                    _, unbound = collect_binding_information_body(original_subset)
                     if not unbound:
                         new_subset, oldvars2newvars = anonymize_variables(original_subset)
                         newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
@@ -126,7 +126,7 @@ class LiteralCollector:
                 for element in lit.atom.elements:
                     assert element.ast_type == ASTType.ConditionalLiteral
                     for original_subset in combinations(element.condition, self.size):
-                        _, unbound = collect_binding_information(original_subset)
+                        _, unbound = collect_binding_information_body(original_subset)
                         if not unbound:
                             new_subset, oldvars2newvars = anonymize_variables(original_subset)
                             newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
@@ -149,7 +149,7 @@ class LiteralCollector:
                 for element in lit.atom.elements:
                     assert element.ast_type == ASTType.BodyAggregateElement
                     for original_subset in combinations(element.condition, self.size):
-                        _, unbound = collect_binding_information(original_subset)
+                        _, unbound = collect_binding_information_body(original_subset)
                         if not unbound:
                             new_subset, oldvars2newvars = anonymize_variables(original_subset)
                             newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
@@ -228,7 +228,7 @@ class LiteralCollector:
                     continue
                 # create new aux predicate
                 min_index = min(map(lambda rb: rb.ruleid, rulebuilding))
-                bound: list[AST] = sorted(collect_binding_information(literal_set)[0])
+                bound: list[AST] = sorted(collect_binding_information_body(literal_set)[0])
                 aux_pred = unique_names.new_auxpredicate(len(bound))
                 new_rule = Rule(
                     location=LOC,

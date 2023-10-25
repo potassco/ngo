@@ -29,7 +29,7 @@ from ngo.utils.ast import (
     AnnotatedPredicate,
     Predicate,
     collect_ast,
-    collect_binding_information,
+    collect_binding_information_body,
     loc2str,
     potentially_unifying_sequence,
     predicates,
@@ -97,7 +97,7 @@ class SumAggregator:
             return ret
 
         preds: set[AnnotatedPredicate] = set()
-        global_vars = collect_binding_information(body)[0]
+        global_vars = collect_binding_information_body(body)[0]
         alone = True
         for elem in head.elements:
             condition: AST

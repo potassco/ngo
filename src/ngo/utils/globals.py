@@ -10,6 +10,7 @@ MIN_STR = "__min_"
 MAX_STR = "__max_"
 NEXT_STR = "__next_"
 DOM_STR = "__dom_"
+AGG_STR = "__agg"
 NEXT = Variable(LOC, "__NEXT")
 PREV = Variable(LOC, "__PREV")
 
