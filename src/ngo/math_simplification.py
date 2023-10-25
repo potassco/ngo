@@ -12,6 +12,7 @@ from clingo.ast import (
     BinaryOperator,
     BodyAggregate,
     BodyAggregateElement,
+    BooleanConstant,
     Comparison,
     ComparisonOperator,
     Function,
@@ -177,21 +178,28 @@ class MathSimplification:
                 new_conditions = gb.simplify_equalities(needed, unbound)
                 for cond in new_conditions:
                     conditions = set(conditions_of_body_agg(cond))
-                    if not conditions or conditions.issubset(agg_conditions[Sign.NoSign]):
+                    if (
+                        stm.head == Literal(LOC, Sign.NoSign, BooleanConstant(False))
+                        or not conditions
+                        or conditions.issubset(agg_conditions[Sign.NoSign])
+                    ):
                         newbody.append(Literal(LOC, Sign.NoSign, cond))
                     elif conditions.issubset(agg_conditions[Sign.DoubleNegation]):
                         newbody.append(Literal(LOC, Sign.DoubleNegation, cond))
                     elif conditions.issubset(agg_conditions[Sign.Negation]):
                         newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond)))
                     else:
-                        raise SympyApi("Couldn't preserve dependency graph, skipping {stm}")  # nocoverage
+                        raise SympyApi(f"Couldn't preserve dependency graph, skipping {stm}")  # nocoverage
 
             except SympyApi as err:
                 log.info(str(err))
                 ret.append(oldstm)
                 continue
             except Exception as err:  # pylint: disable=broad-exception-caught
-                log.info(f"""Unable to simplfiy because of: {err}""")
+                log.info(
+                    f"""Unable to simplfiy because of:\
+ {str(err).replace(" contains an element of the set of generators", "")}"""
+                )
                 ret.append(oldstm)
                 continue
             if collect_binding_information_body(newbody)[1]:
