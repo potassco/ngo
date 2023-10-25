@@ -356,8 +356,7 @@ class Goebner:
         if aggs:  # use next and iteration
             rest = [x for x in asts if x.ast_type != ASTType.BodyAggregate]
             collector = aggs[0]
-            function = collector.function
-            if function in (AggregateFunction.Min, AggregateFunction.Max):
+            if collector.function in (AggregateFunction.Min, AggregateFunction.Max):
                 raise SympyApi("Cannot express addition with min/max aggregate, skipping.")
 
             # add a unique identifier to each aggregate so set semantic does not work over multiple aggregates
@@ -370,14 +369,11 @@ class Goebner:
             for index in range(1, len(aggs)):
                 if aggs[index].function in (AggregateFunction.Min, AggregateFunction.Max):
                     raise SympyApi("Cannot express addition with min/max aggregate, skipping.")  # nocoverage
-                if aggs[index].function == AggregateFunction.Sum:
-                    function = AggregateFunction.Sum
                 for e in aggs[index].elements:
                     newelements.append(e.update(terms=[*e.terms, agg_ident(index)]))
             for index, term in enumerate(rest):
-                function = AggregateFunction.Sum
                 newelements.append(BodyAggregateElement([term, agg_ident(len(aggs) + index)], []))
-            return collector.update(elements=newelements, function=function)
+            return collector.update(elements=newelements, function=AggregateFunction.Sum)
 
         collector = asts[0]
         index = 1
