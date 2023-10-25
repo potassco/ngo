@@ -317,6 +317,13 @@ a :- X=#count{a : a}, Y=#max{1,b: b}, X+Y=2.
             """#program base.
 a :- X = #count { a: a }; Y = #max { 1,b: b }; (X+Y) = 2.""",
         ),
+        (
+            """
+a :- a(X); not Y = #sum{1,b : b}, constant = Y-2.
+            """,
+            """#program base.
+a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); constant,__agg(2) }.""",
+        ),
     ],
 )
 def test_math_simplification_execute_noopt(rule: str, output: str) -> None:

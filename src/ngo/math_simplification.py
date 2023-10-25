@@ -220,6 +220,7 @@ class Goebner:
         self._fo_vars: dict[Symbol, AST] = {}
         self.help_neq_vars: dict[Symbol, ComparisonOperator] = OrderedDict()
         self._sym2agg: dict[Symbol, AST] = {}
+        self._constants: dict[Symbol, AST] = {}
         self.equalities: dict[AST, list[Expr]] = {}
         # self.to_keep: list[Symbol] = []
 
@@ -234,16 +235,13 @@ class Goebner:
         # pylint: disable=too-many-return-statements
         # pylint: disable=too-many-branches
         if t.ast_type == ASTType.Variable:
-            name = str(t)
-            s = Symbol(name, integer=True)
+            s = Symbol(str(t), integer=True)
             self._fo_vars[s] = t
             return s
         if t.ast_type == ASTType.SymbolicTerm:  # constants
             symbol = t.symbol
             if symbol.type == SymbolType.Number:
                 return cast(Expr, Integer(symbol.number))
-            # if symbol.type == SymbolType.Function:
-            #    return cast(AtomicExpr, Symbol(str(symbol), integer=True))
             if symbol.type == SymbolType.String:
                 log.info(f"Can't simplify string operation {t}")
                 return None
@@ -253,7 +251,9 @@ class Goebner:
                 return cast(Expr, oo)
             if symbol.type == SymbolType.Function:
                 if not symbol.arguments:
-                    return cast(Expr, Symbol(str(t), integer=True))
+                    s = Symbol(str(t), integer=True)
+                    self._constants[s] = t
+                    return s
                 return None  # nocoverage
             assert False, f"unknown SymbolicTerm {t}"
         if t.ast_type == ASTType.UnaryOperation:
@@ -442,6 +442,8 @@ class Goebner:
                 return self._fo_vars[expr]
             if expr in self._sym2agg:
                 return self._sym2agg[expr]
+            if expr in self._constants:
+                return self._constants[expr]
             assert False, "Solve for t first ?"
 
         asts: list[AST] = [self.sympy2ast(cast(Expr, sub)) for sub in expr.args]
@@ -484,7 +486,8 @@ class Goebner:
         unbound = need_bound - set(self._fo_vars.values())
         if unbound:
             raise SympyApi(
-                f"Variables {unbound} seem to be unbound on line {str(next(iter(unbound)).location.begin)}"
+                f"Variables {[str(v) for v in unbound]} seem to be unbound\
+ on line {str(next(iter(unbound)).location.begin)}"
             )  # nocoverage
         nothing = list(self.equalities.keys())
         inv_fo = {v: k for k, v in self._fo_vars.items()}

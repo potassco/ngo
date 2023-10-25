@@ -494,6 +494,28 @@ def _collect_binding_information_conditions(
     return bound_variables, unbound_variables
 
 
+def _collect_binding_information_from_equal(
+    lhs: AST, rhs: AST, input_bound_variables: set[AST]
+) -> tuple[set[AST], set[AST]]:
+    bound_variables: set[AST] = input_bound_variables
+    unbound_variables: set[AST] = set(collect_ast(lhs, "Variable")) | set(collect_ast(rhs, "Variable"))
+    if all(i.ast_type == ASTType.Function and i.name == "" and i.arguments for i in (lhs, rhs)) and len(
+        lhs.arguments
+    ) == len(rhs.arguments):
+        for left, right in zip(lhs.arguments, rhs.arguments):
+            bound, unbound = _collect_binding_information_from_equal(left, right, bound_variables)
+            bound_variables.update(bound)
+            unbound_variables.update(unbound)
+    else:
+        lhs_vars = set(collect_ast(lhs, "Variable"))
+        rhs_vars = set(collect_ast(rhs, "Variable"))
+        if len(lhs_vars) == 1 and not has_unsafe_operation(lhs) and rhs_vars <= bound_variables:
+            bound_variables.update(lhs_vars)
+        if len(rhs_vars) == 1 and not has_unsafe_operation(rhs) and lhs_vars <= bound_variables:
+            bound_variables.update(rhs_vars)
+    return bound_variables, unbound_variables - bound_variables
+
+
 def _collect_binding_information_from_comparison(
     comparison: AST, input_bound_variables: set[AST]
 ) -> tuple[set[AST], set[AST]]:
@@ -502,12 +524,9 @@ def _collect_binding_information_from_comparison(
     unbound_variables: set[AST] = set(collect_ast(comparison, "Variable"))
     for lhs, operator, rhs in comparison2comparisonlist(comparison):
         if operator == ComparisonOperator.Equal:
-            lhs_vars = set(collect_ast(lhs, "Variable"))
-            rhs_vars = set(collect_ast(rhs, "Variable"))
-            if len(lhs_vars) == 1 and not has_unsafe_operation(lhs) and rhs_vars <= bound_variables:
-                bound_variables.update(lhs_vars)
-            if len(rhs_vars) == 1 and not has_unsafe_operation(rhs) and lhs_vars <= bound_variables:
-                bound_variables.update(rhs_vars)
+            bound, unbound = _collect_binding_information_from_equal(lhs, rhs, bound_variables)
+            bound_variables.update(bound)
+            unbound_variables.update(unbound)
     return bound_variables, unbound_variables - bound_variables
 
 
