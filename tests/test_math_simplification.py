@@ -139,28 +139,28 @@ a :- b(X,Y,Z); 0 = (X+(-1*Z)); 0 = (Y+(-1*Z)).""",
 a :- X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
         ),
         (
             """
 a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- b(X); 0 = #sum { 1,a: a; (-1*X) }; 0 = #sum { 1,b: b; -2; X }.""",
+a :- b(X); 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }; 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); X,__agg(2) }.""",
         ),
         (
             """
 a :- b(X), X=#sum{1,b : b}.
                     """,
             """#program base.
-a :- b(X); 0 = #sum { 1,b: b; (-1*X) }.""",
+a :- b(X); 0 = #sum { 1,b,__agg(0): b; (-1*X),__agg(1) }.""",
         ),
         (
             """
 a :- b(X), X<#sum{1,b : b}.
                     """,
             """#program base.
-a :- b(X); 0 > #sum { (1*-1),b: b; X }.""",
+a :- b(X); 0 > #sum { (1*-1),b,__agg(0): b; X,__agg(1) }.""",
         ),
         (  # unbounded global
             """
@@ -174,14 +174,14 @@ a(X) :- 3 < #sum { 1,b: b }.""",
 a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { 1,b: b; ((-3*Y)*Z) }.""",
+a :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
         ),
         (
             """
 a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b: b; (-1*Z) }.""",
+a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
         ),
         (
             """
@@ -223,21 +223,22 @@ a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
 a :- a(X); not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not 0 = #sum { (1*-1),b: b; 2; X }.""",
+a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) }.""",
         ),
         (
             """
 a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not not 0 = #sum { 1,b: b; -2; (-1*X) }.""",
+a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""",
         ),
         (
             """
 a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
             """,
             """#program base.
-a :- a(X); b(Z); not 0 = #sum { (1*-1),b: b; 2; X }; not 0 = #sum { 1,b: b; (-1*Z) }.""",
+a :- a(X); b(Z); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) };\
+ not 0 = #sum { 1,b,__agg(0): b; (-1*Z),__agg(1) }.""",
         ),
         (  # sympy seems not to be able to handle abs
             """
@@ -300,7 +301,7 @@ a.""",
 a :- X=#count{a : a}, Y=#count{b: b}, X+Y=2.
             """,
             """#program base.
-a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
         ),
         (
             """
@@ -385,14 +386,14 @@ a :- b(X,Y,Z); X = Y = Z.""",
 a :- X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- 0 = #sum { 1,b: b; 1,a: a; -2 }.""",
+a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
         ),
         (
             """
 a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- b(X); 0 = #sum { 1,a: a; (-1*X) }; 0 = #sum { 1,b: b; -2; X }.""",
+a :- b(X); 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }; 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); X,__agg(2) }.""",
         ),
         (
             """
@@ -420,14 +421,14 @@ a(X) :- 3 < #sum { 1,b: b }.""",
 a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { 1,b: b; ((-3*Y)*Z) }.""",
+a :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
         ),
         (
             """
 a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b: b; (-1*Z) }.""",
+a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
         ),
         (
             """
@@ -469,14 +470,14 @@ a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
 a :- a(X); not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not 0 = #sum { (1*-1),b: b; 2; X }.""",
+a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) }.""",
         ),
         (
             """
 a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not not 0 = #sum { 1,b: b; -2; (-1*X) }.""",
+a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""",
         ),
         (
             """

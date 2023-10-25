@@ -14,6 +14,7 @@ from clingo.ast import (
     BodyAggregateElement,
     Comparison,
     ComparisonOperator,
+    Function,
     Guard,
     Literal,
     Sign,
@@ -58,6 +59,7 @@ from ngo.utils.ast import (
     negate_comparison,
     rhs2lhs_comparison,
 )
+from ngo.utils.globals import AGG_STR
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("math_simplification")
@@ -189,7 +191,7 @@ class MathSimplification:
                 ret.append(oldstm)
                 continue
             except Exception as err:  # pylint: disable=broad-exception-caught
-                log.info(f"""Something went wrong with using sympy {err}.""")
+                log.info(f"""Unable to simplfiy because of: {err}""")
                 ret.append(oldstm)
                 continue
             if collect_binding_information_body(newbody)[1]:
@@ -358,17 +360,23 @@ class Goebner:
             if function in (AggregateFunction.Min, AggregateFunction.Max):
                 raise SympyApi("Cannot express addition with min/max aggregate, skipping.")
 
-            newelements = list(collector.elements)
+            # add a unique identifier to each aggregate so set semantic does not work over multiple aggregates
+            def agg_ident(i: int) -> AST:
+                return Function(LOC, AGG_STR, [SymbolicTerm(LOC, clingo.Number(i))], False)
+
+            newelements: list[AST] = []
+            for elem in collector.elements:
+                newelements.append(elem.update(terms=[*elem.terms, agg_ident(0)]))
             for index in range(1, len(aggs)):
                 if aggs[index].function in (AggregateFunction.Min, AggregateFunction.Max):
                     raise SympyApi("Cannot express addition with min/max aggregate, skipping.")  # nocoverage
                 if aggs[index].function == AggregateFunction.Sum:
                     function = AggregateFunction.Sum
                 for e in aggs[index].elements:
-                    newelements.append(e)
-            for term in rest:
+                    newelements.append(e.update(terms=[*e.terms, agg_ident(index)]))
+            for index, term in enumerate(rest):
                 function = AggregateFunction.Sum
-                newelements.append(BodyAggregateElement([term], []))
+                newelements.append(BodyAggregateElement([term, agg_ident(len(aggs) + index)], []))
             return collector.update(elements=newelements, function=function)
 
         collector = asts[0]
