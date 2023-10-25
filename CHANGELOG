@@ -1,3 +1,4 @@
+0.0.6:
 0.0.5:
  - add sum_chains trait
  - set log output to info by default
