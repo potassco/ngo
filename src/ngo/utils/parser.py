@@ -20,7 +20,8 @@ else:
 VERSION = metadata.version("ngo")
 
 
-OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math"]
+ALL_OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math"]
+DEFAULT_OPTIONS = ["equalities", "minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math"]
 
 
 class PredicateList(Action):
@@ -64,7 +65,12 @@ class VerifyEnable(Action):
         if len(values) > 1 and "none" in values:
             raise ArgumentTypeError("'none' may not be combined with other options.")
         if "all" in values:
-            values = OPTIONS
+            values = ALL_OPTIONS
+
+        if "default" in values:
+            while "default" in values:
+                values.remove("default")
+            values = sorted(values + DEFAULT_OPTIONS)
 
         setattr(namespace, self.dest, values)
 
@@ -96,9 +102,9 @@ def get_parser() -> ArgumentParser:
         action=VerifyEnable,
         type=str.lower,
         nargs="+",
-        choices=["all", "none"] + OPTIONS,
-        default=OPTIONS,
-        help="enables a set of traits",
+        choices=["all", "none", "default"] + ALL_OPTIONS,
+        default=DEFAULT_OPTIONS,
+        help=f"enables a set of traits, or default={' '.join(DEFAULT_OPTIONS)}",
     )
     parser.add_argument(
         "--input-predicates",

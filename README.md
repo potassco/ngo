@@ -48,8 +48,10 @@ The option enable support several traits that can be added, like
 ```shell
 cat encoding.lp | ngo --enable equality minmax_chains
 ```
-By default this setting is set to `all`, which enables all traits.
+By default this setting is set to `default`, which enables most traits.
+(See `--help` for which traits are used by default.)
 To just rewrite your program into std clingo.ast form, use `none` to disable any optimizations.
+You can use `all` to enable all available traits.
 
 The following traits are available:
 
@@ -153,6 +155,20 @@ parts of the chain are used inside the #sum aggregate.
 This can reduce grounding and solving time.
 Depending on the domain of the weight Variable (L in this case here)
 the computation of the ordered domain can cause problems in grounding.
+
+**math**
+
+Tries to optimize any form of comparisons and aggregates in the rule body.
+This means that:
+```
+a :- X = #sum { 1,a : a }, Y=#sum{ 1,b: b }, X+Y=2.
+```
+gets replaces by something similar to
+```
+a :- 0 = #sum { 1,a: a; 1,b: b; -2 }.
+```
+This can reduce grounding drastically and might have an effect on solving.
+
 
 
 ## Development

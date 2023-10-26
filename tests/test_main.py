@@ -8,7 +8,7 @@ import pytest
 
 from ngo.utils.ast import Predicate
 from ngo.utils.logger import singleton_factory_logger
-from ngo.utils.parser import OPTIONS, get_parser
+from ngo.utils.parser import ALL_OPTIONS, DEFAULT_OPTIONS, get_parser
 
 
 def test_logger() -> None:
@@ -33,7 +33,9 @@ def test_parser() -> None:
     assert "equalities" in args.enable
     assert "minmax_chains" in args.enable
     args = parser.parse_args(["--enable", "all"])
-    assert OPTIONS == args.enable
+    assert ALL_OPTIONS == args.enable
+    args = parser.parse_args(["--enable", "default"])
+    assert sorted(DEFAULT_OPTIONS) == sorted(args.enable)
 
     with pytest.raises(ArgumentTypeError) as excinfo:
         parser.parse_args(["--enable", "none", "equalities"])
