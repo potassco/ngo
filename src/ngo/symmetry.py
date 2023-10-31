@@ -4,10 +4,25 @@
 """
 
 from collections import defaultdict
+from functools import partial
 from itertools import chain, combinations, pairwise
 from typing import Collection, Iterable, Iterator, Optional, TypeVar
 
-from clingo.ast import AST, ASTType, Comparison, ComparisonOperator, Guard, Literal, Sign
+from clingo.ast import (
+    AST,
+    AggregateFunction,
+    ASTType,
+    BodyAggregate,
+    BodyAggregateElement,
+    Comparison,
+    ComparisonOperator,
+    Guard,
+    Literal,
+    Sign,
+    SymbolicTerm,
+    Variable,
+)
+from clingo.symbol import Number
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import LOC, Predicate, collect_ast, comparison2comparisonlist
@@ -130,13 +145,21 @@ class SymmetryTranslator:
         equalities: list[tuple[AST, ...]],
     ) -> Optional[list[AST]]:
         """given a set of inequalities for variables and equalities in predicates
-        create a new body breaking inequalities or return None"""
+        create a new body aggregate breaking inequalities or return None"""
 
         # all positions in the eq_list must be either equal or an inequality
         symmetric = True
         used_inequalities: dict[AST, tuple[AST, AST]] = {}
+        used_equalities: list[AST] = []
         new_inequalities: set[AST] = set()
+        new_aggs: list[AST] = []
+        use_agg = 0
+        finished_equalities: list[set[AST]] = []
+        def sub(small: set[AST], big: set[AST]) -> bool:
+            return small.issubset(big)
         for eq_list in equalities:
+            if any(map(partial(sub, set(eq_list)), finished_equalities)): # dont check subsets
+                continue
             # find the position inside the predicate that has the most inequalities
             used_inequalities_indexed: dict[int, dict[AST, tuple[AST, AST]]] = defaultdict(dict)
             new_inequalities_indexed: dict[int, list[AST]] = defaultdict(list)
@@ -162,18 +185,50 @@ class SymmetryTranslator:
                         Literal(LOC, Sign.NoSign, Comparison(lhs_, [Guard(ComparisonOperator.LessThan, rhs_)]))
                         for lhs_, rhs_ in pairwise(sides)
                     ]
+                    use_agg += 1
                     continue
                 symmetric = False
                 break
             if not symmetric:
                 break
+            finished_equalities.append(set(eq_list))
+            if len(used_inequalities_indexed) > 1:
+                use_agg += 1
             index, old_ineqs = max(used_inequalities_indexed.items(), key=lambda x: len(x[1]))
+            example_eq = eq_list[0]
             if not set(old_ineqs.keys()).issubset(used_inequalities):
+                # P1 < P2
                 used_inequalities.update(old_ineqs)
                 new_inequalities.update(new_inequalities_indexed[index])
+                
+            ineqs: set[AST] = set()
+            for tup in used_inequalities.values():
+                ineqs.update(tup)
+            elements = [BodyAggregateElement([x for x in sorted(ineqs) if x in example_eq.atom.symbol.arguments], [example_eq])]
+            agg = BodyAggregate(
+                LOC,
+                Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(eq_list)))),
+                AggregateFunction.Count,
+                elements,
+                None,
+            )
+            
+
+            new_aggs.append(Literal(LOC, Sign.NoSign, agg))
+            arguments = [Variable(LOC, "_") if x in ineqs else x for x in example_eq.atom.symbol.arguments]
+            symbol = example_eq.atom.symbol.update(arguments=arguments)
+            atom = example_eq.atom.update(symbol=symbol)
+            new_aggs.append(example_eq.update(atom=atom))
+            used_equalities.extend(eq_list)
+                
         if symmetric:
-            newbody = [b for b in body if b not in used_inequalities]
-            newbody.extend(sorted(new_inequalities))
+            if use_agg <= 1:
+                newbody = [b for b in body if b not in chain(used_inequalities, used_equalities)]
+                newbody.extend(sorted(new_aggs))
+            else:
+                newbody = [b for b in body if b not in used_inequalities]
+                newbody.extend(sorted(new_inequalities))
+                
             return newbody
         return None
 
@@ -217,7 +272,10 @@ class SymmetryTranslator:
         return aggregate
 
     def _process_rule(self, rule: AST) -> AST:
-        """replace X1 != X2 with X2 < X2 if possible"""
+        """This modtrait replaces bodys with symmetry breaking rules that
+        count different occurences of the same predicate with a counting aggregate
+        if this preserves semantics. This can reduce the number of grounded
+        rules by half for this rule, but has no effect on solving."""
         assert rule.ast_type == ASTType.Rule
         head: AST = rule.head
         body: list[AST] = list(rule.body)

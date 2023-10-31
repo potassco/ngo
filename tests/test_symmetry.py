@@ -12,19 +12,19 @@ from ngo.utils.globals import UniqueNames
     (
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
-            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), X1 = X2, P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); X1 = X2; P1 < P2.",
+            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), P1 != P2, X1 = X2.",
+            "#program base.\nf(X) :- node(X); X1 = X2; player(_,X1,Y); 2 <= #count { P1: player(P1,X1,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), not X1 != X2, P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); not X1 != X2; P1 < P2.",
+            "#program base.\nf(X) :- node(X); not X1 != X2; player(_,X1,Y); 2 <= #count { P1: player(P1,X1,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), not P1 = P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
@@ -52,7 +52,7 @@ from ngo.utils.globals import UniqueNames
         ),
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); player(P3,X,Y); P1 < P2; P2 < P3.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 3 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
             ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
