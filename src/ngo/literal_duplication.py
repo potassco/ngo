@@ -7,36 +7,20 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from functools import partial
 from itertools import combinations
 from typing import Iterable, Optional
 
 import networkx as nx
-from clingo.ast import AST, ASTType, ComparisonOperator, Function, Literal, Rule, Sign, SymbolicAtom
+from clingo.ast import AST, ASTType, Function, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import (
-    LOC,
-    collect_binding_information_body,
-    global_vars,
-    has_interval,
-    normalize_operators,
-    transform_ast,
-)
+from ngo.utils.ast import LOC, collect_binding_information_body, global_vars, replace_assignments, transform_ast
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("literal_duplication")
 
 AUX_VAR = "__AUX_"
-
-
-def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
-    assert orig.ast_type == ASTType.Variable
-    assert var.ast_type == ASTType.Variable
-    if var == orig:
-        return replace
-    return var
 
 
 @dataclass
@@ -248,52 +232,6 @@ class LiteralCollector:
                         new_rule = rule.update(body=new_body)  # should work for rules and minimize statements
                         self.prg[rule_builder.ruleid] = new_rule
         return changed_rules
-
-
-def replace_assignments(stm: AST) -> AST:
-    """replace equalities with their inlined versions
-    e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
-    if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
-        return stm
-    literals: Iterable[AST] = stm.body
-    new_body: list[AST] = []
-    new_heads: list[AST]
-    if stm.ast_type == ASTType.Rule:
-        new_heads = [stm.head]
-    else:
-        new_heads = [stm.weight, stm.priority, *stm.terms]
-    # normalize comparison operators
-    # TODO: normalize comparison operators to ignore sign and create a list
-    new_body = normalize_operators(literals)
-
-    removal: list[int] = []
-    for index, lit in enumerate(new_body):
-        if (
-            lit.ast_type == ASTType.Literal
-            and lit.atom.ast_type == ASTType.Comparison
-            and lit.atom.term.ast_type == ASTType.Variable
-            and not has_interval(lit.atom.guards[0].term)
-        ):
-            if (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal) or (
-                lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual
-            ):
-                for other, elem in enumerate(new_body):
-                    if other == index:
-                        continue
-                    new_body[other] = transform_ast(
-                        elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
-                    )
-                removal.append(index)
-                for i, head in enumerate(new_heads):
-                    new_heads[i] = transform_ast(
-                        head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
-                    )
-                continue
-    for index in reversed(removal):
-        new_body.pop(index)
-    if stm.ast_type == ASTType.Rule:
-        return stm.update(head=new_heads[0], body=new_body)
-    return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=new_body)
 
 
 def unanonymize_variables(variables: Iterable[AST], mapping: dict[str, str]) -> list[AST]:

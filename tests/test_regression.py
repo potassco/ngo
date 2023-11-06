@@ -34,12 +34,16 @@ all_finish(Max) :- Max = #max {T : slot(J,M,T) }.
 #minimize {T : all_finish(T)}.
 """,
             """#program base.
+:~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain_0_0__max___dom___max_0_13(__PREV,__NEXT)]
+:~ __chain_0_0__max___dom___max_0_13(__NEXT);\
+ __min_0_0__dom___max_0_13(__NEXT). [__NEXT@0,__chain_0_0__max___dom___max_0_13(#sup,__NEXT)]
+__aux_1(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
 dur(J,M,D) :- duration(J,M,D).
 machine(M) :- dur(_,M,_).
 time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D) }.
 { slot(J,M,T): dur(J,M,_) } :- machine(M); time(T).
 #false :- slot(J,M,T); not slot(J,M,(T-1)); dur(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
-#false :- slot(J1,M,T); slot(J2,M,T); J1 < J2.
+#false :- slot(_,M,T); 2 <= #count { J1: slot(J1,M,T) }.
 #false :- dur(J,M,_); not slot(J,M,_).
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
 __dom_slot(T) :- dur(_,M,_); machine(M); time(T).
@@ -50,11 +54,7 @@ __next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom___max_0_1
 __next_0_0__dom___max_0_13(P,N) :- __next_0_0__dom___max_0_13(_,P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
 __chain_0_0__max___dom___max_0_13(T) :- slot(_,_,T).
-__aux_1(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
-__chain_0_0__max___dom___max_0_13(__PREV) :- __aux_1(_,__PREV).
-:~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain_0_0__max___dom___max_0_13(__PREV,__NEXT)]
-:~ __chain_0_0__max___dom___max_0_13(__NEXT);\
- __min_0_0__dom___max_0_13(__NEXT). [__NEXT@0,__chain_0_0__max___dom___max_0_13(#sup,__NEXT)]""",
+__chain_0_0__max___dom___max_0_13(__PREV) :- __aux_1(_,__PREV).""",
         ),
         (
             """

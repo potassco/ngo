@@ -2,8 +2,9 @@
 from dataclasses import dataclass
 from functools import partial
 from itertools import product
-from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
+from typing import Callable, Iterable, Iterator, NamedTuple, Optional, Sequence
 
+import networkx as nx
 from clingo import SymbolType
 from clingo.ast import (
     AST,
@@ -667,13 +668,39 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
     return collect_binding_information_body(stmlist)[0]
 
 
+def expand_comparisons(rule: AST) -> AST:
+    """given a rule, return a rule with expanded comparisons"""
+    assert rule.ast_type == ASTType.Rule
+    if not rule.body:
+        return rule
+    return rule.update(body=normalize_operators(rule.body))
+
+
 def normalize_operators(literals: Iterable[AST]) -> list[AST]:
     """replace a list of literals with a new list where all comparisons are binary and not chained"""
     new_literals: list[AST] = []
     for lit in literals:
-        if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison:
-            for lhs, cop, rhs in comparison2comparisonlist(lit.atom):
-                new_literals.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
+        if lit.ast_type == ASTType.Literal:
+            atom = lit.atom
+            if lit.atom.ast_type == ASTType.Comparison:
+                for lhs, cop, rhs in comparison2comparisonlist(atom):
+                    new_literals.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
+            elif atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate) and atom.elements is not None:
+                new_elements: list[AST] = []
+                for elem in atom.elements:
+                    new_condition: list[AST] = []
+                    for c in elem.condition:
+                        if c.atom.ast_type == ASTType.Comparison:
+                            for lhs, cop, rhs in comparison2comparisonlist(c.atom):
+                                new_condition.append(Literal(LOC, c.sign, Comparison(lhs, [Guard(cop, rhs)])))
+                        else:
+                            new_condition.append(c)
+                    new_elements.append(elem.update(condition=new_condition))
+                new_atom = atom.update(elements=new_elements)
+                new_lit = lit.update(atom=new_atom)
+                new_literals.append(new_lit)
+            else:
+                new_literals.append(lit)
         else:
             new_literals.append(lit)
     return new_literals
@@ -700,3 +727,147 @@ def loc2str(loc: Location) -> str:
 def global_vars(lits: list[AST]) -> set[AST]:
     """compute all Variables that are visible within the same outer scope"""
     return set.union(*collect_binding_information_body(lits))
+
+
+def _get_simple_equalities(lits: Optional[list[AST]]) -> list[AST]:
+    ret: list[AST] = []
+    if lits is None:
+        return ret
+    for lit in lits:
+        if (
+            lit.ast_type == ASTType.Literal
+            and lit.atom.ast_type == ASTType.Comparison
+            and lit.atom.term.ast_type == ASTType.Variable
+            and not has_interval(lit.atom.guards[0].term)
+        ):
+            if (
+                (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal)
+                or (lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual)
+                and lit.atom.term.ast_type == lit.atom.term.ast_type == ASTType.Variable
+            ):
+                ret.append(lit)
+    return ret
+
+
+def _replace(uniques: list[tuple[set[AST], AST]], var: AST) -> AST:
+    for cc, single in uniques:
+        if var in cc:
+            return single
+    return var
+
+
+def replace_simple_assignments_aggregate(lit: AST) -> AST:
+    """replace variable equalities with their inlined versions
+    e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X) inside an aggregate"""
+    assert lit.atom.ast_type == ASTType.BodyAggregate
+    new_elements: list[AST] = []
+    for elem in lit.atom.elements:
+        eqs = _get_simple_equalities(elem.condition)
+        graph = nx.Graph()
+        for eq in eqs:
+            graph.add_edge(eq.atom.term, eq.atom.guards[0].term)
+        uniques: list[tuple[set[AST], AST]] = []
+        for cc in nx.connected_components(graph):
+            uniques.append((cc, sorted(cc)[0]))
+        new_condition = [c for c in elem.condition if c not in eqs]
+        new_elem = elem.update(condition=new_condition)
+        new_elements.append(transform_ast(new_elem, "Variable", partial(_replace, uniques)))
+    new_atom = lit.atom.update(elements=new_elements)
+    return lit.update(atom=new_atom)
+
+
+def replace_simple_assignments(stm: AST) -> AST:
+    """replace variable equalities with their inlined versions
+    e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
+    if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
+        return stm
+    literals: Iterable[AST] = stm.body
+    new_body: list[AST] = []
+    new_heads: list[AST]
+    if stm.ast_type == ASTType.Rule:
+        new_heads = [stm.head]
+    else:
+        new_heads = [stm.weight, stm.priority, *stm.terms]
+    # normalize comparison operators
+    new_body = normalize_operators(literals)
+    graph = nx.Graph()
+    aux_body: list[AST] = []
+    eqs = _get_simple_equalities(new_body)
+    for lit in new_body:
+        if lit in eqs:
+            continue
+        if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate:
+            aux_body.append(replace_simple_assignments_aggregate(lit))
+        else:
+            aux_body.append(lit)
+
+    for eq in eqs:
+        graph.add_edge(eq.atom.term, eq.atom.guards[0].term)
+    uniques: list[tuple[set[AST], AST]] = []
+    for cc in nx.connected_components(graph):
+        uniques.append((cc, sorted(cc)[0]))
+
+    p = partial(transform_ast, ast_name="Variable", function=partial(_replace, uniques))
+    aux_body = list(map(p, aux_body))
+    new_heads = list(map(p, new_heads))
+
+    # for lit in aux_body:
+    #     new_body.append(transform_ast(lit, "Variable", partial(_replace, uniques)))
+
+    if stm.ast_type == ASTType.Rule:
+        return stm.update(head=new_heads[0], body=aux_body)
+    return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=aux_body)
+
+
+def replace_assignments(stm: AST) -> AST:
+    """replace equalities with their inlined versions
+    e.g. foo(X), bar(Y), X=Y becomes foo(X), bar(X)"""
+    if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
+        return stm
+    literals: Iterable[AST] = stm.body
+    new_body: list[AST] = []
+    new_heads: list[AST]
+    if stm.ast_type == ASTType.Rule:
+        new_heads = [stm.head]
+    else:
+        new_heads = [stm.weight, stm.priority, *stm.terms]
+    # normalize comparison operators
+    # TODO: normalize comparison operators to ignore sign and create a list
+    new_body = normalize_operators(literals)
+
+    removal: list[int] = []
+    for index, lit in enumerate(new_body):
+        if (
+            lit.ast_type == ASTType.Literal
+            and lit.atom.ast_type == ASTType.Comparison
+            and lit.atom.term.ast_type == ASTType.Variable
+            and not has_interval(lit.atom.guards[0].term)
+        ):
+            if (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal) or (
+                lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual
+            ):
+                for other, elem in enumerate(new_body):
+                    if other == index:
+                        continue
+                    new_body[other] = transform_ast(
+                        elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                    )
+                removal.append(index)
+                for i, head in enumerate(new_heads):
+                    new_heads[i] = transform_ast(
+                        head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                    )
+                continue
+    for index in reversed(removal):
+        new_body.pop(index)
+    if stm.ast_type == ASTType.Rule:
+        return stm.update(head=new_heads[0], body=new_body)
+    return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=new_body)
+
+
+def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
+    assert orig.ast_type == ASTType.Variable
+    assert var.ast_type == ASTType.Variable
+    if var == orig:
+        return replace
+    return var

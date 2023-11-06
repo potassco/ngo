@@ -3,7 +3,8 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.dependency import DomainPredicates
-from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables, replace_assignments
+from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables
+from ngo.utils.ast import replace_assignments
 from ngo.utils.globals import UniqueNames
 
 

@@ -4,9 +4,10 @@
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import partial
-from itertools import chain, combinations, pairwise
-from typing import Collection, Iterable, Iterator, Optional, TypeVar
+from itertools import chain, combinations
+from typing import Any, Collection, Iterable, Iterator, Optional, TypeVar
 
 from clingo.ast import (
     AST,
@@ -25,7 +26,7 @@ from clingo.ast import (
 from clingo.symbol import Number
 
 from ngo.dependency import DomainPredicates, RuleDependency
-from ngo.utils.ast import LOC, Predicate, collect_ast, comparison2comparisonlist
+from ngo.utils.ast import LOC, Predicate, collect_ast, expand_comparisons, global_vars, replace_simple_assignments
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("symmetry")
@@ -34,47 +35,139 @@ log = singleton_factory_logger("symmetry")
 class SymmetryTranslator:
     """Translates some min/max aggregates into chains"""
 
+    @dataclass(order=True)
+    class Symmetry:
+        """a single symmetry"""
+
+        literals: tuple[AST, ...]
+        strict_neq: dict[int, list[AST]]  # strict_neq[pos] = [lit, ...] for != comparisons
+        nstrict_neq: dict[int, list[AST]]  # nstrict_neq[pos] = [lit, ...] for < comparisons
+
     def __init__(self, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
         self.rule_dependency = rule_dependency
         self.domain_predicates = domain_predicates
 
+    Inequalities = dict[ComparisonOperator, list[tuple[AST, AST, AST]]]
+
     @staticmethod
-    def _inequalities(body: Iterable[AST]) -> list[tuple[AST, AST, AST]]:
-        """returns a list of inequlities of the form (orignal_literal, variable1, variable2)"""
-        ret: list[tuple[AST, AST, AST]] = []
+    def _unequal(lhs: AST, rhs: AST, inequalities: Inequalities) -> Optional[tuple[ComparisonOperator, AST]]:
+        """given two terms lhs and rhs and some inequalities
+        return (OP, lit) if they are unequal or None"""
+        for op, ineqs in inequalities.items():
+            for lit, var1, var2 in ineqs:
+                if (lhs == var1 and rhs == var2) or (lhs == var2 and rhs == var1):
+                    return (op, lit)
+        return None
+
+    @staticmethod
+    def largest_symmetric_group(body: list[AST], rest: list[AST]) -> Iterator[Symmetry]:
+        """
+        Given a list A of literals (a body or a condition)
+        Given a list B of literals that is also visible in the same scope
+        return tuples of literals with the same predicate from list A
+        and a list of inequalities used (from A)
+        All Variables used in the same predicates are either equal
+        or unequal (with proof in the inequalities)
+        Only one asymetric inequality is allowed.
+        All unequal Variables are not to allowed to be used within the rest of the
+        visible level of A and B
+        """
+        potential_equalities: list[set[AST]] = []
+        potential_strict_inequalities: list[dict[int, list[AST]]] = []
+        potential_nstrict_inequalities: list[dict[int, list[AST]]] = []
+        inequalities = SymmetryTranslator._inequalities(body)
+
+        # for each equality
+        #     check if it is not a subset of an already existing potential equality
+        #     do all tests and collect a set of potential equalities
+        #     Then do a crosscheck of the uneqal variables of all of them
+        #     None of them may occur outside
+        #     If they occur outside, only take a subset of the potential equalities
+        def issubset(sub: set[Any], dom: set[Any]) -> bool:
+            return sub.issubset(dom)
+
+        for equality in SymmetryTranslator._all_equal_symbols(body):
+            if any(map(partial(issubset, set(equality)), potential_equalities)):
+                continue
+            used_inequalities = []
+            fine = True
+            for pos, sides in enumerate(zip(*[x.atom.symbol.arguments for x in equality])):
+                # (lhs, rhs) = sides
+                # 1. all sides are equal
+                if len(set(sides)) == 1:
+                    continue
+                # 2. all sides are inequal
+                for lhs, rhs in combinations(sides, 2):
+                    res = SymmetryTranslator._unequal(lhs, rhs, inequalities)
+                    if res is None:
+                        fine = False
+                        break
+                    op, lit = res
+                    used_inequalities.append((op, lit, pos))
+                if not fine:
+                    break
+            if fine:  # and len(global_vars(lit_list) & uneqal_variables) == 0:
+                potential_equalities.append(set(equality))
+                potential_strict_inequalities.append(defaultdict(list))
+                potential_nstrict_inequalities.append(defaultdict(list))
+                for op, lit, pos in used_inequalities:
+                    if op == ComparisonOperator.NotEqual:
+                        potential_strict_inequalities[-1][pos].append(lit)
+                    else:
+                        potential_nstrict_inequalities[-1][pos].append(lit)
+        for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
+            used_uneqal_variables: set[AST] = set()
+            lits = body + rest
+            for index in index_subset:
+                for lit in potential_equalities[index]:
+                    lits.remove(lit)
+                for pos, neq_lits in chain(
+                    potential_strict_inequalities[index].items(), potential_nstrict_inequalities[index].items()
+                ):
+                    lits = [x for x in lits if x not in neq_lits]
+                    for pred in potential_equalities[index]:
+                        used_uneqal_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
+            if len(global_vars(lits) & used_uneqal_variables) == 0:
+                for index in index_subset:
+                    yield SymmetryTranslator.Symmetry(
+                        literals=tuple(sorted(potential_equalities[index])),
+                        strict_neq=potential_strict_inequalities[index],
+                        nstrict_neq=potential_nstrict_inequalities[index],
+                    )
+                return
+
+    @staticmethod
+    def _inequalities(body: Iterable[AST]) -> Inequalities:
+        """given some literals
+        returns inequlities of the form [OP] =[(orignal_literal, variable1, variable2),...]
+        expects only simple comparisons
+        OP in {!=, <}"""
+        ret: SymmetryTranslator.Inequalities = defaultdict(list)
         for lit in body:
-            if (
-                lit.ast_type == ASTType.Literal
-                and lit.sign == Sign.NoSign
-                and lit.atom.ast_type == ASTType.Comparison
-                and len(lit.atom.guards) == 1
-            ):
-                comp = lit.atom
-                if (
-                    comp.guards[0].comparison == ComparisonOperator.NotEqual
-                    and comp.term.ast_type == ASTType.Variable
-                    and comp.guards[0].term.ast_type == ASTType.Variable
+            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison:
+                assert len(lit.atom.guards) == 1
+                atom = lit.atom
+                guard = atom.guards[0]
+                if atom.term.ast_type != ASTType.Variable or guard.term.ast_type != ASTType.Variable:
+                    continue
+                if (lit.sign == Sign.NoSign and guard.comparison == ComparisonOperator.NotEqual) or (
+                    lit.sign == Sign.Negation and guard.comparison == ComparisonOperator.Equal
                 ):
-                    ret.append((lit, comp.term, comp.guards[0].term))
-            if (
-                lit.ast_type == ASTType.Literal
-                and lit.sign == Sign.Negation
-                and lit.atom.ast_type == ASTType.Comparison
-                and len(lit.atom.guards) == 1
-            ):
-                comp = lit.atom
-                if (
-                    comp.guards[0].comparison == ComparisonOperator.Equal
-                    and comp.term.ast_type == ASTType.Variable
-                    and comp.guards[0].term.ast_type == ASTType.Variable
+                    ret[ComparisonOperator.NotEqual].append((lit, atom.term, guard.term))
+                elif (lit.sign == Sign.NoSign and guard.comparison == ComparisonOperator.LessThan) or (
+                    lit.sign == Sign.Negation and guard.comparison == ComparisonOperator.GreaterThan
                 ):
-                    ret.append((lit, comp.term, comp.guards[0].term))
+                    ret[ComparisonOperator.LessThan].append((lit, atom.term, guard.term))
+                elif (lit.sign == Sign.NoSign and guard.comparison == ComparisonOperator.GreaterThan) or (
+                    lit.sign == Sign.Negation and guard.comparison == ComparisonOperator.LessThan
+                ):
+                    ret[ComparisonOperator.LessThan].append((lit, guard.term, atom.term))
         return ret
 
     @staticmethod
     def _all_equal_symbols(body: Iterable[AST]) -> Iterator[tuple[AST, ...]]:
         """return all tuples of any length of literals that use the same predicate
-        can contain subsets"""
+        can contain subsets, ordered by size"""
         symbols: list[AST] = []
         for lit in body:
             if (
@@ -94,41 +187,6 @@ class SymmetryTranslator:
             if len(preds) == 1:
                 yield tuple(sorted(subset))
 
-    @staticmethod
-    def _equal_pair(body: Iterable[AST], lhs: AST, rhs: AST) -> bool:
-        """return true if lhs and rhs are equal wrt. body"""
-        if lhs == rhs:
-            return True
-        for bodylit in body:
-            if bodylit.ast_type == ASTType.Literal and bodylit.atom.ast_type == ASTType.Comparison:
-                for clhs, operator, crhs in comparison2comparisonlist(bodylit.atom):
-                    both_sides = (clhs == lhs and crhs == rhs) or (clhs == rhs and crhs == lhs)
-                    if (
-                        (bodylit.sign == Sign.NoSign and operator == ComparisonOperator.Equal)
-                        or (bodylit.sign == Sign.Negation and operator == ComparisonOperator.NotEqual)
-                    ) and both_sides:
-                        return True
-        return False
-
-    @staticmethod
-    def _equal(body: Iterable[AST], sides: list[AST]) -> bool:
-        """return true if all elements in sides are equal wrt. body"""
-        if not sides:
-            return True  # nocoverage
-        equals: list[AST] = []
-        unknown = list(sides[1:])
-        equals.append(sides[0])
-        oldsize = 0
-        while oldsize < len(equals):
-            oldsize = len(equals)
-            for lhs in reversed(unknown):
-                for rhs in equals:
-                    if SymmetryTranslator._equal_pair(body, lhs, rhs):
-                        equals.append(lhs)  # pylint: disable=modified-iterating-list
-                        unknown.remove(lhs)
-                        break
-        return len(equals) == len(sides)
-
     T = TypeVar("T")
 
     @staticmethod
@@ -138,191 +196,73 @@ class SymmetryTranslator:
             reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1))))
         )
 
-    def _process_inequalities(
-        self,
-        body: list[AST],
-        inequalities: Collection[tuple[AST, AST, AST]],
-        equalities: list[tuple[AST, ...]],
-    ) -> Optional[list[AST]]:
-        """given a set of inequalities for variables and equalities in predicates
-        create a new body aggregate breaking inequalities or return None"""
-
-        # all positions in the eq_list must be either equal or an inequality
-        symmetric = True
-        used_inequalities: dict[AST, tuple[AST, AST]] = {}
-        used_equalities: list[AST] = []
-        new_inequalities: set[AST] = set()
-        new_aggs: list[AST] = []
-        use_agg = 0
-        finished_equalities: list[set[AST]] = []
-        def sub(small: set[AST], big: set[AST]) -> bool:
-            return small.issubset(big)
-        for eq_list in equalities:
-            if any(map(partial(sub, set(eq_list)), finished_equalities)): # dont check subsets
-                continue
-            # find the position inside the predicate that has the most inequalities
-            used_inequalities_indexed: dict[int, dict[AST, tuple[AST, AST]]] = defaultdict(dict)
-            new_inequalities_indexed: dict[int, list[AST]] = defaultdict(list)
-            for pos, sides in enumerate(zip(*[x.atom.symbol.arguments for x in eq_list])):
-                # (lhs, rhs) = sides
-                # 1. all sides are equal
-                if SymmetryTranslator._equal(body, sides):
-                    continue
-                # 2. all sides are inequal
-
-                found = False
-                for lhs, rhs in combinations(sides, 2):
-                    found = False
-                    for lit, var1, var2 in inequalities:
-                        if (lhs == var1 and rhs == var2) or (lhs == var2 and rhs == var1):
-                            used_inequalities_indexed[pos][lit] = (lhs, rhs)
-                            found = True
-                            break
-                    if not found:
-                        break
-                if found:
-                    new_inequalities_indexed[pos] = [
-                        Literal(LOC, Sign.NoSign, Comparison(lhs_, [Guard(ComparisonOperator.LessThan, rhs_)]))
-                        for lhs_, rhs_ in pairwise(sides)
-                    ]
-                    use_agg += 1
-                    continue
-                symmetric = False
-                break
-            if not symmetric:
-                break
-            finished_equalities.append(set(eq_list))
-            if len(used_inequalities_indexed) > 1:
-                use_agg += 1
-            index, old_ineqs = max(used_inequalities_indexed.items(), key=lambda x: len(x[1]))
-            example_eq = eq_list[0]
-            if not set(old_ineqs.keys()).issubset(used_inequalities):
-                # P1 < P2
-                used_inequalities.update(old_ineqs)
-                new_inequalities.update(new_inequalities_indexed[index])
-                
-            ineqs: set[AST] = set()
-            for tup in used_inequalities.values():
-                ineqs.update(tup)
-            elements = [BodyAggregateElement([x for x in sorted(ineqs) if x in example_eq.atom.symbol.arguments], [example_eq])]
-            agg = BodyAggregate(
-                LOC,
-                Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(eq_list)))),
-                AggregateFunction.Count,
-                elements,
-                None,
-            )
-            
-
-            new_aggs.append(Literal(LOC, Sign.NoSign, agg))
-            arguments = [Variable(LOC, "_") if x in ineqs else x for x in example_eq.atom.symbol.arguments]
-            symbol = example_eq.atom.symbol.update(arguments=arguments)
-            atom = example_eq.atom.update(symbol=symbol)
-            new_aggs.append(example_eq.update(atom=atom))
-            used_equalities.extend(eq_list)
-                
-        if symmetric:
-            if use_agg <= 1:
-                newbody = [b for b in body if b not in chain(used_inequalities, used_equalities)]
-                newbody.extend(sorted(new_aggs))
-            else:
-                newbody = [b for b in body if b not in used_inequalities]
-                newbody.extend(sorted(new_inequalities))
-                
-            return newbody
-        return None
-
-    def _process_aggregate(self, aggregate_lit: AST, body: list[AST], head: AST) -> AST:
-        """process aggregate and replace symmetries inside it"""
-        assert aggregate_lit.ast_type == ASTType.Literal
-        aggregate: AST = aggregate_lit.atom
-        if aggregate.ast_type == ASTType.BodyAggregate:
-            new_elements: list[AST] = []
-            for elem in aggregate.elements:
-                inequalities = SymmetryTranslator._inequalities(elem.condition)
-                # 1. For the largest subset of inequalities
-                for inequality_subset in SymmetryTranslator.largest_subset(inequalities):
-                    # remove all literals from the body that do not have the unequal variables
-                    variables = set()
-                    rest = body + [head]
-                    rest.remove(aggregate_lit)
-                    rest.extend(elem.condition)
-                    for lit, var1, var2 in inequality_subset:
-                        variables.add(var1)
-                        variables.add(var2)
-                        if lit in rest:
-                            rest.remove(lit)
-                    rest = [b for b in rest if len(set(collect_ast(b, "Variable")) & variables) > 0]
-
-                    # compute all lists of equal predicates
-                    equalities = list(SymmetryTranslator._all_equal_symbols(elem.condition))
-                    for lit in set(x for equals in equalities for x in equals):
-                        if lit in rest:
-                            rest.remove(lit)
-
-                    # not applicable due to variable usage outside the predicates
-                    if rest or not equalities:
-                        continue
-                    ret = self._process_inequalities(elem.condition, inequality_subset, equalities)
-                    if ret is not None:
-                        elem = elem.update(condition=ret)
-                        break
-                new_elements.append(elem)
-            return aggregate.update(elements=new_elements)
-        return aggregate
-
     def _process_rule(self, rule: AST) -> AST:
         """This modtrait replaces bodys with symmetry breaking rules that
         count different occurences of the same predicate with a counting aggregate
         if this preserves semantics. This can reduce the number of grounded
-        rules by half for this rule, but has no effect on solving."""
+        rules."""
         assert rule.ast_type == ASTType.Rule
         head: AST = rule.head
         body: list[AST] = list(rule.body)
 
-        # 0. process aggregates inside the rule first
-        newbody: list[AST] = []
-        for lit in body:
-            if lit.ast_type == ASTType.Literal and lit.atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
-                newbody.append(lit.update(atom=self._process_aggregate(lit, body, head)))
-            else:
-                newbody.append(lit)
-        rule = rule.update(body=newbody)
-        body = list(rule.body)
+        for symmetry in list(SymmetryTranslator.largest_symmetric_group(body, [head])):
+            ### Translate to aggregate
+            if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
+                # remove old symmetric literals
+                for s in symmetry.literals:
+                    body.remove(s)
+                # remove inequalities
+                for lits in chain(symmetry.strict_neq.values(), symmetry.nstrict_neq.values()):
+                    body = [x for x in body if x not in lits]
+                # create projected lit
+                uneq_positions = set(chain(symmetry.strict_neq.keys(), symmetry.nstrict_neq.keys()))
+                same: list[AST] = []
+                nsame: list[AST] = []
+                first_sym = symmetry.literals[0]
+                for i, x in enumerate(first_sym.atom.symbol.arguments):
+                    if i in uneq_positions:
+                        nsame.append(x)
+                        same.append(Variable(LOC, "_"))
+                    else:
+                        same.append(x)
+                symbol = first_sym.atom.symbol.update(arguments=same)
+                atom = first_sym.atom.update(symbol=symbol)
+                body.append(first_sym.update(atom=atom))
 
-        inequalities = SymmetryTranslator._inequalities(body)
+                # create new aggregate
+                elements = [BodyAggregateElement(nsame, [first_sym])]
+                agg = BodyAggregate(
+                    LOC,
+                    Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(symmetry.literals)))),
+                    AggregateFunction.Count,
+                    elements,
+                    None,
+                )
+                body.append(Literal(LOC, Sign.NoSign, agg))
+            elif len(symmetry.nstrict_neq) == 0:
+                ### update with new symmetries
+                # remove inequalities and add new symmetry breaking
+                first = next(iter(symmetry.strict_neq))
+                for uneq in symmetry.strict_neq[first]:
+                    body.remove(uneq)
+                    guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
+                    body.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
 
-        # 1. For the largest subset of inequalities
-        for inequality_subset in SymmetryTranslator.largest_subset(inequalities):
-            # remove all literals from the body that do not have the unequal variables
-            variables = set()
-            rest = body + [head]
-            for lit, var1, var2 in inequality_subset:
-                variables.add(var1)
-                variables.add(var2)
-                if lit in rest:
-                    rest.remove(lit)
-            rest = [b for b in rest if len(set(collect_ast(b, "Variable")) & variables) > 0]
+        return rule.update(body=body)
 
-            # compute all lists of equal predicates
-            equalities = list(SymmetryTranslator._all_equal_symbols(rest))
-            for lit in set(x for equals in equalities for x in equals):
-                rest.remove(lit)
-
-            # not applicable due to variable usage outside the predicates
-            if rest or not equalities:
-                continue
-            ret = self._process_inequalities(body, inequality_subset, equalities)
-            if ret is not None:
-                return rule.update(body=ret)
-        return rule
-
-    def execute(self, prg: list[AST]) -> list[AST]:
+    def execute(self, orig: list[AST]) -> list[AST]:
         """
         replace easy min/max aggregates with chaining rules
         also replace the usage of the results in sum and optimize conditions
         """
         ret: list[AST] = []
+        prg: list[AST] = []
+        for rule in orig:
+            if rule.ast_type == ASTType.Rule:
+                rule = expand_comparisons(rule)
+                prg.append(replace_simple_assignments(rule))
+                continue
+            ret.append(rule)
         for rule in prg:
             if rule.ast_type == ASTType.Rule:
                 ret.append(self._process_rule(rule))
