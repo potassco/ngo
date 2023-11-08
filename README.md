@@ -118,7 +118,7 @@ rules.
 ```
 gets replaced by
 ```
-:- 2 #count {slot(J1,M,T) : slot(J1,M,T)}.
+:- slot(_,M,T), 2 #count {J1 : slot(J1,M,T)}.
 ```
 For more complex rules the symmetry breaking is improved:
 ```

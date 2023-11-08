@@ -276,7 +276,7 @@ class DomainPredicates:
                 newatom = SymbolicAtom(
                     Function(
                         LOC,
-                        self.domain_predicate(pred)[0],
+                        self.domain_predicate(pred).name,
                         atom.symbol.arguments,
                         False,
                     )

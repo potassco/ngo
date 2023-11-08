@@ -17,9 +17,12 @@ from clingo.ast import (
     BodyAggregateElement,
     Comparison,
     ComparisonOperator,
+    Function,
     Guard,
     Literal,
+    Rule,
     Sign,
+    SymbolicAtom,
     SymbolicTerm,
     Variable,
 )
@@ -27,6 +30,7 @@ from clingo.symbol import Number
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.utils.ast import LOC, Predicate, collect_ast, expand_comparisons, global_vars, replace_simple_assignments
+from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("symmetry")
@@ -43,7 +47,8 @@ class SymmetryTranslator:
         strict_neq: dict[int, list[AST]]  # strict_neq[pos] = [lit, ...] for != comparisons
         nstrict_neq: dict[int, list[AST]]  # nstrict_neq[pos] = [lit, ...] for < comparisons
 
-    def __init__(self, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
+    def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
+        self.unique_names = unique_names
         self.rule_dependency = rule_dependency
         self.domain_predicates = domain_predicates
 
@@ -72,6 +77,7 @@ class SymmetryTranslator:
         All unequal Variables are not to allowed to be used within the rest of the
         visible level of A and B
         """
+        # pylint: disable=too-many-branches
         potential_equalities: list[set[AST]] = []
         potential_strict_inequalities: list[dict[int, list[AST]]] = []
         potential_nstrict_inequalities: list[dict[int, list[AST]]] = []
@@ -115,6 +121,7 @@ class SymmetryTranslator:
                         potential_strict_inequalities[-1][pos].append(lit)
                     else:
                         potential_nstrict_inequalities[-1][pos].append(lit)
+        # cross check
         for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
             used_uneqal_variables: set[AST] = set()
             lits = body + rest
@@ -196,12 +203,94 @@ class SymmetryTranslator:
             reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1))))
         )
 
-    def _process_rule(self, rule: AST) -> AST:
+    def _create_count(self, symmetry: Symmetry, rules: list[AST]) -> list[AST]:
+        """given a symmetry, create the representive count aggregate
+        might add aux rules to the program"""
+        # create projected lit
+        uneq_positions = set(chain(symmetry.strict_neq.keys(), symmetry.nstrict_neq.keys()))
+        same: list[AST] = []
+        nsame: list[AST] = []
+        first_sym = symmetry.literals[0]
+        for i, x in enumerate(first_sym.atom.symbol.arguments):
+            if i in uneq_positions:
+                nsame.append(x)
+                same.append(Variable(LOC, "_"))
+            else:
+                same.append(x)
+        # get domain if possible
+        name = first_sym.atom.symbol.name
+        pred = Predicate(name, len(same))
+        if self.domain_predicates.has_domain(pred):
+            rules.extend(self.domain_predicates.create_domain(pred))
+            name = self.domain_predicates.domain_predicate(pred).name
+        symbol = first_sym.atom.symbol.update(name=name, arguments=same)
+        atom = first_sym.atom.update(symbol=symbol)
+
+        # create new aggregate
+        elements = [BodyAggregateElement(nsame, [first_sym])]
+        agg = BodyAggregate(
+            LOC,
+            Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(symmetry.literals)))),
+            AggregateFunction.Count,
+            elements,
+            None,
+        )
+        return [first_sym.update(atom=atom), Literal(LOC, Sign.NoSign, agg)]
+
+    def _process_aggregates(self, rule: AST) -> list[AST]:
+        """given a rule, process all aggregates for symmetries
+        and either break them or create aux rules using counting
+        """
+        ret: list[AST] = []
+        newbody: list[AST] = []
+        for lit in rule.body:
+            if not (lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate):
+                newbody.append(lit)
+                continue
+            new_elements: list[AST] = []
+            for elem in lit.atom.elements:
+                condition = list(elem.condition)
+                for symmetry in list(
+                    SymmetryTranslator.largest_symmetric_group(
+                        condition, [rule.head] + list(elem.terms) + list(rule.body)
+                    )
+                ):
+                    if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
+                        # remove old symmetric literals
+                        for s in symmetry.literals:
+                            condition.remove(s)
+                        # remove inequalities
+                        for lits in chain(symmetry.strict_neq.values(), symmetry.nstrict_neq.values()):
+                            condition = [x for x in condition if x not in lits]
+                        # create new rule and extend condition with new predicate
+                        aux_body = self._create_count(symmetry, ret)
+                        args = [x for x in aux_body[0].atom.symbol.arguments if x.name != "_"]
+                        pred = self.unique_names.new_auxpredicate(len(args))
+                        head_lit = Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, pred.name, args, False)))
+                        ret.append(Rule(LOC, head_lit, aux_body))
+                        condition.append(head_lit)
+                    elif len(symmetry.nstrict_neq) == 0:
+                        ### update with new symmetries
+                        # remove inequalities and add new symmetry breaking
+                        first = next(iter(symmetry.strict_neq))
+                        for uneq in symmetry.strict_neq[first]:
+                            condition.remove(uneq)
+                            guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
+                            condition.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
+                new_elements.append(elem.update(condition=condition))
+            atom = lit.atom.update(elements=new_elements)
+            newbody.append(lit.update(atom=atom))
+
+        ret.append(rule.update(body=newbody))
+        return ret
+
+    def _process_rule(self, rule: AST) -> list[AST]:
         """This modtrait replaces bodys with symmetry breaking rules that
-        count different occurences of the same predicate with a counting aggregate
-        if this preserves semantics. This can reduce the number of grounded
-        rules."""
+        count different occurences of the same predicate.
+        This can reduce the number of grounded rules.
+        Might also return additional aux rules."""
         assert rule.ast_type == ASTType.Rule
+        ret: list[AST] = []
         head: AST = rule.head
         body: list[AST] = list(rule.body)
 
@@ -214,31 +303,7 @@ class SymmetryTranslator:
                 # remove inequalities
                 for lits in chain(symmetry.strict_neq.values(), symmetry.nstrict_neq.values()):
                     body = [x for x in body if x not in lits]
-                # create projected lit
-                uneq_positions = set(chain(symmetry.strict_neq.keys(), symmetry.nstrict_neq.keys()))
-                same: list[AST] = []
-                nsame: list[AST] = []
-                first_sym = symmetry.literals[0]
-                for i, x in enumerate(first_sym.atom.symbol.arguments):
-                    if i in uneq_positions:
-                        nsame.append(x)
-                        same.append(Variable(LOC, "_"))
-                    else:
-                        same.append(x)
-                symbol = first_sym.atom.symbol.update(arguments=same)
-                atom = first_sym.atom.update(symbol=symbol)
-                body.append(first_sym.update(atom=atom))
-
-                # create new aggregate
-                elements = [BodyAggregateElement(nsame, [first_sym])]
-                agg = BodyAggregate(
-                    LOC,
-                    Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(symmetry.literals)))),
-                    AggregateFunction.Count,
-                    elements,
-                    None,
-                )
-                body.append(Literal(LOC, Sign.NoSign, agg))
+                body.extend(self._create_count(symmetry, ret))
             elif len(symmetry.nstrict_neq) == 0:
                 ### update with new symmetries
                 # remove inequalities and add new symmetry breaking
@@ -248,7 +313,20 @@ class SymmetryTranslator:
                     guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
                     body.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
 
-        return rule.update(body=body)
+        ret.append(rule.update(body=body))
+        return ret
+
+    def _process(self, rule: AST) -> list[AST]:
+        """This modtrait replaces bodys with symmetry breaking rules that
+        count different occurences of the same predicate with a counting aggregate
+        if this preserves semantics. This can reduce the number of grounded
+        rules.
+        Might also return additional aux rules."""
+        ret: list[AST] = []
+        rules = self._process_aggregates(rule)
+        for r in rules:
+            ret.extend(self._process_rule(r))
+        return ret
 
     def execute(self, orig: list[AST]) -> list[AST]:
         """
@@ -262,10 +340,10 @@ class SymmetryTranslator:
                 rule = expand_comparisons(rule)
                 prg.append(replace_simple_assignments(rule))
                 continue
-            ret.append(rule)
+            prg.append(rule)
         for rule in prg:
             if rule.ast_type == ASTType.Rule:
-                ret.append(self._process_rule(rule))
+                ret.extend(self._process(rule))
                 continue
             ret.append(rule)
         return ret

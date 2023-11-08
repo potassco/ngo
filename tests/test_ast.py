@@ -385,6 +385,18 @@ a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)
 """,
             """a(X,X) :- bar(A,B); b(X); c(X); #sum { A: dom(A,A); A,B: foo(A,B) }.""",
         ),
+        (
+            """
+#show.
+""",
+            """#show.""",
+        ),
+        (
+            """
+#minimize {T,U : all_finish(T, U), T=U}.
+""",
+            """:~ all_finish(T,T). [T@0,T]""",
+        ),
     ],
 )
 def test_replace_simple_assignments(input_: str, output: str) -> None:

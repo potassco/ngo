@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from functools import partial
 from itertools import product
-from typing import Callable, Iterable, Iterator, NamedTuple, Optional, Sequence
+from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
 
 import networkx as nx
 from clingo import SymbolType
@@ -671,8 +671,6 @@ def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
 def expand_comparisons(rule: AST) -> AST:
     """given a rule, return a rule with expanded comparisons"""
     assert rule.ast_type == ASTType.Rule
-    if not rule.body:
-        return rule
     return rule.update(body=normalize_operators(rule.body))
 
 
@@ -680,29 +678,37 @@ def normalize_operators(literals: Iterable[AST]) -> list[AST]:
     """replace a list of literals with a new list where all comparisons are binary and not chained"""
     new_literals: list[AST] = []
     for lit in literals:
-        if lit.ast_type == ASTType.Literal:
-            atom = lit.atom
-            if lit.atom.ast_type == ASTType.Comparison:
-                for lhs, cop, rhs in comparison2comparisonlist(atom):
-                    new_literals.append(Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)])))
-            elif atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate) and atom.elements is not None:
-                new_elements: list[AST] = []
-                for elem in atom.elements:
-                    new_condition: list[AST] = []
-                    for c in elem.condition:
-                        if c.atom.ast_type == ASTType.Comparison:
-                            for lhs, cop, rhs in comparison2comparisonlist(c.atom):
-                                new_condition.append(Literal(LOC, c.sign, Comparison(lhs, [Guard(cop, rhs)])))
-                        else:
-                            new_condition.append(c)
-                    new_elements.append(elem.update(condition=new_condition))
-                new_atom = atom.update(elements=new_elements)
-                new_lit = lit.update(atom=new_atom)
-                new_literals.append(new_lit)
-            else:
-                new_literals.append(lit)
-        else:
-            new_literals.append(lit)
+        new_lit = lit.update()
+        if lit.ast_type != ASTType.Literal:
+            new_literals.append(new_lit)
+            continue
+        atom = lit.atom
+        if atom.ast_type == ASTType.Comparison:
+            new_literals.extend(
+                [
+                    Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)]))
+                    for lhs, cop, rhs in comparison2comparisonlist(atom)
+                ]
+            )
+            continue
+        if atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
+            new_elements: list[AST] = []
+            for elem in atom.elements:
+                new_condition: list[AST] = []
+                for c in elem.condition:
+                    if c.atom.ast_type == ASTType.Comparison:
+                        new_condition.extend(
+                            [
+                                Literal(LOC, c.sign, Comparison(lhs, [Guard(cop, rhs)]))
+                                for lhs, cop, rhs in comparison2comparisonlist(c.atom)
+                            ]
+                        )
+                        continue
+                    new_condition.append(c)
+                new_elements.append(elem.update(condition=new_condition))
+            new_atom = atom.update(elements=new_elements)
+            new_lit = lit.update(atom=new_atom)
+        new_literals.append(new_lit)
     return new_literals
 
 
@@ -729,10 +735,8 @@ def global_vars(lits: list[AST]) -> set[AST]:
     return set.union(*collect_binding_information_body(lits))
 
 
-def _get_simple_equalities(lits: Optional[list[AST]]) -> list[AST]:
+def _get_simple_equalities(lits: list[AST]) -> list[AST]:
     ret: list[AST] = []
-    if lits is None:
-        return ret
     for lit in lits:
         if (
             lit.ast_type == ASTType.Literal
