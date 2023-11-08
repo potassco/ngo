@@ -736,18 +736,17 @@ def global_vars(lits: list[AST]) -> set[AST]:
 
 
 def _get_simple_equalities(lits: list[AST]) -> list[AST]:
+    """only return var1 = var2 or not var1 != var2 equalities"""
     ret: list[AST] = []
     for lit in lits:
         if (
             lit.ast_type == ASTType.Literal
             and lit.atom.ast_type == ASTType.Comparison
             and lit.atom.term.ast_type == ASTType.Variable
-            and not has_interval(lit.atom.guards[0].term)
+            and lit.atom.guards[0].term.ast_type == ASTType.Variable
         ):
-            if (
-                (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal)
-                or (lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual)
-                and lit.atom.term.ast_type == lit.atom.term.ast_type == ASTType.Variable
+            if (lit.sign == Sign.NoSign and lit.atom.guards[0].comparison == ComparisonOperator.Equal) or (
+                lit.sign == Sign.Negation and lit.atom.guards[0].comparison == ComparisonOperator.NotEqual
             ):
                 ret.append(lit)
     return ret

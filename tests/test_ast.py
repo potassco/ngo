@@ -397,6 +397,14 @@ a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)
 """,
             """:~ all_finish(T,T). [T@0,T]""",
         ),
+        (
+            """
+working(J2,1,D) :- perm(J1,P1); working(J1,1,D1); perm(J2,P2);\
+ duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).
+""",
+            """working(J2,1,D) :- perm(J1,P1); working(J1,1,D1);\
+ perm(J2,P2); duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).""",
+        ),
     ],
 )
 def test_replace_simple_assignments(input_: str, output: str) -> None:
