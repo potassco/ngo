@@ -242,6 +242,7 @@ class SymmetryTranslator:
         """given a rule, process all aggregates for symmetries
         and either break them or create aux rules using counting
         """
+        #pylint: disable=too-many-nested-blocks
         ret: list[AST] = []
         newbody: list[AST] = []
         for lit in rule.body:
@@ -257,6 +258,7 @@ class SymmetryTranslator:
                     )
                 ):
                     if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
+                        log.info(f"Replace atleast2 inside aggregate {str(lit)} with a counting aggregate.")
                         # remove old symmetric literals
                         for s in symmetry.literals:
                             condition.remove(s)
@@ -271,13 +273,15 @@ class SymmetryTranslator:
                         ret.append(Rule(LOC, head_lit, aux_body))
                         condition.append(head_lit)
                     elif len(symmetry.nstrict_neq) == 0:
+                        log.info(f"Improve symmetries on {str(lit)}.")
                         ### update with new symmetries
                         # remove inequalities and add new symmetry breaking
                         first = next(iter(symmetry.strict_neq))
                         for uneq in symmetry.strict_neq[first]:
-                            condition.remove(uneq)
-                            guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
-                            condition.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
+                            if uneq in condition:
+                                condition.remove(uneq)
+                                guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
+                                condition.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
                 new_elements.append(elem.update(condition=condition))
             atom = lit.atom.update(elements=new_elements)
             newbody.append(lit.update(atom=atom))
@@ -298,6 +302,7 @@ class SymmetryTranslator:
         for symmetry in list(SymmetryTranslator.largest_symmetric_group(body, [head])):
             ### Translate to aggregate
             if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
+                log.info(f"Replace atleast2 in {str(rule)} with a counting aggregate.")
                 # remove old symmetric literals
                 for s in symmetry.literals:
                     body.remove(s)
@@ -306,13 +311,15 @@ class SymmetryTranslator:
                     body = [x for x in body if x not in lits]
                 body.extend(self._create_count(symmetry, ret))
             elif len(symmetry.nstrict_neq) == 0:
+                log.info(f"Improve symmetries on {str(rule)}")
                 ### update with new symmetries
                 # remove inequalities and add new symmetry breaking
                 first = next(iter(symmetry.strict_neq))
                 for uneq in symmetry.strict_neq[first]:
-                    body.remove(uneq)
-                    guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
-                    body.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
+                    if uneq in body:
+                        body.remove(uneq)
+                        guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
+                        body.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
 
         ret.append(rule.update(body=body))
         return ret
