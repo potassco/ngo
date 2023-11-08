@@ -76,6 +76,7 @@ class SymmetryTranslator:
         Only one asymetric inequality is allowed.
         All unequal Variables are not to allowed to be used within the rest of the
         visible level of A and B
+        At least one inequality needs to be present.
         """
         # pylint: disable=too-many-branches
         potential_equalities: list[set[AST]] = []
@@ -112,7 +113,7 @@ class SymmetryTranslator:
                     used_inequalities.append((op, lit, pos))
                 if not fine:
                     break
-            if fine:  # and len(global_vars(lit_list) & uneqal_variables) == 0:
+            if fine and len(used_inequalities) > 0:
                 potential_equalities.append(set(equality))
                 potential_strict_inequalities.append(defaultdict(list))
                 potential_nstrict_inequalities.append(defaultdict(list))
