@@ -8,77 +8,6 @@ from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
-    "prg, symmetries",
-    (
-        (
-            "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.",
-            [("player(P1,X,Y)", "player(P2,X,Y)")],
-        ),
-        (
-            "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), not P1 = P2.",
-            [("player(P1,X,Y)", "player(P2,X,Y)")],
-        ),
-        (
-            "f(X) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
-            [("player(P1,X,Y,V1)", "player(P2,X,Y,V2)")],
-        ),
-        (
-            "f(V1) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
-            [],
-        ),
-        ("f(X) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != V1, V1 != P2.", []),
-        (
-            "#false :- at(X,Y,T); at(X,Y,U); foo(Z,W,T); bar(Z,W,U); not U = T.",
-            [],
-        ),
-        (
-            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
-            [("at(X,Y,T)", "at(X,Y,U)"), ("minot(Z,W,T)", "minot(Z,W,U)")],
-        ),
-        (
-            "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
-            [("player(P1,X,Y)", "player(P2,X,Y)", "player(P3,X,Y)")],
-        ),
-        (  # aggregate test needed
-            ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
-            [],
-        ),
-    ),
-)
-def test_largest_symmetric_group_body(prg: str, symmetries: list[tuple[str, ...]]) -> None:
-    """test finding symmetries in bodies"""
-    ast: list[AST] = []
-    parse_string(prg, ast.append)
-    found_syms = list(SymmetryTranslator.largest_symmetric_group(list(ast[1].body), [ast[1].head]))
-    assert len(found_syms) == len(symmetries)
-    for my_sym, out_sym in zip(sorted(symmetries), sorted(found_syms)):
-        assert my_sym == tuple(str(x) for x in out_sym.literals)
-
-
-@pytest.mark.parametrize(
-    "prg, symmetries",
-    (
-        (  # aggregate test needed
-            ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
-            [("match(M1,W)", "match(M2,W)", "match(M3,W)")],
-        ),
-    ),
-)
-def test_largest_symmetric_group_aggregate(prg: str, symmetries: list[tuple[str, ...]]) -> None:
-    """test finding symmetries on aggregates"""
-    ast: list[AST] = []
-    parse_string(prg, ast.append)
-    found_syms = list(
-        SymmetryTranslator.largest_symmetric_group(
-            list(ast[1].body[0].atom.elements[0].condition), [ast[1].head] + list(ast[1].body[1:])
-        )
-    )
-    assert len(found_syms) == len(symmetries)
-    for my_sym, out_sym in zip(sorted(symmetries), sorted(found_syms)):
-        assert my_sym == tuple(str(x) for x in out_sym.literals)
-
-
-@pytest.mark.parametrize(
     "prg, converted_prg",
     (
         (
@@ -122,9 +51,13 @@ def test_largest_symmetric_group_aggregate(prg: str, symmetries: list[tuple[str,
             "#program base.\n#false :- at(X,Y,T); at(X,Y,U); foo(Z,W,T); bar(Z,W,U); not U = T.",
         ),
         (
-            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
-            "#program base.\n#false :- minot(Z,W,_); 2 <= #count { T: minot(Z,W,T) }; at(X,Y,_);\
+            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,V1); minot(Z,W,V2); not U = T; V1 != V2.",
+            "#program base.\n#false :- minot(Z,W,_); 2 <= #count { V1: minot(Z,W,V1) }; at(X,Y,_);\
  2 <= #count { T: at(X,Y,T) }.",
+        ),
+        (
+            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
+            "#program base.\n#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); T < U.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
@@ -156,6 +89,16 @@ f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.
 __dom_player(P,X,Y) :- name(P); pos(X); pos(Y).
 f(X) :- node(X); __dom_player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.""",
         ),
+        (
+            "false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y != B.",
+            """#program base.
+false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); Y != B; A < X.""",
+        ),
+        (
+            "false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B.",
+            """#program base.
+false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B.""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
@@ -165,8 +108,8 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     rdp = RuleDependency(ast)
     unique_names = UniqueNames(ast, [])
     dp = DomainPredicates(unique_names, ast)
-    mma = SymmetryTranslator(unique_names, rdp, dp)
-    output = "\n".join(map(str, mma.execute(ast)))
+    st = SymmetryTranslator(unique_names, rdp, dp)
+    output = "\n".join(map(str, st.execute(ast)))
     assert converted_prg == output
 
 

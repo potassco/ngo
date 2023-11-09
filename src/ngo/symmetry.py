@@ -6,9 +6,10 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
-from itertools import chain, combinations
+from itertools import chain, combinations, pairwise
 from typing import Any, Collection, Iterable, Iterator, Optional, TypeVar
 
+import networkx as nx
 from clingo.ast import (
     AST,
     AggregateFunction,
@@ -47,6 +48,118 @@ class SymmetryTranslator:
         strict_neq: dict[int, list[AST]]  # strict_neq[pos] = [lit, ...] for != comparisons
         nstrict_neq: dict[int, list[AST]]  # nstrict_neq[pos] = [lit, ...] for < comparisons
 
+    class SymmetryBundle:
+        """a bundle of symmetries that affects each other"""
+
+        def __init__(
+            self,
+            domain_predicates: DomainPredicates,
+            unique_names: UniqueNames,
+            in_aggregate: bool,
+            symmetries: list["SymmetryTranslator.Symmetry"],
+        ):
+            self.domain_predicates = domain_predicates
+            self.unique_names = unique_names
+            self._remove_lits: set[AST] = set()
+            self._aux_rules: list[AST] = []
+            self._add_lits: set[AST] = set()
+            complex_ = len(symmetries) == 1
+            for sym in symmetries:
+                complex_ = complex_ and bool(
+                    len(sym.nstrict_neq) + len(sym.strict_neq) == 1
+                )  #  will be false if one sym needs to be simple
+            if complex_:
+                self.init_complex(in_aggregate, symmetries)
+            else:
+                self.init_simple(symmetries)
+
+        def init_complex(self, in_aggregate: bool, symmetries: list["SymmetryTranslator.Symmetry"]) -> None:
+            """translate to count aggregate"""
+            for sym in symmetries:
+                # remove symmetries
+                for s in sym.literals:
+                    self._remove_lits.add(s)
+                # remove inequalities
+                for lits in chain(sym.strict_neq.values(), sym.nstrict_neq.values()):
+                    self._remove_lits.update(lits)
+                if in_aggregate:
+                    # create new rule and extend condition with new predicate
+                    aux_body = self._create_count(sym, self._aux_rules)
+                    args = [x for x in aux_body[0].atom.symbol.arguments if x.name != "_"]
+                    pred = self.unique_names.new_auxpredicate(len(args))
+                    head_lit = Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, pred.name, args, False)))
+                    self._aux_rules.append(Rule(LOC, head_lit, aux_body))
+                    self._add_lits.add(head_lit)
+                else:
+                    self._add_lits.update(self._create_count(sym, self._aux_rules))
+
+        def init_simple(self, symmetries: list["SymmetryTranslator.Symmetry"]) -> None:
+            """simply improve symmetry by replacing one != with <"""
+            improve = True
+            for sym in symmetries:
+                if sym.nstrict_neq:
+                    improve = False
+
+            if improve:
+                # Improve symmetries by changing 1 set of variable comparisons
+                sym = symmetries[0]
+                it = next(iter(sym.strict_neq))
+                collect: set[AST] = set()
+                for lit in sym.strict_neq[it]:
+                    self._remove_lits.add(lit)
+                    collect.add(lit.atom.term)
+                    collect.add(lit.atom.guards[0].term)
+                for lhs, rhs in pairwise(sorted(collect)):
+                    self._add_lits.add(
+                        Literal(LOC, Sign.NoSign, Comparison(lhs, [Guard(ComparisonOperator.LessThan, rhs)]))
+                    )
+
+        def _create_count(self, symmetry: "SymmetryTranslator.Symmetry", rules: list[AST]) -> list[AST]:
+            """given a symmetry, create the representive count aggregate and projector and return it
+            might add aux rules to the program"""
+            # create projected lit
+            uneq_positions = set(chain(symmetry.strict_neq.keys(), symmetry.nstrict_neq.keys()))
+            same: list[AST] = []
+            nsame: list[AST] = []
+            first_sym = symmetry.literals[0]
+            for i, x in enumerate(first_sym.atom.symbol.arguments):
+                if i in uneq_positions:
+                    nsame.append(x)
+                    same.append(Variable(LOC, "_"))
+                else:
+                    same.append(x)
+            # get domain if possible
+            name = first_sym.atom.symbol.name
+            pred = Predicate(name, len(same))
+            if self.domain_predicates.has_domain(pred):
+                rules.extend(self.domain_predicates.create_domain(pred))
+                name = self.domain_predicates.domain_predicate(pred).name
+            symbol = first_sym.atom.symbol.update(name=name, arguments=same)
+            atom = first_sym.atom.update(symbol=symbol)
+
+            # create new aggregate
+            elements = [BodyAggregateElement(nsame, [first_sym])]
+            agg = BodyAggregate(
+                LOC,
+                Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(symmetry.literals)))),
+                AggregateFunction.Count,
+                elements,
+                None,
+            )
+            return [first_sym.update(atom=atom), Literal(LOC, Sign.NoSign, agg)]
+
+        def remove_lits(self) -> list[AST]:
+            """a list of all literals that neede to be removed"""
+            return sorted(self._remove_lits)
+
+        def aux_rules(self) -> list[AST]:
+            """a list of aux rules that need to be added"""
+            return self._aux_rules
+
+        def add_lits(self) -> list[AST]:
+            """a list of all literals that need to be added"""
+            return sorted(self._add_lits)
+
     def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
         self.unique_names = unique_names
         self.rule_dependency = rule_dependency
@@ -64,8 +177,7 @@ class SymmetryTranslator:
                     return (op, lit)
         return None
 
-    @staticmethod
-    def largest_symmetric_group(body: list[AST], rest: list[AST]) -> Iterator[Symmetry]:
+    def largest_symmetric_group(self, body: list[AST], rest: list[AST], in_aggregate: bool) -> Iterator[SymmetryBundle]:
         """
         Given a list A of literals (a body or a condition)
         Given a list B of literals that is also visible in the same scope
@@ -90,6 +202,7 @@ class SymmetryTranslator:
         #     Then do a crosscheck of the uneqal variables of all of them
         #     None of them may occur outside
         #     If they occur outside, only take a subset of the potential equalities
+        # Group them together by shared variables
         def issubset(sub: set[Any], dom: set[Any]) -> bool:
             return sub.issubset(dom)
 
@@ -124,7 +237,8 @@ class SymmetryTranslator:
                         potential_nstrict_inequalities[-1][pos].append(lit)
         # cross check
         for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
-            used_uneqal_variables: set[AST] = set()
+            used_variables: set[AST] = set()
+            used_uneq_variables: dict[int, set[AST]] = defaultdict(set)
             lits = body + rest
             for index in index_subset:
                 for lit in potential_equalities[index]:
@@ -134,13 +248,31 @@ class SymmetryTranslator:
                 ):
                     lits = [x for x in lits if x not in neq_lits]
                     for pred in potential_equalities[index]:
-                        used_uneqal_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
-            if len(global_vars(lits) & used_uneqal_variables) == 0:
-                for index in index_subset:
-                    yield SymmetryTranslator.Symmetry(
-                        literals=tuple(sorted(potential_equalities[index])),
-                        strict_neq=potential_strict_inequalities[index],
-                        nstrict_neq=potential_nstrict_inequalities[index],
+                        used_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
+                        used_uneq_variables[index].update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
+            if len(global_vars(lits) & used_variables) == 0:
+                # built ccs, in a cc, only one comparison can be improved
+                g = nx.Graph()
+                for index1 in index_subset:
+                    g.add_edge(index1, index1)  # cc's of length 1
+                    for index2 in index_subset:
+                        if index1 == index2:
+                            continue
+                        if used_uneq_variables[index1] & used_uneq_variables[index2]:
+                            g.add_edge(index1, index2)
+                for cc in nx.connected_components(g):
+                    yield SymmetryTranslator.SymmetryBundle(
+                        self.domain_predicates,
+                        self.unique_names,
+                        in_aggregate,
+                        [
+                            SymmetryTranslator.Symmetry(
+                                literals=tuple(sorted(potential_equalities[index])),
+                                strict_neq=potential_strict_inequalities[index],
+                                nstrict_neq=potential_nstrict_inequalities[index],
+                            )
+                            for index in cc
+                        ],
                     )
                 return
 
@@ -204,87 +336,33 @@ class SymmetryTranslator:
             reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1))))
         )
 
-    def _create_count(self, symmetry: Symmetry, rules: list[AST]) -> list[AST]:
-        """given a symmetry, create the representive count aggregate
-        might add aux rules to the program"""
-        # create projected lit
-        uneq_positions = set(chain(symmetry.strict_neq.keys(), symmetry.nstrict_neq.keys()))
-        same: list[AST] = []
-        nsame: list[AST] = []
-        first_sym = symmetry.literals[0]
-        for i, x in enumerate(first_sym.atom.symbol.arguments):
-            if i in uneq_positions:
-                nsame.append(x)
-                same.append(Variable(LOC, "_"))
-            else:
-                same.append(x)
-        # get domain if possible
-        name = first_sym.atom.symbol.name
-        pred = Predicate(name, len(same))
-        if self.domain_predicates.has_domain(pred):
-            rules.extend(self.domain_predicates.create_domain(pred))
-            name = self.domain_predicates.domain_predicate(pred).name
-        symbol = first_sym.atom.symbol.update(name=name, arguments=same)
-        atom = first_sym.atom.update(symbol=symbol)
-
-        # create new aggregate
-        elements = [BodyAggregateElement(nsame, [first_sym])]
-        agg = BodyAggregate(
-            LOC,
-            Guard(ComparisonOperator.LessEqual, SymbolicTerm(LOC, Number(len(symmetry.literals)))),
-            AggregateFunction.Count,
-            elements,
-            None,
-        )
-        return [first_sym.update(atom=atom), Literal(LOC, Sign.NoSign, agg)]
-
     def _process_aggregates(self, rule: AST) -> list[AST]:
         """given a rule, process all aggregates for symmetries
         and either break them or create aux rules using counting
         """
-        #pylint: disable=too-many-nested-blocks
+        # pylint: disable=too-many-nested-blocks
         ret: list[AST] = []
         newbody: list[AST] = []
-        for lit in rule.body:
-            if not (lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate):
-                newbody.append(lit)
+        for blit in rule.body:
+            if not (blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate):
+                newbody.append(blit)
                 continue
             new_elements: list[AST] = []
-            for elem in lit.atom.elements:
+            for elem in blit.atom.elements:
                 condition = list(elem.condition)
-                for symmetry in list(
-                    SymmetryTranslator.largest_symmetric_group(
-                        condition, [rule.head] + list(elem.terms) + list(rule.body)
-                    )
+                for symmetry_bundle in list(
+                    self.largest_symmetric_group(condition, [rule.head] + list(elem.terms) + list(rule.body), True)
                 ):
-                    if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
-                        log.info(f"Replace atleast2 inside aggregate {str(lit)} with a counting aggregate.")
-                        # remove old symmetric literals
-                        for s in symmetry.literals:
-                            condition.remove(s)
-                        # remove inequalities
-                        for lits in chain(symmetry.strict_neq.values(), symmetry.nstrict_neq.values()):
-                            condition = [x for x in condition if x not in lits]
-                        # create new rule and extend condition with new predicate
-                        aux_body = self._create_count(symmetry, ret)
-                        args = [x for x in aux_body[0].atom.symbol.arguments if x.name != "_"]
-                        pred = self.unique_names.new_auxpredicate(len(args))
-                        head_lit = Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, pred.name, args, False)))
-                        ret.append(Rule(LOC, head_lit, aux_body))
-                        condition.append(head_lit)
-                    elif len(symmetry.nstrict_neq) == 0:
-                        log.info(f"Improve symmetries on {str(lit)}.")
-                        ### update with new symmetries
-                        # remove inequalities and add new symmetry breaking
-                        first = next(iter(symmetry.strict_neq))
-                        for uneq in symmetry.strict_neq[first]:
-                            if uneq in condition:
-                                condition.remove(uneq)
-                                guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
-                                condition.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
+                    log.info(f"Replace atleast2 in aggregate {str(blit)}.")
+                    for lit in symmetry_bundle.remove_lits():
+                        condition.remove(lit)
+                    for lit in symmetry_bundle.add_lits():
+                        condition.append(lit)
+                    ret.extend(symmetry_bundle.aux_rules())
+
                 new_elements.append(elem.update(condition=condition))
-            atom = lit.atom.update(elements=new_elements)
-            newbody.append(lit.update(atom=atom))
+            atom = blit.atom.update(elements=new_elements)
+            newbody.append(blit.update(atom=atom))
 
         ret.append(rule.update(body=newbody))
         return ret
@@ -299,27 +377,14 @@ class SymmetryTranslator:
         head: AST = rule.head
         body: list[AST] = list(rule.body)
 
-        for symmetry in list(SymmetryTranslator.largest_symmetric_group(body, [head])):
+        for symmetry_bundle in list(self.largest_symmetric_group(body, [head], False)):
             ### Translate to aggregate
-            if len(symmetry.nstrict_neq) + len(symmetry.strict_neq) == 1:
-                log.info(f"Replace atleast2 in {str(rule)} with a counting aggregate.")
-                # remove old symmetric literals
-                for s in symmetry.literals:
-                    body.remove(s)
-                # remove inequalities
-                for lits in chain(symmetry.strict_neq.values(), symmetry.nstrict_neq.values()):
-                    body = [x for x in body if x not in lits]
-                body.extend(self._create_count(symmetry, ret))
-            elif len(symmetry.nstrict_neq) == 0:
-                log.info(f"Improve symmetries on {str(rule)}")
-                ### update with new symmetries
-                # remove inequalities and add new symmetry breaking
-                first = next(iter(symmetry.strict_neq))
-                for uneq in symmetry.strict_neq[first]:
-                    if uneq in body:
-                        body.remove(uneq)
-                        guard = uneq.atom.guards[0].update(comparison=ComparisonOperator.LessThan)
-                        body.append(Literal(LOC, Sign.NoSign, Comparison(uneq.atom.term, [guard])))
+            log.info(f"Replace atleast2 in {str(rule)}.")
+            for lit in symmetry_bundle.remove_lits():
+                body.remove(lit)
+            for lit in symmetry_bundle.add_lits():
+                body.append(lit)
+            ret.extend(symmetry_bundle.aux_rules())
 
         ret.append(rule.update(body=body))
         return ret
