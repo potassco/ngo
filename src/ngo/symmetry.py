@@ -73,6 +73,10 @@ class SymmetryTranslator:
             else:
                 self.init_simple(symmetries)
 
+        def empty(self) -> bool:
+            """true if nothing is to change"""
+            return len(self._add_lits) + len(self._aux_rules) + len(self._remove_lits) == 0
+
         def init_complex(self, in_aggregate: bool, symmetries: list["SymmetryTranslator.Symmetry"]) -> None:
             """translate to count aggregate"""
             for sym in symmetries:
@@ -379,12 +383,13 @@ class SymmetryTranslator:
 
         for symmetry_bundle in list(self.largest_symmetric_group(body, [head], False)):
             ### Translate to aggregate
-            log.info(f"Replace atleast2 in {str(rule)}")
-            for lit in symmetry_bundle.remove_lits():
-                body.remove(lit)
-            for lit in symmetry_bundle.add_lits():
-                body.append(lit)
-            ret.extend(symmetry_bundle.aux_rules())
+            if not symmetry_bundle.empty():
+                log.info(f"Replace atleast2 in {str(rule)}")
+                for lit in symmetry_bundle.remove_lits():
+                    body.remove(lit)
+                for lit in symmetry_bundle.add_lits():
+                    body.append(lit)
+                ret.extend(symmetry_bundle.aux_rules())
 
         ret.append(rule.update(body=body))
         return ret
