@@ -379,7 +379,7 @@ class SymmetryTranslator:
 
         for symmetry_bundle in list(self.largest_symmetric_group(body, [head], False)):
             ### Translate to aggregate
-            log.info(f"Replace atleast2 in {str(rule)}.")
+            log.info(f"Replace atleast2 in {str(rule)}")
             for lit in symmetry_bundle.remove_lits():
                 body.remove(lit)
             for lit in symmetry_bundle.add_lits():
