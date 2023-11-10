@@ -1,6 +1,7 @@
 0.0.6:
  - add default options without duplication trait
  - translate symmetries to counting aggregate if possible
+ - improve cleanup trait
 0.0.5:
  - add sum_chains trait
  - set log output to info by default

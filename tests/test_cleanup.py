@@ -178,6 +178,14 @@ seq(T,(S+1)) :- task(T); foo(T,S).
 foo(T,S) :- seq(T,S).
 seq(T,(S+1)) :- foo(T,S).""",
         ),
+        (  # same predicate
+            """
+b(X,Y) :- dom(X,Y), dom(_,Y).
+            """,
+            [Predicate("dom", 2)],
+            """#program base.
+b(X,Y) :- dom(X,Y).""",
+        ),
     ),
 )
 def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: str) -> None:

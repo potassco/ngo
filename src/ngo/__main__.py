@@ -2,6 +2,7 @@
 The main entry point for the application.
 """
 
+from copy import deepcopy
 from itertools import chain
 
 from clingo.ast import AST, parse_files
@@ -39,7 +40,7 @@ def main() -> None:
     dp = DomainPredicates(unique_names, prg)
 
     while True:
-        old = list(prg)
+        old = deepcopy(prg)
         ### call transformers
         if "cleanup" in args.enable:
             clt = CleanupTranslator(args.input_predicates)

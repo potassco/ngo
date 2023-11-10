@@ -187,6 +187,16 @@ class CleanupTranslator:
         lhs_pred = Predicate(lhs_symbol.name, len(lhs_symbol.arguments))
         rhs_symbol = rhs.atom.symbol
         rhs_pred = Predicate(rhs_symbol.name, len(rhs_symbol.arguments))
+        # check for equality
+        if lhs_pred == rhs_pred:
+            for lhs_arg, rhs_arg in zip(lhs_symbol.arguments, rhs_symbol.arguments):
+                if rhs_arg.ast_type == ASTType.Variable and rhs_arg.name == "_":
+                    continue
+                if lhs_arg != rhs_arg:
+                    return False
+            return True
+
+        # check for derived superseeding
         for m in self.superseeds:
             if m.head_pred == lhs_pred and m.body_pred.pred == rhs_pred and m.body_pred.sign == rhs.sign:
                 fits = True
