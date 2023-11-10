@@ -55,7 +55,7 @@ def main() -> None:
 
         if "symmetry" in args.enable:
             rdp = RuleDependency(prg)
-            trans = SymmetryTranslator(rdp, dp)
+            trans = SymmetryTranslator(unique_names, rdp, dp)
             prg = trans.execute(prg)
 
         if "equalities" in args.enable:

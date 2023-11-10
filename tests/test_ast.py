@@ -10,6 +10,7 @@ from ngo.utils.ast import (
     global_vars,
     headderivable_predicates,
     potentially_unifying,
+    replace_simple_assignments,
 )
 
 
@@ -337,3 +338,77 @@ def test_global_vars_body(prg: str, globals_: list[str]) -> None:
     ast: list[AST] = []
     parse_string(prg, ast.append)
     assert set(globals_) == set(map(lambda x: x.name, global_vars(ast[1].body)))
+
+
+@pytest.mark.parametrize(
+    "input_, output",
+    [
+        (
+            """
+a(X,Y) :- b(X), c(Y), X = Y.
+""",
+            """a(X,X) :- b(X); c(X).""",
+        ),
+        (
+            """
+a(X,Y) :- b(X), c(Y), not X != Y.
+""",
+            """a(X,X) :- b(X); c(X).""",
+        ),
+        (
+            """
+a(Z,Y) :- b(X), c(Y), X = Y, Y = Z.
+""",
+            """a(X,X) :- b(X); c(X).""",
+        ),
+        (
+            """
+a(Z,Y) :- b(X), c(Y), X = Y = Z > 2.
+""",
+            """a(X,X) :- b(X); c(X); X > 2.""",
+        ),
+        (
+            """
+a(X,Y) :- b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A}.
+""",
+            """a(X,X) :- b(X); c(X); #sum { A: dom(A,A) }.""",
+        ),
+        (
+            """
+a(X,Y) :- b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
+""",
+            """a(X,X) :- b(X); c(X); #sum { A: dom(A,A); A,B: foo(A,B) }.""",
+        ),
+        (
+            """
+a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
+""",
+            """a(X,X) :- bar(A,B); b(X); c(X); #sum { A: dom(A,A); A,B: foo(A,B) }.""",
+        ),
+        (
+            """
+#show.
+""",
+            """#show.""",
+        ),
+        (
+            """
+#minimize {T,U : all_finish(T, U), T=U}.
+""",
+            """:~ all_finish(T,T). [T@0,T]""",
+        ),
+        (
+            """
+working(J2,1,D) :- perm(J1,P1); working(J1,1,D1); perm(J2,P2);\
+ duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).
+""",
+            """working(J2,1,D) :- perm(J1,P1); working(J1,1,D1);\
+ perm(J2,P2); duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).""",
+        ),
+    ],
+)
+def test_replace_simple_assignments(input_: str, output: str) -> None:
+    """test replacing assignments in rules"""
+    ast: list[AST] = []
+    parse_string(input_, ast.append)
+    assert output == str(replace_simple_assignments(ast[1]))

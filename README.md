@@ -108,17 +108,28 @@ foobar :- { e: __aux_1 }.
 
 **symmetry**
 
-This modtrait replaces bodys with symmetry breaking rules of the form X1 != X2
-with X1 < X2 if this preserves semantics. This can reduce the number of grounded
-rules by half for this rule, but has no effect on solving.
+This modtrait replaces bodys with symmetry breaking rules that
+count different occurences of the same predicate with a counting aggregate
+if this preserves semantics. This can reduce the number of grounded
+rules.
 
 ```
 :- slot(J1,M,T); slot(J2,M,T); J1 != J2.
 ```
 gets replaced by
 ```
-:- slot(J1,M,T); slot(J2,M,T); J1 < J2.
+:- slot(_,M,T), 2 #count {J1 : slot(J1,M,T)}.
 ```
+For more complex rules the symmetry breaking is improved:
+```
+:- slot(J1,M,T1); slot(J2,M,T2); J1 != J2, T1 != T2.
+```
+becomes
+```
+:- slot(J1,M,T1); slot(J2,M,T2); J1 < J2, T1 != T2.
+```
+
+
 
 **equality**
 

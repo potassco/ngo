@@ -39,11 +39,11 @@ machine(M) :- dur(_,M,_).
 time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D) }.
 { slot(J,M,T): dur(J,M,_) } :- machine(M); time(T).
 #false :- slot(J,M,T); not slot(J,M,(T-1)); dur(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
-#false :- slot(J1,M,T); slot(J2,M,T); J1 < J2.
+__dom_slot(M,T) :- dur(_,M,_); machine(M); time(T).
+#false :- __dom_slot(M,T); 2 <= #count { J1: slot(J1,M,T) }.
 #false :- dur(J,M,_); not slot(J,M,_).
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
-__dom_slot(T) :- dur(_,M,_); machine(M); time(T).
-__dom___max_0_13(T) :- __dom_slot(T).
+__dom___max_0_13(T) :- __dom_slot(_,T).
 __min_0_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }; __dom___max_0_13(_).
 __next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
@@ -87,7 +87,7 @@ def test_all(lhs: str, rhs: str) -> None:
         ldt = LiteralDuplicationTranslator(unique_names, dp)
         prg = ldt.execute(prg)
 
-        trans = SymmetryTranslator(rdp, dp)
+        trans = SymmetryTranslator(unique_names, rdp, dp)
         prg = trans.execute(prg)
 
         eq = EqualVariable(pdg)

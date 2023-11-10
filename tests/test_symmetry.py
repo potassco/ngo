@@ -12,19 +12,23 @@ from ngo.utils.globals import UniqueNames
     (
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
-            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), X1 = X2, P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); X1 = X2; P1 < P2.",
+            "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.",
+        ),
+        (
+            "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), P1 != P2, X1 = X2.",
+            "#program base.\nf(X) :- node(X); player(_,X1,Y); 2 <= #count { P1: player(P1,X1,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X1, Y), player(P2, X2, Y), not X1 != X2, P1 != P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X1,Y); player(P2,X2,Y); not X1 != X2; P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X1,Y); 2 <= #count { P1: player(P1,X1,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), not P1 = P2.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); P1 < P2.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2.",
@@ -47,28 +51,65 @@ from ngo.utils.globals import UniqueNames
             "#program base.\n#false :- at(X,Y,T); at(X,Y,U); foo(Z,W,T); bar(Z,W,U); not U = T.",
         ),
         (
+            "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,V1); minot(Z,W,V2); not U = T; V1 != V2.",
+            "#program base.\n#false :- minot(Z,W,_); 2 <= #count { V1: minot(Z,W,V1) }; at(X,Y,_);\
+ 2 <= #count { T: at(X,Y,T) }.",
+        ),
+        (
             "#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); not U = T.",
             "#program base.\n#false :- at(X,Y,T); at(X,Y,U); minot(Z,W,T); minot(Z,W,U); T < U.",
         ),
         (
             "f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), player(P3, X, Y), P1 != P2, P1 != P3, P2 != P3.",
-            "#program base.\nf(X) :- node(X); player(P1,X,Y); player(P2,X,Y); player(P3,X,Y); P1 < P2; P2 < P3.",
+            "#program base.\nf(X) :- node(X); player(_,X,Y); 3 <= #count { P1: player(P1,X,Y) }.",
         ),
         (
             ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
-            "#program base.\n#false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.",
+            """#program base.
+__aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
+#false :- 2 <= #count { W: __aux_1(W) }.""",
+        ),
+        (
+            ":- #count{X,Y : player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2} >= 2.",
+            """#program base.
+#false :- 2 <= #count { X,Y: player(P1,X,Y,V1), player(P2,X,Y,V2), V1 != V2, P1 < P2 }.""",
+        ),
+        (
+            "#minimize {a}.",
+            """#program base.
+:~ . [a@0]""",
+        ),
+        (  # test domain replacement
+            """
+{player(P,X,Y) : name(P), pos(X), pos(Y)}.
+f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.
+            """,
+            """#program base.
+{ player(P,X,Y): name(P), pos(X), pos(Y) }.
+__dom_player(P,X,Y) :- name(P); pos(X); pos(Y).
+f(X) :- node(X); __dom_player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.""",
+        ),
+        (
+            "false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y != B.",
+            """#program base.
+false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); Y != B; A < X.""",
+        ),
+        (
+            "false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B.",
+            """#program base.
+false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B.""",
         ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
-    """test minmax aggregates on whole programs"""
+    """test symmetry breaking on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
     rdp = RuleDependency(ast)
     unique_names = UniqueNames(ast, [])
     dp = DomainPredicates(unique_names, ast)
-    mma = SymmetryTranslator(rdp, dp)
-    output = "\n".join(map(str, mma.execute(ast)))
+    st = SymmetryTranslator(unique_names, rdp, dp)
+    output = "\n".join(map(str, st.execute(ast)))
     assert converted_prg == output
 
 
