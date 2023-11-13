@@ -4,7 +4,6 @@
 
 from collections import Counter, defaultdict
 from copy import deepcopy
-from dataclasses import dataclass
 from functools import partial
 from itertools import chain
 from typing import Callable, Sequence
@@ -13,7 +12,7 @@ from clingo.ast import AST, ASTType, Function, Sign, SymbolicAtom, Variable
 
 from ngo.dependency import RuleDependency
 from ngo.utils.ast import LOC, Predicate, collect_ast, transform_ast
-from ngo.utils.globals import UniqueNames
+from ngo.utils.globals import UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("unused")
@@ -171,13 +170,28 @@ class UnusedTranslator:
             return all(map(UnusedTranslator.simple_term, t.arguments))
         return False
 
-    @dataclass
     class Mapper:
         """maps a singular rule of the form a(X) :- b(X)."""
 
-        rule_id: int
-        arguments: list[AST]
-        symbol: AST
+        def __init__(self, uv: UniqueVariables, rule_id: int, arguments: list[AST], symbol: AST) -> None:
+            self.uv = uv
+            self.rule_id = rule_id
+            vars_: set[AST] = set()
+            for arg in arguments:
+                vars_.update(collect_ast(arg, "Variable"))
+            map_: dict[AST, AST] = {}
+            for v in vars_:
+                map_[v] = uv.make_unique(v)
+
+            def replace(var: AST) -> AST:
+                if var in map_:
+                    return map_[var]
+                return var
+
+            self.arguments = [transform_ast(arg, "Variable", replace) for arg in arguments]
+            # self.arguments = deepcopy(arguments)
+            self.symbol = symbol.update(arguments=[transform_ast(arg, "Variable", replace) for arg in symbol.arguments])
+            # self.symbol = deepcopy(symbol)
 
         def convert(self, arguments: list[AST]) -> AST:
             """places the new arguments inside the symbol (and returns it)
@@ -246,7 +260,7 @@ class UnusedTranslator:
             if not len(hlit.atom.symbol.arguments) == len(blit.atom.symbol.arguments):
                 continue
             mapping[head] = UnusedTranslator.Mapper(
-                prg.index(rules[0]), deepcopy(list(hlit.atom.symbol.arguments)), deepcopy(blit.atom.symbol)
+                UniqueVariables(rules[0]), prg.index(rules[0]), list(hlit.atom.symbol.arguments), blit.atom.symbol
             )
 
         used: set[int] = set()

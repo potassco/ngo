@@ -311,6 +311,23 @@ c(X*Z) :- b(X,X,Z).
             """#program base.
 c((X*Z)) :- a(X,_,f(Z)).""",
         ),
+        (
+            """
+executionTime(J,M,T) :- duration(J,M,T).
+task(T) :- executionTime(T,_,_).
+machine(M) :- executionTime(_,M,_).
+maxtime(T,T1) :- task(T); executionTime(T,R1,T1); 0 <= { executionTime(T,R2,T2): R2 != R1, T2 > T1 } <= 0.
+time((0..(Max-1))) :- Max = #sum { T1,T,R1: executionTime(T,R1,T1) }.
+task_nr(S) :- S = #sum { 1,task(T): task(T) }.
+1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).
+         """,
+            [Predicate("duration", 3)],
+            [],
+            """#program base.
+task(T) :- duration(T,_,_).
+task_nr(S) :- S = #sum { 1,task(T): task(T) }.
+1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).""",
+        ),
     ),
 )
 def test_unused_translation_fixpoint(

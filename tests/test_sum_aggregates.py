@@ -373,6 +373,15 @@ a(X) :- X = #sum {L,D : shift(D,L); 1,a : #true}.
 1 >= { shift(D,L): pshift(D,L) } :- day(D).
 a(X) :- X = #sum { L,D: shift(D,L); 1,a: #true }.""",
         ),
+        (  # non unique tuple in sums
+            """
+{ shift(D,L) : pshift(D,L) } 1 :- day(D).
+a(X) :- X = #sum {L,D : shift(D,L); 1,a : #true}.
+         """,
+            """#program base.
+1 >= { shift(D,L): pshift(D,L) } :- day(D).
+a(X) :- X = #sum { L,D: shift(D,L); 1,a: #true }.""",
+        ),
     ],
 )
 def test_sum_aggregates_output(prg: str, converted_prg: str) -> None:
