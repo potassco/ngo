@@ -520,6 +520,8 @@ class MinMaxAggregator:
         """
         # pylint: disable=too-many-branches
         assert stm.ast_type == ASTType.Minimize
+        if not self._minmax_preds:
+            return [stm]
 
         term_tuple = (
             stm.weight,
