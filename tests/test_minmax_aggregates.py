@@ -4,7 +4,6 @@ from clingo.ast import AST, parse_string
 
 from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.minmax_aggregates import MinMaxAggregator
-from ngo.utils.ast import Predicate
 from ngo.utils.globals import UniqueNames
 
 # diable line too long warnings
@@ -1008,14 +1007,3 @@ def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     mma = MinMaxAggregator(unique, rdp, dp)
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output
-
-
-def test_translation_mapping() -> None:
-    """test the argument order translation class"""
-    # NOTE: isn't there something already in python that can reorder things ?
-    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 4), (2, 1, 0))
-    assert trans.translate_parameters(["X", "Y", "Z"]) == ["Z", "Y", "X"]
-    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 3), (2, 1))
-    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Y", "X"]
-    trans = MinMaxAggregator.Translation(Predicate("a", 3), Predicate("b", 3), (None, 2, 1))
-    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Z", "Y"]

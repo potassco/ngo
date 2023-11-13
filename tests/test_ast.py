@@ -5,6 +5,7 @@ from clingo.ast import AST, ASTType, parse_string
 from ngo.utils.ast import (
     Predicate,
     SignedPredicate,
+    TranslationMap,
     collect_binding_information_body,
     collect_binding_information_head,
     global_vars,
@@ -412,3 +413,14 @@ def test_replace_simple_assignments(input_: str, output: str) -> None:
     ast: list[AST] = []
     parse_string(input_, ast.append)
     assert output == str(replace_simple_assignments(ast[1]))
+
+
+def test_translation_mapping() -> None:
+    """test the argument order translation class"""
+    # NOTE: isn't there something already in python that can reorder things ?
+    trans = TranslationMap(Predicate("a", 3), Predicate("b", 4), (2, 1, 0))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == ["Z", "Y", "X"]
+    trans = TranslationMap(Predicate("a", 3), Predicate("b", 3), (2, 1))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Y", "X"]
+    trans = TranslationMap(Predicate("a", 3), Predicate("b", 3), (None, 2, 1))
+    assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Z", "Y"]

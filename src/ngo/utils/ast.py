@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from functools import partial
 from itertools import product
-from typing import Callable, Iterable, Iterator, NamedTuple, Sequence
+from typing import Any, Callable, Iterable, Iterator, NamedTuple, Sequence
 
 import networkx as nx
 from clingo import SymbolType
@@ -874,3 +874,26 @@ def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
     if var == orig:
         return replace
     return var
+
+
+class TranslationMap:
+    """translates an old predicate to a new one"""
+
+    def __init__(self, oldpred: Predicate, newpred: Predicate, mapping: Iterable[int | None]):
+        self.oldpred = oldpred
+        self.newpred = newpred
+        # simple ordered list of indices or none, to map f(A1,A2,A4) to b(A1,A4,A3,A2)
+        # have mapping [0,3,1], reverse mapping would be [0,2,None,1]
+        self.mapping = mapping
+
+    def translate_parameters(self, arguments: list[Any]) -> list[AST | None]:
+        """given the mapping, return the mapped order of the argument terms"""
+        ret: list[AST | None] = []
+        for oldidx, index in enumerate(self.mapping):
+            if index is None:
+                continue
+            assert len(arguments) > index
+            if index >= len(ret):
+                ret.extend([None] * (index + 1 - len(ret)))
+            ret[index] = arguments[oldidx]
+        return ret

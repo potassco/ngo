@@ -25,23 +25,22 @@ machine(M) :- dur(_,M,_).
 jobs(X) :- X = { job(J) }.
 machines(M) :- machine(M); not machine((M+1)).
 time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D)}.
-{ slot(J,M,T): dur(J,M,_) } :- machine(M); time(T).
-:- slot(J,M,T), not slot(J,M,T-1), dur(J,M,D),     time(T+D), X=T..T+D-1, not slot(J,M,X).
+{ slot(J,M,T): duration(J,M,_) } :- machine(M); time(T).
+:- slot(J,M,T), not slot(J,M,T-1), duration(J,M,D),     time(T+D), X=T..T+D-1, not slot(J,M,X).
 :- slot(J1,M,T); slot(J2,M,T); J1 != J2; machine(M).
-:- dur(J,M,T), not slot(J,M,_).
+:- duration(J,M,T), not slot(J,M,_).
 :- sequence(J,M,S), sequence(J,MM,(S-1)), slot(J,M,T), slot(J,MM,TT), TT >= T.
 all_finish(Max) :- Max = #max {T : slot(J,M,T) }.
 #minimize {T : all_finish(T)}.
 """,
             """#program base.
-dur(J,M,D) :- duration(J,M,D).
-machine(M) :- dur(_,M,_).
-time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D) }.
-{ slot(J,M,T): dur(J,M,_) } :- machine(M); time(T).
-#false :- slot(J,M,T); not slot(J,M,(T-1)); dur(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
-__dom_slot(M,T) :- dur(_,M,_); machine(M); time(T).
+machine(M) :- duration(_,M,_).
+time(T) :- T = (1..X); X = #sum { D,J,M: duration(J,M,D) }.
+{ slot(J,M,T): duration(J,M,_) } :- machine(M); time(T).
+#false :- slot(J,M,T); not slot(J,M,(T-1)); duration(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
+__dom_slot(M,T) :- duration(_,M,_); machine(M); time(T).
 #false :- __dom_slot(M,T); 2 <= #count { J1: slot(J1,M,T) }.
-#false :- dur(J,M,_); not slot(J,M,_).
+#false :- duration(J,M,_); not slot(J,M,_).
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
 __dom___max_0_13(T) :- __dom_slot(_,T).
 __min_0_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }; __dom___max_0_13(_).
@@ -61,7 +60,7 @@ __chain_0_0__max___dom___max_0_13(__PREV) :- __aux_1(_,__PREV).
 {max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
          """,  # currently not handled but in future, see #9
             """#program base.
-{ max } :- person(_); random(_).""",
+{ max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23: #true }; person(P); random(_).""",
         ),
     ),
 )

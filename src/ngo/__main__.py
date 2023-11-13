@@ -25,6 +25,7 @@ def main() -> None:
     """
     Run the main function.
     """
+    # pylint: disable=too-many-branches # will be refactored
     parser = get_parser()
     args = parser.parse_args()
 
@@ -35,6 +36,8 @@ def main() -> None:
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
         args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
+    if args.output_predicates == "":
+        args.output_predicates = []
     pdg = PositivePredicateDependency(prg)
     unique_names = UniqueNames(prg, args.input_predicates)
     dp = DomainPredicates(unique_names, prg)

@@ -55,7 +55,7 @@ b(X) :- c(X).
 #show b/1.
             """,
             [],
-            [],
+            [Predicate("b", 1)],
             """#program base.
 b(X) :- c(X).
 #show b/1.""",
@@ -84,27 +84,27 @@ b(X) :- c(X).
         ),
         (
             """
-b(X) :- c(X).
+b(X) :- c(X), x.
 { a } :- b(X).
             """,
-            [Predicate("b", 0)],
+            [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X).
+b1 :- c(X); x.
 { a } :- b1.""",
         ),
         (
             """
-b(X,X,X+1,42) :- c(X).
-b(X,X+1,23) :- c(X).
+b(X,X,X+1,42) :- c(X), x.
+b(X,X+1,23) :- c(X), x.
 { a } :- b(X,Y,Z,W).
 { a } :- b(X,Y,Z).
             """,
-            [Predicate("b", 0)],
+            [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X).
-b2 :- c(X).
+b1 :- c(X); x.
+b2 :- c(X); x.
 { a } :- b1.
 { a } :- b2.""",
         ),
@@ -168,8 +168,7 @@ b(X) :- c(X).
             [],
             [],
             """#program base.
-b :- c.
-{ a } :- b.""",
+{ a } :- c.""",
         ),
         (
             """
@@ -177,7 +176,7 @@ b(X) :- c(X).
 #show b/1.
             """,
             [],
-            [],
+            [Predicate("b", 1)],
             """#program base.
 b(X) :- c(X).
 #show b/1.""",
@@ -206,27 +205,27 @@ b(X) :- c(X).
         ),
         (
             """
-b(X) :- c(X).
+b(X) :- c(X), x.
 { a } :- b(X).
             """,
-            [Predicate("b", 0)],
+            [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c.
+b1 :- c; x.
 { a } :- b1.""",
         ),
         (
             """
-b(X,X,X+1,42) :- c(X).
-b(X,X+1,23) :- c(X).
+b(X,X,X+1,42) :- c(X), x.
+b(X,X+1,23) :- c(X), x.
 { a } :- b(X,Y,Z,W).
 { a } :- b(X,Y,Z).
             """,
-            [Predicate("b", 0)],
+            [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c.
-b2 :- c.
+b1 :- c; x.
+b2 :- c; x.
 { a } :- b1.
 { a } :- b2.""",
         ),
@@ -252,6 +251,65 @@ foo :- a.
             """#program base.
 b :- c(_).
 { a } :- b.""",
+        ),
+        (
+            """
+__dom_match(B) :- person(B).
+__aux_1(W) :- __dom_match(W); 3 <= #count { M1: match(M1,W) }.
+            """,
+            [Predicate("person", 1)],
+            [Predicate("__aux_1", 1)],
+            """#program base.
+__aux_1(W) :- person(W); 3 <= #count { M1: match(M1,W) }.""",
+        ),
+        (
+            """
+dur(J,M,D) :- duration(J,M,D).
+job(J) :- dur(J,_,_).
+machine(M) :- dur(_,M,_).
+jobs(X) :- X = { job(J) }.
+machines(M) :- machine(M); not machine((M+1)).
+time(T) :- T = (1..X); X = #sum { D,J,M: dur(J,M,D)}.
+{ slot(J,M,T): dur(J,M,_) } :- machine(M); time(T).
+            """,
+            [Predicate("person", 1)],
+            [Predicate("__aux_1", 1)],
+            """#program base.
+machine(M) :- duration(_,M,_).
+time(T) :- T = (1..X); X = #sum { D,J,M: duration(J,M,D) }.
+{ slot(J,M,T): duration(J,M,_) } :- machine(M); time(T).""",
+        ),
+        (  # dont optimize complex relations
+            """
+b(X) :- a(X,X*2).
+c(X) :- b(X).
+            """,
+            [Predicate("a", 1)],
+            [Predicate("c", 1)],
+            """#program base.
+b(X) :- a(X,(X*2)).
+c(X) :- b(X).""",
+        ),
+        (  # dont optimize complex relations in head
+            """
+b(X*X) :- a(X).
+c(X) :- b(X).
+            """,
+            [Predicate("a", 1)],
+            [Predicate("c", 1)],
+            """#program base.
+b((X*X)) :- a(X).
+c(X) :- b(X).""",
+        ),
+        (  # anonymous variables
+            """
+b(X,X,A) :- a(X,_,f(A)).
+c(X*Z) :- b(X,X,Z).
+            """,
+            [Predicate("a", 3)],
+            [Predicate("c", 1)],
+            """#program base.
+c((X*Z)) :- a(X,_,f(Z)).""",
         ),
     ),
 )

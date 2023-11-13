@@ -6,7 +6,7 @@
 
 from collections import defaultdict
 from itertools import chain
-from typing import Any, Callable, Iterable, Iterator, Optional
+from typing import Callable, Iterator, Optional
 
 from clingo.ast import (
     AST,
@@ -40,6 +40,7 @@ from ngo.utils.ast import (
     AggAnalytics,
     AnnotatedPredicate,
     Predicate,
+    TranslationMap,
     collect_ast,
     global_vars,
     loc2str,
@@ -69,29 +70,7 @@ def _characteristic_variables(term: AST) -> Iterator[AST]:
 class MinMaxAggregator:
     """Translates some min/max aggregates into chains"""
 
-    class Translation:
-        """translates an old predicate to a new one"""
-
-        def __init__(self, oldpred: Predicate, newpred: Predicate, mapping: Iterable[int | None]):
-            self.oldpred = oldpred
-            self.newpred = newpred
-            # simple ordered list of indices or none, to map f(A1,A2,A4) to b(A1,A4,A3,A2)
-            # have mapping [0,3,1], reverse mapping would be [0,2,None,1]
-            self.mapping = mapping
-
-        def translate_parameters(self, arguments: list[Any]) -> list[AST | None]:
-            """given the mapping, return the mapped order of the argument terms"""
-            ret: list[AST | None] = []
-            for oldidx, index in enumerate(self.mapping):
-                if index is None:
-                    continue
-                assert len(arguments) > index
-                if index >= len(ret):
-                    ret.extend([None] * (index + 1 - len(ret)))
-                ret[index] = arguments[oldidx]
-            return ret
-
-    MinMaxPred = tuple[int, Translation, int]
+    MinMaxPred = tuple[int, TranslationMap, int]
 
     def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
         self.unique_names = unique_names
@@ -127,7 +106,7 @@ class MinMaxAggregator:
             (rest_vars + [max_var]).index(arg) if arg in rest_vars + [max_var] else None for arg in symbol.arguments
         ]
 
-        translation = self.Translation(
+        translation = TranslationMap(
             Predicate(symbol.name, len(symbol.arguments)),
             Predicate(new_name, len(rest_vars) + 1),
             mapping,

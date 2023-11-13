@@ -65,6 +65,10 @@ class RuleDependency:
         """return all rules that could derive head predicate"""
         return self.head2rules[head]
 
+    def get_headderivable_predicates(self) -> list[Predicate]:
+        """return all predicates that can possible be derived in a head"""
+        return list(self.head2bodies.keys())
+
 
 # TODO: refactor all graphs
 def _create_graph_from_prg(prg: Iterable[AST], signs: SignSetType) -> nx.DiGraph:
