@@ -3,12 +3,15 @@
 """
 
 from collections import Counter, defaultdict
+from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
 from itertools import chain
 from typing import Callable, Sequence
 
-from clingo.ast import AST, ASTType, Sign, Variable
+from clingo.ast import AST, ASTType, Function, Sign, SymbolicAtom, Variable
 
+from ngo.dependency import RuleDependency
 from ngo.utils.ast import LOC, Predicate, collect_ast, transform_ast
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
@@ -54,15 +57,19 @@ class UnusedTranslator:
             new_prg.append(stm)
         return new_prg
 
+    def _add_usage_stm(self, stm: AST) -> None:
+        """add all predicate positions with non anonymous variables to self.usage_xxx"""
+        for func in collect_ast(stm, "Function"):
+            pred = Predicate(func.name, len(func.arguments))
+            self.used.add(pred)
+            for index, arg in enumerate(func.arguments):
+                if arg != self._anon:
+                    self.used_positions[pred].add(index)
+
     def _add_usage(self, stms: Sequence[AST]) -> None:
         """add all predicate positions with non anonymous variables to self.usage_xxx"""
         for stm in stms:
-            for func in collect_ast(stm, "Function"):
-                pred = Predicate(func.name, len(func.arguments))
-                self.used.add(pred)
-                for index, arg in enumerate(func.arguments):
-                    if arg != self._anon:
-                        self.used_positions[pred].add(index)
+            self._add_usage_stm(stm)
 
     def analyze_usage(self, prg: list[AST]) -> None:
         """analyze program which predicates positions are used"""
@@ -84,6 +91,12 @@ class UnusedTranslator:
             ):
                 for elem in stm.head.elements:
                     self._add_usage(elem.condition)
+            if stm.ast_type == ASTType.Rule and stm.head.ast_type in (
+                ASTType.Disjunction,
+                ASTType.Aggregate,
+            ):
+                for elem in stm.head.elements:
+                    self._add_usage_stm(elem.literal)
             if stm.ast_type in (ASTType.ShowSignature, ASTType.ProjectSignature):
                 pred = Predicate(stm.name, stm.arity)
                 self.used.add(pred)
@@ -149,6 +162,106 @@ class UnusedTranslator:
             new_prg.append(stm)
         return new_prg
 
+    @staticmethod
+    def simple_term(t: AST) -> bool:
+        """true if term is variable, symbolicterm, or function consisting of these three options"""
+        if t.ast_type in (ASTType.Variable, ASTType.SymbolicTerm):
+            return True
+        if t.ast_type == ASTType.Function:
+            return all(map(UnusedTranslator.simple_term, t.arguments))
+        return False
+
+    @dataclass
+    class Mapper:
+        """maps a singular rule of the form a(X) :- b(X)."""
+
+        rule_id: int
+        arguments: list[AST]
+        symbol: AST
+
+        def convert(self, arguments: list[AST]) -> AST:
+            """places the new arguments inside the symbol (and returns it)
+            given by order of self.arguments"""
+
+            def replace(input_: AST, old: AST, new: AST) -> AST:
+                if input_ == old:
+                    return new
+                return input_
+
+            args = deepcopy(list(self.symbol.arguments))
+            for index, _ in enumerate(args):
+                for head_arg, new_arg in zip(self.arguments, arguments):
+                    args[index] = transform_ast(args[index], "Variable", partial(replace, old=head_arg, new=new_arg))
+
+            old_vars: set[AST] = set()
+            for arg in arguments:
+                old_vars.update(collect_ast(arg, "Variable"))
+
+            def replace_rest(input_: AST, old_vars: set[AST]) -> AST:
+                if input_ not in old_vars:
+                    return Variable(LOC, "_")
+                return input_
+
+            for index, arg in enumerate(args):
+                args[index] = transform_ast(arg, "Variable", partial(replace_rest, old_vars=old_vars))
+            return SymbolicAtom(Function(LOC, self.symbol.name, args, False))
+
+    def remove_single_copies(self, prg: list[AST]) -> list[AST]:
+        """remove rules of the form a(X) :- b(X) and replaces a/1 with b/1"""
+        ret: list[AST] = []
+        # create a mapping for all 1to1 replaceable predicates
+        mapping: dict[Predicate, "UnusedTranslator.Mapper"] = {}
+        rd = RuleDependency(prg)
+
+        for head in rd.get_headderivable_predicates():
+            if head in self.input_predicates or head in self.output_predicates:
+                continue
+
+            rules = rd.get_rules_that_derive(head)
+            if not len(rules) == 1:
+                continue
+            hlit = rules[0].head
+            if not (
+                hlit.ast_type == ASTType.Literal
+                and hlit.sign == Sign.NoSign
+                and hlit.atom.ast_type == ASTType.SymbolicAtom
+                and hlit.atom.symbol.ast_type == ASTType.Function
+            ):
+                continue
+            if not len(rules[0].body) == 1:
+                continue
+            blit = rules[0].body[0]
+            if not (
+                blit.ast_type == ASTType.Literal
+                and blit.sign == Sign.NoSign
+                and blit.atom.ast_type == ASTType.SymbolicAtom
+                and blit.atom.symbol.ast_type == ASTType.Function
+            ):
+                continue
+            # very simple
+            if not all(map(lambda x: x.ast_type == ASTType.Variable, hlit.atom.symbol.arguments)):
+                continue
+            if not all(map(UnusedTranslator.simple_term, blit.atom.symbol.arguments)):
+                continue
+            if not len(hlit.atom.symbol.arguments) == len(blit.atom.symbol.arguments):
+                continue
+            mapping[head] = UnusedTranslator.Mapper(
+                prg.index(rules[0]), deepcopy(list(hlit.atom.symbol.arguments)), deepcopy(blit.atom.symbol)
+            )
+
+        used: set[int] = set()
+
+        def convert(atom: AST) -> AST:
+            bpred = Predicate(atom.symbol.name, len(atom.symbol.arguments))
+            if bpred in mapping:
+                used.add(mapping[bpred].rule_id)
+                return mapping[bpred].convert(atom.symbol.arguments)
+            return atom
+
+        for rule in prg:
+            ret.append(transform_ast(rule, "SymbolicAtom", convert))
+        return [x for i, x in enumerate(ret) if i not in used]
+
     def execute(self, prg: list[AST]) -> list[AST]:
         """
         remove all predicates that are unconstrained and
@@ -158,4 +271,5 @@ class UnusedTranslator:
         self.analyze_usage(prg)
         prg = self.project_unused(prg)
         prg = self.remove_unused(prg)
+        prg = self.remove_single_copies(prg)
         return prg

@@ -85,8 +85,7 @@ foo :- a.
 ```
 where `c/1` is an input predicate, becomes:
 ```
-b :- c(_).
-{ a } :- b.
+{ a } :- c(_).
 ``````
 
 **duplication**
