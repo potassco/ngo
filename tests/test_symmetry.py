@@ -99,6 +99,11 @@ false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); Y != B; A < X
             """#program base.
 false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B.""",
         ),
+        (
+            "{ before(T1,T2,M) } :- sequence(T1,M,_); sequence(T2,M,_); T1 < T2.",
+            """#program base.
+{ before(T1,T2,M) } :- sequence(T1,M,_); sequence(T2,M,_); T1 < T2.""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:

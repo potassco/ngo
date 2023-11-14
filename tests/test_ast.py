@@ -8,7 +8,7 @@ from ngo.utils.ast import (
     TranslationMap,
     collect_binding_information_body,
     collect_binding_information_head,
-    global_vars,
+    global_vars_inside_body,
     headderivable_predicates,
     potentially_unifying,
     replace_simple_assignments,
@@ -338,7 +338,7 @@ def test_global_vars_body(prg: str, globals_: list[str]) -> None:
     """test minmax aggregates on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    assert set(globals_) == set(map(lambda x: x.name, global_vars(ast[1].body)))
+    assert set(globals_) == set(map(lambda x: x.name, global_vars_inside_body(ast[1].body)))
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,13 @@ import networkx as nx
 from clingo.ast import AST, ASTType, Function, Literal, Rule, Sign, SymbolicAtom
 
 from ngo.dependency import DomainPredicates
-from ngo.utils.ast import LOC, collect_binding_information_body, global_vars, replace_assignments, transform_ast
+from ngo.utils.ast import (
+    LOC,
+    collect_binding_information_body,
+    global_vars_inside_body,
+    replace_assignments,
+    transform_ast,
+)
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -63,7 +69,7 @@ class LiteralCollector:
             graph = nx.Graph()
             all_vars: set[AST] = set()
             for lit in subset:
-                vars_ = global_vars([lit])
+                vars_ = global_vars_inside_body([lit])
                 all_vars.update(vars_)
                 graph.add_edges_from(combinations(vars_, 2))
             cc = list(nx.connected_components(graph))

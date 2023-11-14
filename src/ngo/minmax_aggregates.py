@@ -42,7 +42,7 @@ from ngo.utils.ast import (
     Predicate,
     TranslationMap,
     collect_ast,
-    global_vars,
+    global_vars_inside_body,
     loc2str,
     potentially_unifying_sequence,
     predicates,
@@ -277,7 +277,7 @@ class MinMaxAggregator:
         """translate a min/max aggregate that has a <,<=,>,>= comparison in the same
         direction to a simple set of rules"""
         ret = []
-        gvars = global_vars(rule.body)
+        gvars = global_vars_inside_body(rule.body)
         uv = UniqueVariables(rule)
         body = rule.body
         body.remove(agg)

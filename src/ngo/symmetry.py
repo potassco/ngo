@@ -30,7 +30,15 @@ from clingo.ast import (
 from clingo.symbol import Number
 
 from ngo.dependency import DomainPredicates, RuleDependency
-from ngo.utils.ast import LOC, Predicate, collect_ast, expand_comparisons, global_vars, replace_simple_assignments
+from ngo.utils.ast import (
+    LOC,
+    Predicate,
+    collect_ast,
+    expand_comparisons,
+    global_vars_inside_body,
+    global_vars_inside_head,
+    replace_simple_assignments,
+)
 from ngo.utils.globals import UniqueNames
 from ngo.utils.logger import singleton_factory_logger
 
@@ -181,7 +189,57 @@ class SymmetryTranslator:
                     return (op, lit)
         return None
 
-    def largest_symmetric_group(self, body: list[AST], rest: list[AST], in_aggregate: bool) -> Iterator[SymmetryBundle]:
+    def _crosscheck(
+        self,
+        potential_equalities: list[set[AST]],
+        potential_strict_inequalities: list[dict[int, list[AST]]],
+        potential_nstrict_inequalities: list[dict[int, list[AST]]],
+        lits: list[AST],
+        head: AST,
+        in_aggregate: bool,
+    ) -> Iterator[SymmetryBundle]:
+        for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
+            used_variables: set[AST] = set()
+            used_uneq_variables: dict[int, set[AST]] = defaultdict(set)
+            for index in index_subset:
+                for lit in potential_equalities[index]:
+                    lits.remove(lit)
+                for pos, neq_lits in chain(
+                    potential_strict_inequalities[index].items(), potential_nstrict_inequalities[index].items()
+                ):
+                    lits = [x for x in lits if x not in neq_lits]
+                    for pred in potential_equalities[index]:
+                        used_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
+                        used_uneq_variables[index].update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
+            if len((global_vars_inside_body(lits) | global_vars_inside_head(head)) & used_variables) == 0:
+                # built ccs, in a cc, only one comparison can be improved
+                g = nx.Graph()
+                for index1 in index_subset:
+                    g.add_edge(index1, index1)  # cc's of length 1
+                    for index2 in index_subset:
+                        if index1 == index2:
+                            continue
+                        if used_uneq_variables[index1] & used_uneq_variables[index2]:
+                            g.add_edge(index1, index2)
+                for cc in nx.connected_components(g):
+                    yield SymmetryTranslator.SymmetryBundle(
+                        self.domain_predicates,
+                        self.unique_names,
+                        in_aggregate,
+                        [
+                            SymmetryTranslator.Symmetry(
+                                literals=tuple(sorted(potential_equalities[index])),
+                                strict_neq=potential_strict_inequalities[index],
+                                nstrict_neq=potential_nstrict_inequalities[index],
+                            )
+                            for index in cc
+                        ],
+                    )
+                return
+
+    def largest_symmetric_group(
+        self, body: list[AST], head: AST, rest: list[AST], in_aggregate: bool
+    ) -> Iterator[SymmetryBundle]:
         """
         Given a list A of literals (a body or a condition)
         Given a list B of literals that is also visible in the same scope
@@ -194,7 +252,6 @@ class SymmetryTranslator:
         visible level of A and B
         At least one inequality needs to be present.
         """
-        # pylint: disable=too-many-branches
         potential_equalities: list[set[AST]] = []
         potential_strict_inequalities: list[dict[int, list[AST]]] = []
         potential_nstrict_inequalities: list[dict[int, list[AST]]] = []
@@ -239,46 +296,14 @@ class SymmetryTranslator:
                         potential_strict_inequalities[-1][pos].append(lit)
                     else:
                         potential_nstrict_inequalities[-1][pos].append(lit)
-        # cross check
-        for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
-            used_variables: set[AST] = set()
-            used_uneq_variables: dict[int, set[AST]] = defaultdict(set)
-            lits = body + rest
-            for index in index_subset:
-                for lit in potential_equalities[index]:
-                    lits.remove(lit)
-                for pos, neq_lits in chain(
-                    potential_strict_inequalities[index].items(), potential_nstrict_inequalities[index].items()
-                ):
-                    lits = [x for x in lits if x not in neq_lits]
-                    for pred in potential_equalities[index]:
-                        used_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
-                        used_uneq_variables[index].update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
-            if len(global_vars(lits) & used_variables) == 0:
-                # built ccs, in a cc, only one comparison can be improved
-                g = nx.Graph()
-                for index1 in index_subset:
-                    g.add_edge(index1, index1)  # cc's of length 1
-                    for index2 in index_subset:
-                        if index1 == index2:
-                            continue
-                        if used_uneq_variables[index1] & used_uneq_variables[index2]:
-                            g.add_edge(index1, index2)
-                for cc in nx.connected_components(g):
-                    yield SymmetryTranslator.SymmetryBundle(
-                        self.domain_predicates,
-                        self.unique_names,
-                        in_aggregate,
-                        [
-                            SymmetryTranslator.Symmetry(
-                                literals=tuple(sorted(potential_equalities[index])),
-                                strict_neq=potential_strict_inequalities[index],
-                                nstrict_neq=potential_nstrict_inequalities[index],
-                            )
-                            for index in cc
-                        ],
-                    )
-                return
+        yield from self._crosscheck(
+            potential_equalities,
+            potential_strict_inequalities,
+            potential_nstrict_inequalities,
+            body + rest,
+            head,
+            in_aggregate,
+        )
 
     @staticmethod
     def _inequalities(body: Iterable[AST]) -> Inequalities:
@@ -355,7 +380,7 @@ class SymmetryTranslator:
             for elem in blit.atom.elements:
                 condition = list(elem.condition)
                 for symmetry_bundle in list(
-                    self.largest_symmetric_group(condition, [rule.head] + list(elem.terms) + list(rule.body), True)
+                    self.largest_symmetric_group(condition, rule.head, list(elem.terms) + list(rule.body), True)
                 ):
                     log.info(f"Replace atleast2 in aggregate {str(blit)}.")
                     for lit in symmetry_bundle.remove_lits():
@@ -381,7 +406,7 @@ class SymmetryTranslator:
         head: AST = rule.head
         body: list[AST] = list(rule.body)
 
-        for symmetry_bundle in list(self.largest_symmetric_group(body, [head], False)):
+        for symmetry_bundle in list(self.largest_symmetric_group(body, head, [], False)):
             ### Translate to aggregate
             if not symmetry_bundle.empty():
                 log.info(f"Replace atleast2 in {str(rule)}")

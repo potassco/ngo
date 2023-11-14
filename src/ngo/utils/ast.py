@@ -730,9 +730,14 @@ def loc2str(loc: Location) -> str:
     return f"{loc.begin.filename}:{loc.begin.line}:{loc.begin.column}"
 
 
-def global_vars(lits: list[AST]) -> set[AST]:
+def global_vars_inside_body(lits: list[AST]) -> set[AST]:
     """compute all Variables that are visible within the same outer scope"""
     return set.union(*collect_binding_information_body(lits))
+
+
+def global_vars_inside_head(head: AST) -> set[AST]:
+    """compute all Variables that are visible within the same outer scope"""
+    return set.union(*collect_binding_information_head(head, []))
 
 
 def _get_simple_equalities(lits: list[AST]) -> list[AST]:
