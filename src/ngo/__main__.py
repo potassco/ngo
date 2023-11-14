@@ -9,14 +9,13 @@ from clingo.ast import AST, parse_files
 
 from ngo.aggregate_equality1 import EqualVariable
 from ngo.cleanup import CleanupTranslator
-from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
-from ngo.utils.globals import UniqueNames, auto_detect_input, auto_detect_output
+from ngo.utils.globals import auto_detect_input, auto_detect_output
 from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import get_parser
 
@@ -40,9 +39,6 @@ def main() -> None:
         args.output_predicates = auto_detect_output(prg)
     elif args.output_predicates == "":
         args.output_predicates = []
-    pdg = PositivePredicateDependency(prg)
-    unique_names = UniqueNames(prg, args.input_predicates)
-    dp = DomainPredicates(unique_names, prg)
 
     while True:
         old = deepcopy(prg)
@@ -52,35 +48,31 @@ def main() -> None:
             prg = clt.execute(prg)
 
         if "unused" in args.enable:
-            utr = UnusedTranslator(args.input_predicates, args.output_predicates, unique_names)
+            utr = UnusedTranslator(prg, args.input_predicates, args.output_predicates)
             prg = utr.execute(prg)
 
         if "duplication" in args.enable:
-            ldt = LiteralDuplicationTranslator(unique_names, dp)
+            ldt = LiteralDuplicationTranslator(prg, args.input_predicates)
             prg = ldt.execute(prg)
 
         if "symmetry" in args.enable:
-            rdp = RuleDependency(prg)
-            trans = SymmetryTranslator(unique_names, rdp, dp)
+            trans = SymmetryTranslator(prg, args.input_predicates)
             prg = trans.execute(prg)
 
         if "equalities" in args.enable:
-            eq = EqualVariable(pdg)
+            eq = EqualVariable(prg)
             prg = list(chain(map(eq, prg)))
 
         if "minmax_chains" in args.enable:
-            rdp = RuleDependency(prg)
-            mma = MinMaxAggregator(unique_names, rdp, dp)
+            mma = MinMaxAggregator(prg, args.input_predicates)
             prg = mma.execute(prg)
 
         if "sum_chains" in args.enable:
-            rdp = RuleDependency(prg)
-            sagg = SumAggregator(unique_names, args.input_predicates, rdp, dp, prg)
+            sagg = SumAggregator(prg, args.input_predicates)
             prg = sagg.execute(prg)
 
         if "math" in args.enable:
-            rdp = RuleDependency(prg)
-            math = MathSimplification(rdp)
+            math = MathSimplification(prg)
             prg = math.execute(prg)
 
         if prg == old:

@@ -4,7 +4,6 @@ from typing import Optional
 import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
-from ngo.dependency import RuleDependency
 from ngo.math_simplification import Goebner, MathSimplification
 
 to_str = {
@@ -330,8 +329,7 @@ def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    rdp = RuleDependency(prg)
-    math = MathSimplification(rdp)
+    math = MathSimplification(prg)
     newprg = "\n".join(map(str, math.execute(prg, False)))
     assert newprg == output
 
@@ -513,7 +511,6 @@ def test_math_simplification_execute_opt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    rdp = RuleDependency(prg)
-    math = MathSimplification(rdp)
+    math = MathSimplification(prg)
     newprg = "\n".join(map(str, math.execute(prg)))
     assert newprg == output

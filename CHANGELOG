@@ -4,6 +4,7 @@
  - improve cleanup trait
  - improve unused trait
  - auto detect output predicates
+ - refactor main loop
 0.0.5:
  - add sum_chains trait
  - set log output to info by default

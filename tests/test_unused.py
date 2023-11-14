@@ -6,7 +6,6 @@ from clingo.ast import AST, parse_string
 
 from ngo.unused import UnusedTranslator
 from ngo.utils.ast import Predicate
-from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -125,8 +124,7 @@ def test_unused_translation(
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    una = UniqueNames(ast, input_predicates)
-    utr = UnusedTranslator(input_predicates, output_predicates, una)
+    utr = UnusedTranslator(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, utr.execute(ast)))
     assert rhs == output
 
@@ -346,8 +344,7 @@ def test_unused_translation_fixpoint(
     ast: list[AST] = []
     parse_string(lhs, ast.append)
     while True:
-        una = UniqueNames(ast, input_predicates)
-        utr = UnusedTranslator(input_predicates, output_predicates, una)
+        utr = UnusedTranslator(ast, input_predicates, output_predicates)
         new_ast = utr.execute(ast)
         if new_ast == ast:
             break

@@ -21,12 +21,10 @@ log = singleton_factory_logger("unused")
 class UnusedTranslator:
     """Removes unecessary predicates and arities from the program"""
 
-    def __init__(
-        self, input_predicates: list[Predicate], output_predicates: list[Predicate], unique_names: UniqueNames
-    ):
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate], output_predicates: list[Predicate]):
+        self.unique_names = UniqueNames(prg, input_predicates)
         self.input_predicates = input_predicates
         self.output_predicates = output_predicates
-        self.unique_names = unique_names
         self.used_positions: dict[Predicate, set[int]] = defaultdict(set)
         self.used: set[Predicate] = set()
         self._anon = Variable(LOC, "_")

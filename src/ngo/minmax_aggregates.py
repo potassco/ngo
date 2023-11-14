@@ -72,10 +72,10 @@ class MinMaxAggregator:
 
     MinMaxPred = tuple[int, TranslationMap, int]
 
-    def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
-        self.unique_names = unique_names
-        self.rule_dependency = rule_dependency
-        self.domain_predicates = domain_predicates
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate]):
+        self.unique_names = UniqueNames(prg, input_predicates)
+        self.rule_dependency = RuleDependency(prg)
+        self.domain_predicates = DomainPredicates(self.unique_names, prg)
         # list of ({AggregateFunction.Max, AggregateFunction.Min}, Translation, index)
         #  where index is the position of the variable indicating the minimum/maximum
 

@@ -172,10 +172,10 @@ class SymmetryTranslator:
             """a list of all literals that need to be added"""
             return sorted(self._add_lits)
 
-    def __init__(self, unique_names: UniqueNames, rule_dependency: RuleDependency, domain_predicates: DomainPredicates):
-        self.unique_names = unique_names
-        self.rule_dependency = rule_dependency
-        self.domain_predicates = domain_predicates
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate]):
+        self.unique_names = UniqueNames(prg, input_predicates)
+        self.rule_dependency = RuleDependency(prg)
+        self.domain_predicates = DomainPredicates(self.unique_names, prg)
 
     Inequalities = dict[ComparisonOperator, list[tuple[AST, AST, AST]]]
 

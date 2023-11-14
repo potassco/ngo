@@ -2,10 +2,8 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.dependency import DomainPredicates
 from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables
 from ngo.utils.ast import replace_assignments
-from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -377,9 +375,6 @@ def test_duplication(prg: str, converted_prg: str) -> None:
     """test removal of duplicate literals on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    unique = UniqueNames(ast, [])
-    dp = DomainPredicates(unique, ast)
-    unique_names = UniqueNames(ast, [])
-    ldt = LiteralDuplicationTranslator(unique_names, dp)
+    ldt = LiteralDuplicationTranslator(ast, [])
     output = "\n".join(map(str, ldt.execute(ast)))
     assert converted_prg == output

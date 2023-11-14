@@ -115,8 +115,8 @@ class EqualVariable(Transformer):
 
     # TODO: can't replace multiple aggregates at the same time yet, needs a fixpoint calculation
 
-    def __init__(self, dependency: PositivePredicateDependency):
-        self.dependency = dependency
+    def __init__(self, prg: list[AST]):
+        self.dependency = PositivePredicateDependency(prg)
 
     def _create_analytics_from_body(self, body: list[AST]) -> dict[int, AggAnalytics]:
         analytics: dict[int, AggAnalytics] = {}

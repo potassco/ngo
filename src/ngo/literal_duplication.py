@@ -16,6 +16,7 @@ from clingo.ast import AST, ASTType, Function, Literal, Rule, Sign, SymbolicAtom
 from ngo.dependency import DomainPredicates
 from ngo.utils.ast import (
     LOC,
+    Predicate,
     collect_binding_information_body,
     global_vars_inside_body,
     replace_assignments,
@@ -277,9 +278,9 @@ def anonymize_variables(literals: Iterable[AST]) -> tuple[list[AST], dict[str, s
 class LiteralDuplicationTranslator:
     """Removes duplicated literal sets in the body"""
 
-    def __init__(self, unique_names: UniqueNames, domain_predicates: DomainPredicates):
-        self.unique_names = unique_names
-        self.domain_predicates = domain_predicates
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate]):
+        self.unique_names = UniqueNames(prg, input_predicates)
+        self.domain_predicates = DomainPredicates(self.unique_names, prg)
 
     @staticmethod
     def compute_size_from_body(rule: AST) -> int:

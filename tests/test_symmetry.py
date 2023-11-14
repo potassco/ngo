@@ -2,9 +2,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.symmetry import SymmetryTranslator
-from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -110,10 +108,7 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     """test symmetry breaking on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    rdp = RuleDependency(ast)
-    unique_names = UniqueNames(ast, [])
-    dp = DomainPredicates(unique_names, ast)
-    st = SymmetryTranslator(unique_names, rdp, dp)
+    st = SymmetryTranslator(ast, [])
     output = "\n".join(map(str, st.execute(ast)))
     assert converted_prg == output
 

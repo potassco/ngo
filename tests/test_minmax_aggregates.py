@@ -2,9 +2,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.minmax_aggregates import MinMaxAggregator
-from ngo.utils.globals import UniqueNames
 
 # diable line too long warnings
 # ruff: noqa: E501
@@ -1001,9 +999,6 @@ def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     """test minmax aggregates on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    rdp = RuleDependency(ast)
-    unique = UniqueNames(ast, [])
-    dp = DomainPredicates(unique, ast)
-    mma = MinMaxAggregator(unique, rdp, dp)
+    mma = MinMaxAggregator(ast, [])
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output

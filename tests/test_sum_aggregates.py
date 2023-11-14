@@ -2,10 +2,8 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.dependency import DomainPredicates, RuleDependency
 from ngo.sum_aggregates import SumAggregator
 from ngo.utils.ast import AnnotatedPredicate, Predicate
-from ngo.utils.globals import UniqueNames
 
 
 @pytest.mark.parametrize(
@@ -107,10 +105,7 @@ def test_sum_aggregates_bound_detection(
     """test sum aggregates on whole programs"""
     ast: list[AST] = []  # pylint: disable=duplicate-code
     parse_string(prg, ast.append)
-    rdp = RuleDependency(ast)
-    unique = UniqueNames(ast, [])
-    dp = DomainPredicates(unique, ast)
-    mma = SumAggregator(unique, [], rdp, dp, ast)
+    mma = SumAggregator(ast, [])
     assert sorted(mma.at_most_one_predicates()) == at_most_one
     assert sorted(mma.at_least_one_predicates()) == at_least_one
 
@@ -388,9 +383,6 @@ def test_sum_aggregates_output(prg: str, converted_prg: str) -> None:
     """test sum aggregates on whole programs"""
     ast: list[AST] = []  # pylint: disable=duplicate-code
     parse_string(prg, ast.append)
-    rdp = RuleDependency(ast)
-    unique = UniqueNames(ast, [])
-    dp = DomainPredicates(unique, ast)
-    mma = SumAggregator(unique, [], rdp, dp, ast)
+    mma = SumAggregator(ast, [])
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output

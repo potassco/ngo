@@ -43,18 +43,11 @@ log = singleton_factory_logger("sum_chains")
 class SumAggregator:
     """Translates some predicates inside sum aggregates into chains"""
 
-    def __init__(
-        self,
-        unique_names: UniqueNames,
-        input_predicates: list[Predicate],
-        rule_dependency: RuleDependency,
-        domain_predicates: DomainPredicates,
-        prg: list[AST],
-    ):
-        self.unique_names = unique_names
+    def __init__(self, prg: list[AST], input_predicates: list[Predicate]):
+        self.unique_names = UniqueNames(prg, input_predicates)
         self.input_predicates: set[Predicate] = set(input_predicates)
-        self.rule_dependency = rule_dependency
-        self.domain_predicates = domain_predicates
+        self.rule_dependency = RuleDependency(prg)
+        self.domain_predicates = DomainPredicates(self.unique_names, prg)
         # list of ({AggregateFunction.Max, AggregateFunction.Min}, Translation, index)
         #  where index is the position of the variable indicating the minimum/maximum
         self._atmost_preds: list[AnnotatedPredicate]

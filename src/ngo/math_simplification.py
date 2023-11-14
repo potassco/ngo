@@ -73,8 +73,8 @@ class SympyApi(Exception):
 class MathSimplification:
     """class does math simplification on literals"""
 
-    def __init__(self, rdp: RuleDependency) -> None:
-        self._rdp = rdp
+    def __init__(self, prg: list[AST]) -> None:
+        self._rdp = RuleDependency(prg)
 
     @staticmethod
     def cost(body: list[AST]) -> tuple[int, int]:

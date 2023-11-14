@@ -6,12 +6,13 @@ from clingo.ast import AST, parse_string
 
 from ngo.aggregate_equality1 import EqualVariable
 from ngo.cleanup import CleanupTranslator
-from ngo.dependency import DomainPredicates, PositivePredicateDependency, RuleDependency
 from ngo.literal_duplication import LiteralDuplicationTranslator
+from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
-from ngo.utils.globals import UniqueNames, auto_detect_input
+from ngo.utils.globals import auto_detect_input
 
 
 @pytest.mark.parametrize(
@@ -38,27 +39,29 @@ machine(M) :- duration(_,M,_).
 time(T) :- T = (1..X); X = #sum { D,J,M: duration(J,M,D) }.
 { slot(J,M,T): duration(J,M,_) } :- machine(M); time(T).
 #false :- slot(J,M,T); not slot(J,M,(T-1)); duration(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
-__dom_slot(M,T) :- duration(_,M,_); machine(M); time(T).
+__aux_1(__AUX_1) :- duration(_,__AUX_1,_); machine(__AUX_1).
+__dom_slot(M,T) :- time(T); __aux_1(M).
 #false :- __dom_slot(M,T); 2 <= #count { J1: slot(J1,M,T) }.
 #false :- duration(J,M,_); not slot(J,M,_).
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
-__dom___max_0_13(T) :- __dom_slot(_,T).
+__dom_slot1(T) :- time(T); __aux_1(_).
+__dom___max_0_13(T) :- __dom_slot1(T).
 __min_0_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }; __dom___max_0_13(_).
 __next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
 __next_0_0__dom___max_0_13(P,N) :- __next_0_0__dom___max_0_13(_,P); __dom___max_0_13(N); N > P;\
  not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
 __chain_0_0__max___dom___max_0_13(T) :- slot(_,_,T).
-__aux_1(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
-__chain_0_0__max___dom___max_0_13(__PREV) :- __aux_1(_,__PREV).
-:~ __aux_1(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain_0_0__max___dom___max_0_13(__PREV,__NEXT)]
+__aux_2(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
+__chain_0_0__max___dom___max_0_13(__PREV) :- __aux_2(_,__PREV).
+:~ __aux_2(__NEXT,__PREV). [(__NEXT-__PREV)@0,__chain_0_0__max___dom___max_0_13(__PREV,__NEXT)]
 :~ __chain_0_0__max___dom___max_0_13(__NEXT);\
  __min_0_0__dom___max_0_13(__NEXT). [__NEXT@0,__chain_0_0__max___dom___max_0_13(#sup,__NEXT)]""",
         ),
         (
             """
 {max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
-         """,  # currently not handled but in future, see #9
+            """,  # currently not handled but in future, see #9
             """#program base.
 { max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23: #true }; person(P); random(_).""",
         ),
@@ -69,10 +72,6 @@ def test_all(lhs: str, rhs: str) -> None:
     prg: list[AST] = []
     parse_string(lhs, prg.append)
     input_predicates = auto_detect_input(prg)
-    rdp = RuleDependency(prg)
-    pdg = PositivePredicateDependency(prg)
-    unique_names = UniqueNames(prg, input_predicates)
-    dp = DomainPredicates(unique_names, prg)
 
     while True:
         old = list(prg)
@@ -80,20 +79,26 @@ def test_all(lhs: str, rhs: str) -> None:
         clt = CleanupTranslator(input_predicates)
         prg = clt.execute(prg)
 
-        utr = UnusedTranslator(input_predicates, [], unique_names)
+        utr = UnusedTranslator(prg, input_predicates, [])
         prg = utr.execute(prg)
 
-        ldt = LiteralDuplicationTranslator(unique_names, dp)
+        ldt = LiteralDuplicationTranslator(prg, input_predicates)
         prg = ldt.execute(prg)
 
-        trans = SymmetryTranslator(unique_names, rdp, dp)
+        trans = SymmetryTranslator(prg, input_predicates)
         prg = trans.execute(prg)
 
-        eq = EqualVariable(pdg)
+        eq = EqualVariable(prg)
         prg = list(chain(map(eq, prg)))
 
-        mma = MinMaxAggregator(unique_names, rdp, dp)
+        mma = MinMaxAggregator(prg, input_predicates)
         prg = mma.execute(prg)
+
+        sagg = SumAggregator(prg, input_predicates)
+        prg = sagg.execute(prg)
+
+        math = MathSimplification(prg)
+        prg = math.execute(prg)
 
         if prg == old:
             break

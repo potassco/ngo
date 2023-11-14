@@ -3,7 +3,6 @@ import pytest
 from clingo.ast import AST, Transformer, parse_string
 
 from ngo.aggregate_equality1 import BoundComputer, EqualVariable
-from ngo.dependency import PositivePredicateDependency
 
 # diable line too long warnings
 # ruff: noqa: E501
@@ -148,8 +147,7 @@ def test_equal_variable_replacement(rule: str, result: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    pdg = PositivePredicateDependency(prg)
-    eq = EqualVariable(pdg)
+    eq = EqualVariable(prg)
 
     class RuleVisitor(Transformer):
         """Simple Transformer"""
@@ -180,8 +178,7 @@ def test_equal_variable_reject(rule: str, result: str) -> None:
     """test cases where I do not want to use the equal variable optimization"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    pdg = PositivePredicateDependency(prg)
-    eq = EqualVariable(pdg)
+    eq = EqualVariable(prg)
 
     class RuleVisitor(Transformer):
         """Simple Transformer"""
