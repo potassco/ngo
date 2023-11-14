@@ -1,3 +1,4 @@
+0.0.7:
 0.0.6:
  - add default options without duplication trait
  - translate symmetries to counting aggregate if possible
