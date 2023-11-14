@@ -287,7 +287,7 @@ class DomainPredicates:
                 )
                 for cond in conditions:
                     yield from self.__create_domain_for_condition(cond)
-                yield Rule(LOC, newatom, conditions)
+                yield Rule(LOC, Literal(LOC, Sign.NoSign, newatom), conditions)
 
     @staticmethod
     def _create_projected_lit(pred: Predicate, variables: Mapping[int, AST], sign: Sign = Sign.NoSign) -> AST:

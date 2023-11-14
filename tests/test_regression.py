@@ -45,12 +45,11 @@ __dom_slot(M,T) :- time(T); __aux_1(M).
 #false :- duration(J,M,_); not slot(J,M,_).
 #false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
 __dom_slot1(T) :- time(T); __aux_1(_).
-__dom___max_0_13(T) :- __dom_slot1(T).
-__min_0_0__dom___max_0_13(X) :- X = #min { L: __dom___max_0_13(L) }; __dom___max_0_13(_).
-__next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom___max_0_13(N); N > P;\
- not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
-__next_0_0__dom___max_0_13(P,N) :- __next_0_0__dom___max_0_13(_,P); __dom___max_0_13(N); N > P;\
- not __dom___max_0_13(B): __dom___max_0_13(B), P < B < N.
+__min_0_0__dom___max_0_13(X) :- X = #min { L: __dom_slot1(L) }; __dom_slot1(_).
+__next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom_slot1(N); N > P;\
+ not __dom_slot1(B): __dom_slot1(B), P < B < N.
+__next_0_0__dom___max_0_13(P,N) :- __next_0_0__dom___max_0_13(_,P); __dom_slot1(N); N > P;\
+ not __dom_slot1(B): __dom_slot1(B), P < B < N.
 __chain_0_0__max___dom___max_0_13(T) :- slot(_,_,T).
 __aux_2(__AUX_0,__AUX_1) :- __chain_0_0__max___dom___max_0_13(__AUX_0); __next_0_0__dom___max_0_13(__AUX_1,__AUX_0).
 __chain_0_0__max___dom___max_0_13(__PREV) :- __aux_2(_,__PREV).
@@ -64,6 +63,24 @@ __chain_0_0__max___dom___max_0_13(__PREV) :- __aux_2(_,__PREV).
             """,  # currently not handled but in future, see #9
             """#program base.
 { max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23: #true }; person(P); random(_).""",
+        ),
+        (
+            """
+subgrid_size(3).
+size(S): S = (N*N) :- subgrid_size(N).
+sudoku(X,Y,V) :- initial(X,Y,V).
+1 = { sudoku(X,Y,V): V = (1..N) } :- size(N); X = (1..N); Y = (1..N).
+#false :- sudoku(X1,Y1,V1); sudoku(X2,Y2,V2); X1 = X2; Y1 != Y2; V1 = V2.
+            """,
+            """#program base.
+subgrid_size(3).
+size(S): S = (N*N) :- subgrid_size(N).
+sudoku(X,Y,V) :- initial(X,Y,V).
+1 = { sudoku(X,Y,V): V = (1..N) } :- size(N); X = (1..N); Y = (1..N).
+__dom_sudoku(X,V) :- initial(X,_,V).
+__dom_size(S) :- S = (N*N); subgrid_size(N).
+__dom_sudoku(X,V) :- V = (1..N); __dom_size(N); X = (1..N); _ = (1..N).
+#false :- __dom_sudoku(X1,V1); 2 <= #count { Y1: sudoku(X1,Y1,V1) }.""",
         ),
     ),
 )

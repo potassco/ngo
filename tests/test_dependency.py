@@ -578,6 +578,15 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
             ],
             ["__dom_c((1..2),(3..4)).", "__dom_b((1..4)).", "__dom_a(X) :- d(X); __dom_c(X,Y): __dom_b(Y)."],
         ),
+        (
+            """
+size(S): S = (N*N) :- subgrid_size(N).
+            """,
+            [
+                ("size", 1),
+            ],
+            ["__dom_size(S) :- S = (N*N); subgrid_size(N)."],
+        ),
     ],
 )
 def test_domain_predicates_condition(prg: str, predicates: list[Predicate], domain_program: list[str]) -> None:
