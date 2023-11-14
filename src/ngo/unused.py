@@ -226,6 +226,10 @@ class UnusedTranslator:
         # create a mapping for all 1to1 replaceable predicates
         mapping: dict[Predicate, "UnusedTranslator.Mapper"] = {}
         rd = RuleDependency(prg)
+        # unpool everything
+        for stm in prg:
+            ret.extend(stm.unpool())
+        ret, prg = [], ret
 
         for head in rd.get_headderivable_predicates():
             if head in self.input_predicates or head in self.output_predicates:

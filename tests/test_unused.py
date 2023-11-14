@@ -328,6 +328,14 @@ task(T) :- duration(T,_,_).
 task_nr(S) :- S = #sum { 1,task(T): task(T) }.
 1 <= { order(T,S): S = (1..Nr), task_nr(Nr) } <= 1 :- task(T).""",
         ),
+        (
+            """
+n(-1;0;1).
+            """,
+            [],
+            [],
+            """#program base.""",
+        ),
     ),
 )
 def test_unused_translation_fixpoint(
