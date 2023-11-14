@@ -195,26 +195,3 @@ def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: s
     clt = CleanupTranslator(input_predicates)
     output = "\n".join(map(str, clt.execute(ast)))
     assert rhs == output
-
-
-@pytest.mark.parametrize(
-    "lhs, input_predicates",
-    (
-        (
-            """
-a.
-{b(X) : c(X)}.
-:- d, not b(X).
-:- not e, e(X).
-#minimize {1,2,3 : f(X)}.
-            """,
-            {Predicate("f", 1), Predicate("c", 1), Predicate("d", 0), Predicate("e", 0), Predicate("e", 1)},
-        ),
-    ),
-)
-def test_auto_detection(lhs: str, input_predicates: set[Predicate]) -> None:
-    """test removal of superseeded literals on whole programs"""
-    ast: list[AST] = []
-    parse_string(lhs, ast.append)
-    auto_detected = CleanupTranslator.auto_detect_predicates(ast)
-    assert input_predicates == set(auto_detected)

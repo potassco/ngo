@@ -1,8 +1,9 @@
 """ test ast utility functions """
+import pytest
 from clingo.ast import AST, Variable, parse_string
 
 from ngo.utils.ast import LOC, Predicate
-from ngo.utils.globals import UniqueNames, UniqueVariables
+from ngo.utils.globals import UniqueNames, UniqueVariables, auto_detect_input, auto_detect_output
 
 
 def test_unique_names() -> None:
@@ -34,3 +35,47 @@ f(X,C) :- b(X,A,B).
     assert unique_names.make_unique(Variable(LOC, "Y")).name == "Y0"
     assert unique_names.make_unique(Variable(LOC, "Y")).name == "Y1"
     assert unique_names.make_unique(Variable(LOC, "A")).name == "A0"
+
+
+@pytest.mark.parametrize(
+    "lhs, input_predicates",
+    (
+        (
+            """
+a.
+{b(X) : c(X)}.
+:- d, not b(X).
+:- not e, e(X).
+#minimize {1,2,3 : f(X)}.
+            """,
+            {Predicate("f", 1), Predicate("c", 1), Predicate("d", 0), Predicate("e", 0), Predicate("e", 1)},
+        ),
+    ),
+)
+def test_auto_input(lhs: str, input_predicates: set[Predicate]) -> None:
+    """test removal of superseeded literals on whole programs"""
+    ast: list[AST] = []
+    parse_string(lhs, ast.append)
+    auto_detected = auto_detect_input(ast)
+    assert input_predicates == set(auto_detected)
+
+
+@pytest.mark.parametrize(
+    "lhs, output_predicates",
+    (
+        (
+            """
+#show p/3.
+#show a : b.
+#show c(X) : d(X).
+            """,
+            {Predicate("p", 3), Predicate("b", 0), Predicate("d", 1)},
+        ),
+    ),
+)
+def test_auto_output(lhs: str, output_predicates: set[Predicate]) -> None:
+    """test removal of superseeded literals on whole programs"""
+    ast: list[AST] = []
+    parse_string(lhs, ast.append)
+    auto_detected = auto_detect_output(ast)
+    assert output_predicates == set(auto_detected)

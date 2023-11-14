@@ -117,9 +117,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument(
         "--output-predicates",
         action=PredicateList,
-        nargs="+",
+        nargs="?",
         type=str,
-        default="",
+        default="auto",
         help="enter all output predicates in the form 'name/arity', like 'edge/2' as a comma seperated list.",
     )
 

@@ -11,7 +11,7 @@ from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
-from ngo.utils.globals import UniqueNames
+from ngo.utils.globals import UniqueNames, auto_detect_input
 
 
 @pytest.mark.parametrize(
@@ -68,7 +68,7 @@ def test_all(lhs: str, rhs: str) -> None:
     """test removal of superseeded literals on whole programs"""
     prg: list[AST] = []
     parse_string(lhs, prg.append)
-    input_predicates = CleanupTranslator.auto_detect_predicates(prg)
+    input_predicates = auto_detect_input(prg)
     rdp = RuleDependency(prg)
     pdg = PositivePredicateDependency(prg)
     unique_names = UniqueNames(prg, input_predicates)

@@ -3,6 +3,7 @@
  - translate symmetries to counting aggregate if possible
  - improve cleanup trait
  - improve unused trait
+ - auto detect output predicates
 0.0.5:
  - add sum_chains trait
  - set log output to info by default

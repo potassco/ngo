@@ -40,7 +40,7 @@ Example:
 ```shell
 ngo --output-predicates="path/2, cost/1"
 ```
-You can also write `--output-predicates` (its the default) to leave it empty. This will remove as much predicate literals as possible. If performance is critical it makes sense to remove all kinds of output rewriting from the encoding and make a dedicated postprocessing step for it.
+You can also write `--output-predicates=auto` (its the default). It will detect the predicates from the show statements. If performance is critical it makes sense to remove all kinds of output rewriting from the encoding and make a dedicated postprocessing step for it. For this consider using `--output-predicates` without an argument to make it empty.
 
 ### Option --enable
 

@@ -9,7 +9,7 @@ from typing import Iterator, Optional
 
 from clingo.ast import AST, ASTType, Sign
 
-from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates, predicates
+from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("cleanup")
@@ -34,23 +34,6 @@ class CleanupTranslator:
     def __init__(self, input_predicates: list[Predicate]):
         self.input_predicates = input_predicates
         self.superseeds: set[Mapping] = set()
-
-    @staticmethod
-    def auto_detect_predicates(prg: list[AST]) -> list[Predicate]:
-        """
-        given a program return a list of all predicates that occur in the program
-        but are not derivable in a head
-        """
-        all_preds: set[Predicate] = set()
-        derivable_preds: set[Predicate] = set()
-        for stm in prg:
-            all_preds.update([pred.pred for pred in predicates(stm)])
-            derivable_preds.update([pred.pred for pred in headderivable_predicates(stm)])
-
-        input_ = list(sorted(all_preds - derivable_preds))
-        for pred in input_:
-            log.info(f"Detected input predicate: {pred.name}/{pred.arity}")
-        return input_
 
     @staticmethod
     def _create_mappings(head_symbol: AST, body_lits: list[AST]) -> Iterator[Mapping]:

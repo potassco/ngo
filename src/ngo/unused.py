@@ -122,7 +122,6 @@ class UnusedTranslator:
             for pos in [x for x in range(0, pred.arity) if x in self.used_positions[pred]]:
                 args.append(term.arguments[pos])
             if args != list(term.arguments):
-                log.info(f"Shrink predicate {term.name}/{len(args)}.")
                 name = self._new_name(pred, Predicate(term.name, len(args)))
                 term = term.update(name=name, arguments=args)
                 return atom.update(symbol=term)

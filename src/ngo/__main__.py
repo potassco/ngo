@@ -16,7 +16,7 @@ from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
-from ngo.utils.globals import UniqueNames
+from ngo.utils.globals import UniqueNames, auto_detect_input, auto_detect_output
 from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import get_parser
 
@@ -35,8 +35,10 @@ def main() -> None:
     parse_files(["-"], prg.append, logger=log.warn)
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
-        args.input_predicates = CleanupTranslator.auto_detect_predicates(prg)
-    if args.output_predicates == "":
+        args.input_predicates = auto_detect_input(prg)
+    if args.output_predicates == "auto":
+        args.output_predicates = auto_detect_output(prg)
+    elif args.output_predicates == "":
         args.output_predicates = []
     pdg = PositivePredicateDependency(prg)
     unique_names = UniqueNames(prg, args.input_predicates)
