@@ -4,6 +4,7 @@
  lb < #agg{} < ub
 """
 from itertools import product
+from typing import Iterator
 
 from clingo.ast import AST, ASTType, BodyAggregate, Comparison, ComparisonOperator, Guard, Literal, Sign, Transformer
 
@@ -11,6 +12,7 @@ from ngo.dependency import PositivePredicateDependency
 from ngo.utils.ast import (
     LOC,
     AggAnalytics,
+    SignedPredicate,
     contains_ast,
     contains_variable,
     loc2str,
@@ -126,6 +128,16 @@ class EqualVariable(Transformer):
                 analytics[i] = agg_info
         return analytics
 
+    def _dependent(self, pheads: Iterator[SignedPredicate], pbodies: Iterator[SignedPredicate]) -> bool:
+        """True if they are dependent due to a positive, cyclic dependency"""
+        for head, body in product(
+            map(lambda signedpred: signedpred.pred, pheads),
+            map(lambda signedpred: signedpred.pred, pbodies),
+        ):
+            if self.dependency.are_dependent([head, body]):
+                return True
+        return False
+
     def _replace_bounds(self, rule: AST) -> AST:
         """
         Replaces bodys with aggregates of the form X = #agg{}
@@ -138,18 +150,11 @@ class EqualVariable(Transformer):
             if contains_variable(rule.head, agg_info.equal_variable_bound[0]):
                 log.info(f"Skip {loc2str(rule.location)} as head contains assignment variable.")
                 continue
-            cont = False
             pbodies = predicates(rule.body[i].atom, {Sign.NoSign})
-            for head, body in product(
-                map(lambda signedpred: signedpred.pred, pheads),
-                map(lambda signedpred: signedpred.pred, pbodies),
-            ):
-                if self.dependency.are_dependent([head, body]):
-                    cont = True
-                    log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
-                    break
-            if cont:
+            if self._dependent(pheads, pbodies):
+                log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
                 continue
+
             bcomp = BoundComputer(agg_info.equal_variable_bound[0])
             for blit in [blit for key, blit in enumerate(rule.body) if key != i]:
                 bcomp.compute_bounds(blit)
@@ -178,19 +183,11 @@ class EqualVariable(Transformer):
         """
         pheads = predicates(rule.head, {Sign.NoSign})
         for i, agg_info in self._create_analytics_from_body(rule.body).items():
-            cont = False
             if rule.body[i].sign != Sign.NoSign:
                 continue
             pbodies = predicates(rule.body[i].atom, {Sign.NoSign})
-            for head, body in product(
-                map(lambda signedpred: signedpred.pred, pheads),
-                map(lambda signedpred: signedpred.pred, pbodies),
-            ):
-                if self.dependency.are_dependent([head, body]):
-                    cont = True
-                    log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
-                    break
-            if cont:
+            if self._dependent(pheads, pbodies):
+                log.info(f"Skip {loc2str(rule.location)} as rule is contained in a positive cycle.")
                 continue
 
             if not (
@@ -209,7 +206,6 @@ class EqualVariable(Transformer):
 
     def visit_Rule(self, node: AST) -> AST:  # pylint: disable=invalid-name
         """visit Rule callback"""
-        assert node.ast_type == ASTType.Rule
         node = self._replace_bounds(node)
         node = self._replace_inequality(node)
         return node

@@ -111,7 +111,7 @@ class PositivePredicateDependency:
         self.sccs = list(nx.strongly_connected_components(self.graph))
 
     def are_dependent(self, predlist: Iterable[Predicate]) -> bool:
-        """returns true if all of the predicates in predlist have a positive dependency with each other"""
+        """returns true if all of the predicates in predlist have a positive, cyclic dependency with each other"""
         spl = set(predlist)
         for scc in self.sccs:
             if spl <= scc:
