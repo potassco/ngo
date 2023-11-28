@@ -15,6 +15,8 @@ to_str = {
     ComparisonOperator.NotEqual: "!=",
 }
 
+# pylint: disable=line-too-long
+
 
 @pytest.mark.parametrize(
     "rule, sympy, ineqs",
@@ -236,8 +238,7 @@ a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""
 a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
             """,
             """#program base.
-a :- a(X); b(Z); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) };\
- not 0 = #sum { 1,b,__agg(0): b; (-1*Z),__agg(1) }.""",
+a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
         ),
         (  # sympy seems not to be able to handle abs
             """
@@ -279,7 +280,7 @@ a :- not a(X); X = #sum { (1*2),0,b: b }.""",
 a :- not a(X), Y = {b} = X; X=Y*2.
             """,
             """#program base.
-a :- not a(X); 0 = #sum { 1,0,b: b }; X = 0.""",
+a :- not a(X); X = 0; 0 = #sum { 1,0,b: b }.""",
         ),
         (
             """
@@ -322,6 +323,128 @@ a :- a(X); not Y = #sum{1,b : b}, constant = Y-2.
             """,
             """#program base.
 a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); constant,__agg(2) }.""",
+        ),
+        (
+            """
+#false :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, X = #sum {1,e: e;1,f: f;1,g: g} 3, X>=2>1, 5>3.
+            """,
+            """#program base.
+#false :- #true; 2 <= #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1.""",
+        ),
+        (
+            """#false :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2, X = #sum { 1,e: e; 1,f: f; 1,g: g } 3, X>=2, 5>3, X=Y, 1<=X!=4<5.""",
+            """#program base.
+#false :- #true; 2 <= #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1; 4 != #sum { 1,e: e; 1,f: f; 1,g: g } >= 1.""",
+        ),
+        (
+            """#false :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, X = #sum {1,e: e;1,f: f;1,g: g} 3, X>=2>1, 5>3.""",
+            """#program base.
+#false :- #true; 2 <= #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1.""",
+        ),
+        (  # refuse has 2 inequalities are combined in groebner basis
+            """bb :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, not X = #sum {1,e: e;1,f: f;1,g: g} 3, X>=2>1, 5>3.""",
+            """#program base.
+bb :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2; not X = #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; X >= 2 > 1; 5 > 3.""",
+        ),
+        (
+            """#false :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, X = #sum {1,e: e;1,f: f;1,g: g} 3, X!=2.""",
+            """#program base.
+#false :- 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1; 2 != #sum { 1,e: e; 1,f: f; 1,g: g } <= 3.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; X != Y.""",
+            """#program base.
+#false :- 0 != #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not X != Y.""",
+            """#program base.
+#false :- 0 = #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; X < Y.""",
+            """#program base.
+#false :- 0 > #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not X < Y.""",
+            """#program base.
+#false :- 0 <= #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; Y < X.""",
+            """#program base.
+#false :- 0 > #sum { (1*-1),J,__agg(0): perm(J,_); 1,J,__agg(1): job(J) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; Y != X.""",
+            """#program base.
+#false :- 0 != #sum { (1*-1),J,__agg(0): perm(J,_); 1,J,__agg(1): job(J) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not Y != X.""",
+            """#program base.
+#false :- 0 = #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Y = #count { J: job(J) }; not Y < X.""",
+            """#program base.
+#false :- 0 <= #sum { (1*-1),J,__agg(0): perm(J,_); 1,J,__agg(1): job(J) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; #count { J: job(J) } > Y; Y = X.""",
+            """#program base.
+#false :- 0 > #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """#false :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.""",
+            """#program base.
+#false :- 0 = #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_) }.""",
+        ),
+        (
+            """head(X) :- X = #count { J: perm(J,_) }; Z = #count { J: job(J) } = Y; Y = X.""",
+            """#program base.
+head(X) :- X = #sum+ { 1,J: job(J) }; 0 = #sum { 1,J,__agg(0): perm(J,_); (-1*X),__agg(1) }.""",
+        ),
+        (
+            """a :- X = #count { J: perm(J,_), a }; Z = #count { J: job(J) } = Y; Y = X.""",
+            """#program base.
+a :- 0 = #sum { (1*-1),J,__agg(0): job(J); 1,J,__agg(1): perm(J,_), a }.""",
+        ),
+        (
+            """p(X) :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2, X = #sum { 1,e: e; 1,f: f; 1,g: g } 3, X>=2, 5>3, X=Y, 1<=X!=4<5.""",
+            """#program base.
+p(X) :- X = #sum { 1,e: e; 1,f: f; 1,g: g }; 0 <= (-2+X); 0 >= (1+(-1*X)); 0 >= (-3+X); 0 != (-4+X); #true; 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1.""",
+        ),
+        (
+            """e :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2, X = #sum { 1,e: e; 1,f: f; 1,g: g } 3, X>=2.""",
+            """#program base.
+e :- 2 <= #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; 2 >= #sum { 1,a: a; 1,b: b; 1,c: c } >= 1.""",
+        ),
+        (
+            """f :- 1 <= 0 < 2.""",
+            """#program base.
+f :- #false.""",
+        ),
+        (
+            """f(X) :- b(X); X <= 0 < 2.""",
+            """#program base.
+f(X) :- b(X); #true; 0 >= X.""",
+        ),
+        (
+            """f(X) :- b(X); X <= 0 < 2.""",
+            """#program base.
+f(X) :- b(X); #true; 0 >= X.""",
+        ),
+        (
+            """f(X) :- b(X); X <= 2 < 0.""",
+            """#program base.
+f(X) :- b(X); #false; 0 >= (-2+X).""",
+        ),
+        (
+            """f(X) :- b(X,Y,Z); X < Y < Z.""",
+            """#program base.
+f(X) :- b(X,Y,Z); 0 > (X+(-1*Y)); 0 > (Y+(-1*Z)).""",
         ),
     ],
 )
@@ -489,7 +612,7 @@ a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""
 a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
             """,
             """#program base.
-a :- a(X); b(Z); not Y = #sum { 1,b: b } = Z; X = (Y-2).""",
+a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
         ),
         (  # sympy seems not to be able to handle abs
             """

@@ -46,7 +46,7 @@ You can also write `--output-predicates=auto` (its the default). It will detect 
 
 The option enable support several traits that can be added, like
 ```shell
-cat encoding.lp | ngo --enable equality minmax_chains
+cat encoding.lp | ngo --enable math minmax_chains
 ```
 By default this setting is set to `default`, which enables most traits.
 (See `--help` for which traits are used by default.)
@@ -126,22 +126,6 @@ For more complex rules the symmetry breaking is improved:
 becomes
 ```
 :- slot(J1,M,T1); slot(J2,M,T2); J1 < J2, T1 != T2.
-```
-
-
-
-**equality**
-
-Replace `X = #agg {}, X > Y` assignments with actual borders `Y < #agg {}`.
-Replace `X != #agg {}` with `not X = #agg {}` if possible.
-This can reduce grounding drastically but usually has no effect on solving.
-
-```
-:- X = #count { J: perm(J,_) }; #count { J: job(J) } > Y; Y = X.
-```
-becomes
-```
-:- Y = #count { J: perm(J,_) }; Y < #count { J: job(J) }.
 ```
 
 **minmax_chains**

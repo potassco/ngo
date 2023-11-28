@@ -89,36 +89,6 @@ def _create_graph_from_prg(prg: Iterable[AST], signs: SignSetType) -> nx.DiGraph
     return graph
 
 
-class PositivePredicateDependency:
-    """
-    positive dependency graph of the predicate in a program
-    allows for scc check
-    """
-
-    def __init__(self, prg: Iterable[AST]):
-        self.sccs = []
-        self.graph = _create_graph_from_prg(prg, {Sign.NoSign})
-        for stm in chain.from_iterable([x.unpool(condition=True) for x in prg]):
-            if stm.ast_type == ASTType.Rule:
-                heads = headderivable_predicates(stm)
-                bodies = body_predicates(stm, {Sign.NoSign})
-                self.graph.add_edges_from(
-                    product(
-                        map(lambda signedpred: signedpred.pred, bodies),
-                        map(lambda signedpred: signedpred.pred, heads),
-                    )
-                )
-        self.sccs = list(nx.strongly_connected_components(self.graph))
-
-    def are_dependent(self, predlist: Iterable[Predicate]) -> bool:
-        """returns true if all of the predicates in predlist have a positive, cyclic dependency with each other"""
-        spl = set(predlist)
-        for scc in self.sccs:
-            if spl <= scc:
-                return True
-        return False
-
-
 class DomainPredicates:
     """
     Computes which predicates have static domain and which predicates

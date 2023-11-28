@@ -20,8 +20,8 @@ else:
 VERSION = metadata.version("ngo")
 
 
-ALL_OPTIONS = ["equalities", "minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math"]
-DEFAULT_OPTIONS = ["equalities", "minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math"]
+ALL_OPTIONS = ["minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math"]
+DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math"]
 
 
 class PredicateList(Action):
