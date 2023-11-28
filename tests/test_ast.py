@@ -1,6 +1,6 @@
 """ test ast utility functions """
 import pytest
-from clingo.ast import AST, ASTType, parse_string
+from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
 from ngo.utils.ast import (
     Predicate,
@@ -8,6 +8,7 @@ from ngo.utils.ast import (
     TranslationMap,
     collect_binding_information_body,
     collect_binding_information_head,
+    compare,
     global_vars_inside_body,
     headderivable_predicates,
     potentially_unifying,
@@ -424,3 +425,20 @@ def test_translation_mapping() -> None:
     assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Y", "X"]
     trans = TranslationMap(Predicate("a", 3), Predicate("b", 3), (None, 2, 1))
     assert trans.translate_parameters(["X", "Y", "Z"]) == [None, "Z", "Y"]
+
+
+def test_compare() -> None:
+    """test comparison"""
+    assert compare(1, ComparisonOperator.Equal, 1)
+    assert compare(1, ComparisonOperator.NotEqual, 2)
+    assert compare(1, ComparisonOperator.LessEqual, 2)
+    assert compare(1, ComparisonOperator.LessThan, 2)
+    assert compare(1, ComparisonOperator.GreaterEqual, 1)
+    assert compare(2, ComparisonOperator.GreaterThan, 1)
+
+    assert not compare(1, ComparisonOperator.Equal, 2)
+    assert not compare(1, ComparisonOperator.NotEqual, 1)
+    assert not compare(1, ComparisonOperator.LessEqual, 0)
+    assert not compare(1, ComparisonOperator.LessThan, 1)
+    assert not compare(1, ComparisonOperator.GreaterEqual, 2)
+    assert not compare(1, ComparisonOperator.GreaterThan, 1)

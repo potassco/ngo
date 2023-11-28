@@ -1,10 +1,7 @@
 """ test removal of superseeded literals """
-from itertools import chain
-
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.aggregate_equality1 import EqualVariable
 from ngo.cleanup import CleanupTranslator
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
@@ -104,9 +101,6 @@ def test_all(lhs: str, rhs: str) -> None:
 
         trans = SymmetryTranslator(prg, input_predicates)
         prg = trans.execute(prg)
-
-        eq = EqualVariable(prg)
-        prg = list(chain(map(eq, prg)))
 
         mma = MinMaxAggregator(prg, input_predicates)
         prg = mma.execute(prg)

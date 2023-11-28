@@ -29,8 +29,8 @@ def test_parser() -> None:
     """
     parser = get_parser()
     args = parser.parse_args(["--log", "error"])
-    args = parser.parse_args(["--enable", "minmax_chains", "equalities"])
-    assert "equalities" in args.enable
+    args = parser.parse_args(["--enable", "minmax_chains", "math"])
+    assert "math" in args.enable
     assert "minmax_chains" in args.enable
     args = parser.parse_args(["--enable", "all"])
     assert ALL_OPTIONS == args.enable
@@ -38,7 +38,7 @@ def test_parser() -> None:
     assert sorted(DEFAULT_OPTIONS) == sorted(args.enable)
 
     with pytest.raises(ArgumentTypeError) as excinfo:
-        parser.parse_args(["--enable", "none", "equalities"])
+        parser.parse_args(["--enable", "none", "math"])
     assert str(excinfo.value) == "'none' may not be combined with other options."
     args = parser.parse_args(["--input-predicates", "zero/0, another/14"])
     assert Predicate("zero", 0) in args.input_predicates

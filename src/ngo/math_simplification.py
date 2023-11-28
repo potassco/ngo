@@ -1,5 +1,6 @@
 """ does math simplification for FO formulas and aggregates"""
 from collections import OrderedDict, defaultdict
+from math import lcm
 from typing import Optional, cast
 
 import clingo
@@ -41,6 +42,8 @@ from sympy import (
     StrictLessThan,
     Symbol,
     Unequality,
+    collect,
+    default_sort_key,
     groebner,
     oo,
     ordered,
@@ -54,6 +57,7 @@ from ngo.utils.ast import (
     collect_ast,
     collect_binding_information_body,
     collect_binding_information_head,
+    compare,
     comparison2comparisonlist,
     conditions_of_body_agg,
     negate_agg,
@@ -467,14 +471,44 @@ class Goebner:
             raise SympyApi("Modulo not supported, skipping.")
         raise SympyApi(f"Not Implemented conversion {expr.func}")  # nocoverage
 
+    @staticmethod
+    def is_const(lhs: Expr) -> bool:
+        """check if sympy expression is a constant integer"""
+        return lhs.is_number is True
+
     def relation2ast(self, lhs: Expr, op: ComparisonOperator, rhs: Expr) -> AST:
         """lhs is either variable for aggregate, fo_variable or constant
         rhs is an expr"""
+        if self.is_const(lhs) and self.is_const(rhs):
+            return BooleanConstant(compare(int(lhs), op, int(rhs)))
         rhs_ast = self.sympy2ast(rhs)
         if rhs_ast.ast_type == ASTType.BodyAggregate:
             return rhs_ast.update(left_guard=Guard(op, self.sympy2ast(lhs)))
         lhs_ast = self.sympy2ast(lhs)
         return Comparison(lhs_ast, [Guard(op, rhs_ast)])
+
+    def double_relation2ast(
+        self, lhs: Expr, opl: ComparisonOperator, mid: Expr, opr: ComparisonOperator, rhs: Expr
+    ) -> AST:
+        """lhs is either variable for aggregate, fo_variable or constant
+        rhs is an expr"""
+        if self.is_const(mid):
+            if self.is_const(lhs):
+                if compare(int(lhs), opl, int(mid)):
+                    return self.relation2ast(mid, opr, rhs)
+                return BooleanConstant(False) #nocoverage, hard to reproduce if not impossible
+            if self.is_const(rhs): #nocoverage
+                if compare(int(mid), opr, int(rhs)): 
+                    return self.relation2ast(lhs, opl, mid)
+                return BooleanConstant(False)
+        mid_ast = self.sympy2ast(mid)
+        if mid_ast.ast_type == ASTType.BodyAggregate:
+            return mid_ast.update(
+                left_guard=Guard(opl, self.sympy2ast(lhs)), right_guard=Guard(opr, self.sympy2ast(rhs))
+            )
+        lhs_ast = self.sympy2ast(lhs) 
+        rhs_ast = self.sympy2ast(rhs)
+        return Comparison(lhs_ast, [Guard(opl, mid_ast), Guard(opr, rhs_ast)])
 
     def remove_unneeded_formulas(self, formulas: list[Expr], needed_symbols: set[Symbol]) -> list[Expr]:
         """filter out formulas that have an unneeded variable on its own"""
@@ -486,6 +520,87 @@ class Goebner:
         for v in set(var_stats.keys()) - needed_symbols:
             if len(var_stats[v]) == 1:
                 ret.remove(var_stats[v][0])
+        return ret
+
+    def combine(
+        self, relations: list[tuple[Expr, ComparisonOperator, Expr]], first: int, second: int
+    ) -> Optional[tuple[Expr, ComparisonOperator, Expr, ComparisonOperator, Expr]]:
+        """combine two relations to a combined one if possible"""
+        rel1 = relations[first][2]
+        linear1 = collect(rel1, list(self._sym2agg.keys()), evaluate=False, exact=False)
+        rel2 = relations[second][2]
+        linear2 = collect(rel2, list(self._sym2agg.keys()), evaluate=False, exact=False)
+        common = set(linear1.keys()).intersection(linear2.keys())
+        agg_common = set()
+        both = None
+        for x in sorted(common, key=default_sort_key):
+            agg_symbols = set(x.free_symbols).intersection(self._sym2agg.keys())
+            if len(agg_symbols) > 0:
+                both = x
+                agg_common.update(agg_symbols)
+
+        # if both have a common non empty subset and no other aggregate variables
+        if (
+            common
+            and len((set(rel1.free_symbols) - agg_common).intersection(self._sym2agg.keys())) == 0
+            and len((set(rel2.free_symbols) - agg_common).intersection(self._sym2agg.keys())) == 0
+        ):
+            # both can be a multiple of each other
+            if both is None:
+                both = next(iter(common))
+            if not linear1[both].is_constant() or not linear2[both].is_constant():
+                return None
+            least_common = lcm(linear1[both], linear2[both])
+            factor1 = int(least_common / linear1[both])
+            factor2 = int(least_common / linear2[both])
+
+            # keep common factors in the middle, move uncommon ones to the left if possible
+            for both in common:
+                if linear1[both] * factor1 != linear2[both] * factor2:
+                    if both.free_symbols.intersection(self._sym2agg.keys()):
+                        return None #nocoverage
+                    relations[first] = (
+                        relations[first][0] - (both * linear1[both]),
+                        relations[first][1],
+                        relations[first][2] - (both * linear1[both]),
+                    )
+                    relations[second] = (
+                        relations[second][0] - (both * linear2[both]),
+                        relations[second][1],
+                        relations[second][2] - (both * linear2[both]),
+                    )
+
+            lhs = relations[first][0] * factor1
+            opl = relations[first][1] if factor1 > 0 else rhs2lhs_comparison(relations[first][1])
+            mid = relations[first][2] * factor1
+            opr = relations[second][1] if factor2 < 0 else rhs2lhs_comparison(relations[second][1])
+            rhs = relations[second][0] * factor2
+            return (lhs, opl, mid, opr, rhs)
+        return None
+
+    def compress_relations(
+        self, relations: list[tuple[Expr, ComparisonOperator, Expr]]
+    ) -> list[tuple[Expr, ComparisonOperator, Expr] | tuple[Expr, ComparisonOperator, Expr, ComparisonOperator, Expr]]:
+        """compress a bunch of ternary relations (lhs, op, rhs) to possibly 5 tuples (lhs, op, mid, opr, rhs)"""
+        ret: list[
+            tuple[Expr, ComparisonOperator, Expr] | tuple[Expr, ComparisonOperator, Expr, ComparisonOperator, Expr]
+        ] = []
+        first = 0
+        while first < len(relations):
+            found: bool = False
+            for second, _ in enumerate(relations[first + 1 :], first + 1):
+                comb = self.combine(relations, first, second)
+                if comb is not None:
+                    ret.append(comb)
+                    relations.pop(second)
+                    relations.pop(first)
+                    found = True
+                    break
+
+            if not found:
+                ret.append(relations[first])
+                first += 1
+
         return ret
 
     def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
@@ -514,36 +629,42 @@ class Goebner:
         ret: list[AST] = []
 
         simplified_expressions = self.remove_unneeded_formulas(list(base), needed_vars_symbols)
-        for expr in simplified_expressions:
-            free = cast(set[Symbol], set(list(expr.free_symbols)))
 
-            # 1. inequality
+        relations: list[tuple[Expr, ComparisonOperator, Expr]] = []
+        # try to bind all needed variables
+        for expr in reversed(simplified_expressions):
+            free = cast(set[Symbol], set(list(expr.free_symbols)))
             neq_vars = set.intersection(free, self.help_neq_vars.keys())
             if len(neq_vars) > 1:
-                return nothing  # nocoverage # hard to produce case
+                return nothing
             if len(neq_vars) == 1:
                 v = list(neq_vars)[0]
                 lexpr = solve(expr, v)
                 if len(lexpr) != 1:
                     return nothing  # nocoverage
-                ret.append(self.relation2ast(S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
+                relations.append((S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
                 continue
-
-            # 2. Equality
-            # rearrange expr such that variable binding is ok #TODO: find a coverage of all needed variables
+            # rearrange expr such that variable binding is ok
+            # #TODO: find a coverage of all needed variables
             common = list(ordered(set.intersection(free, needed_vars_symbols)))
             if common:
                 # solve for some random needed variable
                 solve_for = next((v for v in common if v in needed_bound_symbols), None)
-                if solve_for is None:
-                    ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
-                else:
+                if solve_for is not None:
                     lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
                     if len(lexpr) != 1:  # negative squareroots etc...
                         return nothing
                     ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
                     needed_bound_symbols.remove(solve_for)
-            else:
-                if not set.intersection(free, self._fo_vars.keys()):
-                    ret.append(self.relation2ast(S(0), ComparisonOperator.Equal, expr))
+                    simplified_expressions.remove(expr)
+                    continue
+            # 2. Equality
+            if common or not set.intersection(free, self._fo_vars.keys()):
+                relations.append((S(0), ComparisonOperator.Equal, expr))
+
+        for rel in sorted(self.compress_relations(relations), key=default_sort_key):
+            if len(rel) == 3:
+                ret.append(self.relation2ast(*rel))
+                continue
+            ret.append(self.double_relation2ast(*rel))
         return ret

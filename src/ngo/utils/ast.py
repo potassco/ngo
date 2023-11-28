@@ -66,6 +66,23 @@ def rhs2lhs_comparison(cmp: ComparisonOperator) -> ComparisonOperator:
     }[cmp]
 
 
+def compare(lhs: int, cmp: ComparisonOperator, rhs: int) -> bool:
+    """compare two integers using the AST comparison operator"""
+    if cmp == ComparisonOperator.Equal:
+        return lhs == rhs
+    if cmp == ComparisonOperator.NotEqual:
+        return lhs != rhs
+    if cmp == ComparisonOperator.GreaterEqual:
+        return lhs >= rhs
+    if cmp == ComparisonOperator.LessEqual:
+        return lhs <= rhs
+    if cmp == ComparisonOperator.GreaterThan:
+        return lhs > rhs
+    if cmp == ComparisonOperator.LessThan:
+        return lhs < rhs
+    assert False, "unknown Comparison Operator used"
+
+
 def negate_agg(agg: AST) -> AST:
     """negate the guards of an aggregate in the body"""
     assert agg.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate)
@@ -141,17 +158,6 @@ def collect_ast(stm: AST, ast_name: str) -> list[AST]:
     visitor = GeneralVisitor(ast_name)
     visitor.visit(stm)
     return visitor.collection
-
-
-def contains_ast(stm: AST, ast_name: str) -> bool:
-    """returns True if the given ast_name is inside the stm"""
-    test = collect_ast(stm, ast_name)
-    return bool(test)
-
-
-def contains_variable(stm: AST, name: str) -> bool:
-    """returns true if an AST contains a variable "name" """
-    return any(map(lambda x: x.name == name, collect_ast(stm, "Variable")))
 
 
 class GeneralTransformer(Transformer):

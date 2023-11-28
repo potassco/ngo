@@ -3,11 +3,9 @@ The main entry point for the application.
 """
 
 from copy import deepcopy
-from itertools import chain
 
 from clingo.ast import AST, parse_files
 
-from ngo.aggregate_equality1 import EqualVariable
 from ngo.cleanup import CleanupTranslator
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
@@ -58,10 +56,6 @@ def main() -> None:
         if "symmetry" in args.enable:
             trans = SymmetryTranslator(prg, args.input_predicates)
             prg = trans.execute(prg)
-
-        if "equalities" in args.enable:
-            eq = EqualVariable(prg)
-            prg = list(chain(map(eq, prg)))
 
         if "minmax_chains" in args.enable:
             mma = MinMaxAggregator(prg, args.input_predicates)
