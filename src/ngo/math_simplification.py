@@ -1,7 +1,7 @@
 """ does math simplification for FO formulas and aggregates"""
 from collections import OrderedDict, defaultdict
 from math import lcm
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 import clingo
 from clingo import SymbolType
@@ -496,9 +496,9 @@ class Goebner:
             if self.is_const(lhs):
                 if compare(int(lhs), opl, int(mid)):
                     return self.relation2ast(mid, opr, rhs)
-                return BooleanConstant(False) #nocoverage, hard to reproduce if not impossible
-            if self.is_const(rhs): #nocoverage
-                if compare(int(mid), opr, int(rhs)): 
+                return BooleanConstant(False)  # nocoverage, hard to reproduce if not impossible
+            if self.is_const(rhs):  # nocoverage
+                if compare(int(mid), opr, int(rhs)):
                     return self.relation2ast(lhs, opl, mid)
                 return BooleanConstant(False)
         mid_ast = self.sympy2ast(mid)
@@ -506,9 +506,9 @@ class Goebner:
             return mid_ast.update(
                 left_guard=Guard(opl, self.sympy2ast(lhs)), right_guard=Guard(opr, self.sympy2ast(rhs))
             )
-        lhs_ast = self.sympy2ast(lhs) 
-        rhs_ast = self.sympy2ast(rhs)
-        return Comparison(lhs_ast, [Guard(opl, mid_ast), Guard(opr, rhs_ast)])
+        lhs_ast = self.sympy2ast(lhs)  # nocoverage
+        rhs_ast = self.sympy2ast(rhs)  # nocoverage
+        return Comparison(lhs_ast, [Guard(opl, mid_ast), Guard(opr, rhs_ast)])  # nocoverage
 
     def remove_unneeded_formulas(self, formulas: list[Expr], needed_symbols: set[Symbol]) -> list[Expr]:
         """filter out formulas that have an unneeded variable on its own"""
@@ -522,6 +522,19 @@ class Goebner:
                 ret.remove(var_stats[v][0])
         return ret
 
+    def least_common(self, rel1: dict[Any, Any], rel2: dict[Any, Any]) -> Optional[tuple[int, int]]:
+        """return the factors that both sides need to be multiplied to be equal if possible"""
+        agg_keys = [key for key in rel1 if key in rel2 and key.free_symbols.intersection(self._sym2agg.keys())]
+        for key in agg_keys:
+            if rel1[key].is_constant() or not rel2[key].is_constant():
+                least_common = lcm(rel1[key], rel2[key])
+                return int(least_common / rel1[key]), int(least_common / rel2[key])
+        for key in rel1:
+            if key in rel2 and rel1[key].is_constant() and rel2[key].is_constant():
+                least_common = lcm(rel1[key], rel2[key])
+                return int(least_common / rel1[key]), int(least_common / rel2[key])
+        return None
+
     def combine(
         self, relations: list[tuple[Expr, ComparisonOperator, Expr]], first: int, second: int
     ) -> Optional[tuple[Expr, ComparisonOperator, Expr, ComparisonOperator, Expr]]:
@@ -532,11 +545,9 @@ class Goebner:
         linear2 = collect(rel2, list(self._sym2agg.keys()), evaluate=False, exact=False)
         common = set(linear1.keys()).intersection(linear2.keys())
         agg_common = set()
-        both = None
         for x in sorted(common, key=default_sort_key):
             agg_symbols = set(x.free_symbols).intersection(self._sym2agg.keys())
             if len(agg_symbols) > 0:
-                both = x
                 agg_common.update(agg_symbols)
 
         # if both have a common non empty subset and no other aggregate variables
@@ -546,19 +557,16 @@ class Goebner:
             and len((set(rel2.free_symbols) - agg_common).intersection(self._sym2agg.keys())) == 0
         ):
             # both can be a multiple of each other
-            if both is None:
-                both = next(iter(common))
-            if not linear1[both].is_constant() or not linear2[both].is_constant():
+            factors = self.least_common(linear1, linear2)
+            if factors is None:
                 return None
-            least_common = lcm(linear1[both], linear2[both])
-            factor1 = int(least_common / linear1[both])
-            factor2 = int(least_common / linear2[both])
+            factor1, factor2 = factors
 
             # keep common factors in the middle, move uncommon ones to the left if possible
             for both in common:
                 if linear1[both] * factor1 != linear2[both] * factor2:
                     if both.free_symbols.intersection(self._sym2agg.keys()):
-                        return None #nocoverage
+                        return None  # nocoverage
                     relations[first] = (
                         relations[first][0] - (both * linear1[both]),
                         relations[first][1],

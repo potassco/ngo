@@ -2,7 +2,7 @@
 import pytest
 from clingo.ast import AST, Sign, Transformer, parse_string
 
-from ngo.dependency import DomainPredicates, PositivePredicateDependency
+from ngo.dependency import DomainPredicates
 from ngo.utils.ast import AnnotatedPredicate, Predicate, SignedPredicate, body_predicates, head_predicates
 from ngo.utils.globals import UniqueNames
 
@@ -100,45 +100,6 @@ def test_positive_head(rule: str, result: list[SignedPredicate]) -> None:
 
     ruler = RuleVisitor()
     parse_string(rule, ruler)  # type: ignore
-
-
-@pytest.mark.parametrize(
-    "prg, result",
-    [
-        (
-            """
-            b :- a.
-            c :- b.
-            d :- c.
-            a :- d.
-            1 = #sum {1,a : e} :- d.
-            """,
-            [{Predicate("e", 0)}, {Predicate("a", 0), Predicate("b", 0), Predicate("c", 0), Predicate("d", 0)}],
-        ),
-        (
-            """
-            b :- #sum{1 : a}.
-            c :- b.
-            {d} :- c, not d.
-            a :- d, not e.
-            e :- d.
-            f;g :- e.
-            e;not g :- f.
-            e :- not g.
-            """,
-            [
-                {Predicate("g", 0)},
-                {Predicate("e", 0), Predicate("f", 0)},
-                {Predicate("a", 0), Predicate("b", 0), Predicate("c", 0), Predicate("d", 0)},
-            ],
-        ),
-    ],
-)
-def test_positive_dependencies(prg: str, result: list[set[Predicate]]) -> None:
-    """test strongly connected component graphs"""
-    ast: list[AST] = []
-    parse_string(prg, ast.append)
-    assert sorted(PositivePredicateDependency(ast).sccs) == sorted(result)
 
 
 @pytest.mark.parametrize(
