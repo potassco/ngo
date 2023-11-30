@@ -5,7 +5,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import permutations
-from typing import Iterator, Optional
+from typing import Iterable, Iterator, Optional
 
 from clingo.ast import AST, ASTType, Sign
 
@@ -226,6 +226,86 @@ class CleanupTranslator:
                 return stm.update(body=body)
         return stm
 
+    @staticmethod
+    def true(stm: AST) -> bool:
+        """check wether literal is constant true"""
+        if stm.ast_type == ASTType.Literal and stm.atom.ast_type == ASTType.BooleanConstant:
+            if stm.sign in (Sign.NoSign, Sign.DoubleNegation):
+                return bool(stm.atom.value)
+            if stm.sign == Sign.Negation:  # nocoverage
+                return not bool(stm.atom.value)  # nocoverage # parser turns not false into true
+        if stm.ast_type == ASTType.ConditionalLiteral and not stm.condition:
+            return CleanupTranslator.true(stm.literal)
+        return False
+
+    @staticmethod
+    def false(stm: AST) -> bool:
+        """check wether literal is constant false"""
+        if stm.ast_type == ASTType.Literal and stm.atom.ast_type == ASTType.BooleanConstant:
+            if stm.sign in (Sign.NoSign, Sign.DoubleNegation):
+                return not bool(stm.atom.value)
+            if stm.sign == Sign.Negation:  # nocoverage
+                return bool(stm.atom.value)  # nocoverage # parser turns not false into true
+        if stm.ast_type == ASTType.ConditionalLiteral and not stm.condition:
+            return CleanupTranslator.false(stm.literal)
+        return False
+
+    @staticmethod
+    def remove_true_literals(lits: Iterable[AST]) -> list[AST]:
+        """remove all #true literals from the list"""
+        newbody: list[AST] = []
+        for lit in lits:
+            if not CleanupTranslator.true(lit):
+                newbody.append(lit)
+        return newbody
+
+    @staticmethod
+    def contains_false(lits: Iterable[AST]) -> bool:
+        """true if lits contain #false"""
+        for lit in lits:
+            if CleanupTranslator.false(lit):
+                return True
+        return False
+
+    @staticmethod
+    def cleanup_boolean_conditionals(lits: Iterable[AST]) -> list[AST]:
+        """remove #true and #false from conditional literals and replace if needed"""
+        ret: list[AST] = []
+        for lit in lits:
+            if lit.ast_type == ASTType.ConditionalLiteral:
+                cond = CleanupTranslator.remove_true_literals(lit.condition)
+                if not CleanupTranslator.contains_false(cond):
+                    ret.append(lit.update(condition=cond))
+            else:
+                ret.append(lit)
+        return ret
+
+    @staticmethod
+    def cleanup_boolean_aggregates(lits: Iterable[AST]) -> list[AST]:
+        """remove #true and #false from BodyAggregate literals and replace if needed"""
+        ret: list[AST] = []
+        for lit in lits:
+            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate:
+                new_elements: list[AST] = []
+                for elem in lit.atom.elements:
+                    cond = CleanupTranslator.remove_true_literals(elem.condition)
+                    if not CleanupTranslator.contains_false(cond):
+                        new_elements.append(elem.update(condition=cond))
+                ret.append(lit.update(atom=lit.atom.update(elements=new_elements)))
+            else:
+                ret.append(lit)
+        return ret
+
+    def remove_boolean(self, stm: AST) -> Optional[AST]:
+        """remove any constant booleans from the statement or the statement itself"""
+        if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
+            stm = stm.update(body=self.cleanup_boolean_aggregates(stm.body))
+            stm = stm.update(body=self.cleanup_boolean_conditionals(stm.body))
+            stm = stm.update(body=self.remove_true_literals(stm.body))
+            if self.contains_false(stm.body):
+                return None
+        return stm
+
     def execute(self, prg: list[AST]) -> list[AST]:
         """
         remove all literals that are weaker than another one from bodies/conditionals
@@ -233,6 +313,8 @@ class CleanupTranslator:
         self._find_superseeded(prg)
         new_prg = []
         for stm in prg:
-            new_prg.append(self._apply_superseeding(stm))
+            r = self.remove_boolean(self._apply_superseeding(stm))
+            if r:
+                new_prg.append(r)
 
         return new_prg
