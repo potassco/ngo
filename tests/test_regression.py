@@ -59,7 +59,7 @@ __chain_0_0__max___dom___max_0_13(__PREV) :- __aux_2(_,__PREV).
 {max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
             """,  # currently not handled but in future, see #9
             """#program base.
-{ max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23: #true }; person(P); random(_).""",
+{ max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23 }; person(P); random(_).""",
         ),
         (
             """

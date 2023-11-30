@@ -195,3 +195,105 @@ def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: s
     clt = CleanupTranslator(input_predicates)
     output = "\n".join(map(str, clt.execute(ast)))
     assert rhs == output
+
+
+@pytest.mark.parametrize(
+    "lhs, input_predicates, rhs",
+    (
+        (
+            """
+{ a; b }.
+a :- #true.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- #true, b.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a :- b.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- not #false, b.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a :- b.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- #false, b.
+            """,
+            [],
+            """#program base.
+{ a; b }.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- not #true, b.
+            """,
+            [],
+            """#program base.
+{ a; b }.""",
+        ),
+        (
+            """
+{ a; b }.
+a(X) :- X = #sum {1: b; 2: #true; 3: #false}.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a(X) :- X = #sum { 1: b; 2 }.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- b : #true.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a :- b.""",
+        ),
+        (
+            """
+{ a; b }.
+a :- b : #false.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+a.""",
+        ),
+        (
+            """
+{ a; b }.
+#minimize {5: #true, a; 3: #false,b}.
+            """,
+            [],
+            """#program base.
+{ a; b }.
+:~ a. [5@0]""",
+        ),
+    ),
+)
+def test_cleanup_booleans(lhs: str, input_predicates: list[Predicate], rhs: str) -> None:
+    """test removal of superseeded literals on whole programs"""
+    ast: list[AST] = []
+    parse_string(lhs, ast.append)
+    clt = CleanupTranslator(input_predicates)
+    output = "\n".join(map(str, clt.execute(ast)))
+    assert rhs == output
