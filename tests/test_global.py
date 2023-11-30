@@ -47,8 +47,16 @@ a.
 :- d, not b(X).
 :- not e, e(X).
 #minimize {1,2,3 : f(X)}.
+wall(X,Y) :- wall(Y,X).
             """,
-            {Predicate("f", 1), Predicate("c", 1), Predicate("d", 0), Predicate("e", 0), Predicate("e", 1)},
+            {
+                Predicate("f", 1),
+                Predicate("c", 1),
+                Predicate("d", 0),
+                Predicate("e", 0),
+                Predicate("e", 1),
+                Predicate("wall", 2),
+            },
         ),
     ),
 )
