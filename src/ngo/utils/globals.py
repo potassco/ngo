@@ -1,8 +1,20 @@
 """ general util functions and classes """
 
+from collections import defaultdict
+from itertools import chain
+
 from clingo.ast import AST, ASTType, Variable
 
-from ngo.utils.ast import LOC, Predicate, collect_ast, headderivable_predicates, predicates
+from ngo.utils.ast import (
+    LOC,
+    SIGNS,
+    Predicate,
+    body_predicates,
+    collect_ast,
+    headderivable_predicates,
+    minimize_predicates,
+    predicates,
+)
 from ngo.utils.logger import singleton_factory_logger
 
 AUX_FUNC = "__aux_"
@@ -25,13 +37,22 @@ def auto_detect_input(prg: list[AST]) -> list[Predicate]:
     """
     all_preds: set[Predicate] = set()
     derivable_preds: set[Predicate] = set()
-    for stm in prg:
+    in_body: dict[Predicate, set[int]] = defaultdict(set)
+    in_head: dict[Predicate, set[int]] = defaultdict(set)
+    for index, stm in enumerate(prg):
         all_preds.update([pred.pred for pred in predicates(stm)])
-        derivable_preds.update([pred.pred for pred in headderivable_predicates(stm)])
+        for pred in headderivable_predicates(stm):
+            derivable_preds.add(pred.pred)
+            in_head[pred.pred].add(index)
+        for pred in chain(body_predicates(stm, SIGNS), minimize_predicates(stm, SIGNS)):
+            in_body[pred.pred].add(index)
 
     input_ = list(sorted(all_preds - derivable_preds))
-    for pred in input_:
-        log.info(f"Detected input predicate: {pred.name}/{pred.arity}")
+    for p in all_preds:
+        if in_body[p] == in_head[p]:
+            input_.append(p)
+    for p in input_:
+        log.info(f"Detected input predicate: {p.name}/{p.arity}")
     return input_
 
 
