@@ -167,6 +167,8 @@ This can reduce grounding drastically and might have an effect on solving.
 
 ## Development
 
+[**Contributing**](CONTRIBUTING.md)
+
 To improve code quality, we run linters, type checkers, and unit tests. The
 tools can be run using [nox]. 
 
