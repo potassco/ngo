@@ -261,6 +261,8 @@ class UnusedTranslator:
                 continue
             if not len(hlit.atom.symbol.arguments) == len(blit.atom.symbol.arguments):
                 continue
+            if head == Predicate(blit.atom.symbol.name, len(blit.atom.symbol.arguments)):
+                continue
             mapping[head] = UnusedTranslator.Mapper(
                 UniqueVariables(rules[0]), prg.index(rules[0]), list(hlit.atom.symbol.arguments), blit.atom.symbol
             )

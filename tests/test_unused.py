@@ -334,6 +334,20 @@ n(-1;0;1).
             [],
             """#program base.""",
         ),
+        (
+            """
+wall(X1,Y1,X,Y) :- wall(X,Y,X1,Y1).
+#false :- at(X,Y,S); at(X1,Y1,(S+1)); S = (0..(MAX-1)); steps(MAX); wall(X,Y,X1,Y1).
+            """,
+            [],
+            [],
+            """#program base.
+wall(X1,Y1,X,Y) :- wall(X,Y,X1,Y1).
+#false :- at(X,Y,S); at(X1,Y1,(S+1)); S = (0..(MAX-1)); steps(MAX); wall(X,Y,X1,Y1).""",
+        ),
+
+
+
     ),
 )
 def test_unused_translation_fixpoint(
