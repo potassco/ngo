@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from itertools import chain
+from typing import Iterable
 
 from clingo.ast import AST, ASTType, Variable
 
@@ -30,7 +31,7 @@ PREV = Variable(LOC, "__PREV")
 log = singleton_factory_logger("general")
 
 
-def auto_detect_input(prg: list[AST]) -> list[Predicate]:
+def auto_detect_input(prg: Iterable[AST]) -> list[Predicate]:
     """
     given a program return a list of all predicates that occur in the program
     but are not derivable in a head
@@ -56,7 +57,7 @@ def auto_detect_input(prg: list[AST]) -> list[Predicate]:
     return input_
 
 
-def auto_detect_output(prg: list[AST]) -> list[Predicate]:
+def auto_detect_output(prg: Iterable[AST]) -> list[Predicate]:
     """
     given a program return a list of all predicates used in show statements
     """

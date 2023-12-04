@@ -2,13 +2,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.cleanup import CleanupTranslator
-from ngo.literal_duplication import LiteralDuplicationTranslator
-from ngo.math_simplification import MathSimplification
-from ngo.minmax_aggregates import MinMaxAggregator
-from ngo.sum_aggregates import SumAggregator
-from ngo.symmetry import SymmetryTranslator
-from ngo.unused import UnusedTranslator
+from ngo.api import optimize
 from ngo.utils.globals import auto_detect_input
 
 
@@ -87,30 +81,6 @@ def test_all(lhs: str, rhs: str) -> None:
     parse_string(lhs, prg.append)
     input_predicates = auto_detect_input(prg)
 
-    while True:
-        old = list(prg)
-        ### call transformers
-        clt = CleanupTranslator(input_predicates)
-        prg = clt.execute(prg)
+    prg = optimize(prg, input_predicates, [], duplication=True)
 
-        utr = UnusedTranslator(prg, input_predicates, [])
-        prg = utr.execute(prg)
-
-        ldt = LiteralDuplicationTranslator(prg, input_predicates)
-        prg = ldt.execute(prg)
-
-        trans = SymmetryTranslator(prg, input_predicates)
-        prg = trans.execute(prg)
-
-        mma = MinMaxAggregator(prg, input_predicates)
-        prg = mma.execute(prg)
-
-        sagg = SumAggregator(prg, input_predicates)
-        prg = sagg.execute(prg)
-
-        math = MathSimplification(prg)
-        prg = math.execute(prg)
-
-        if prg == old:
-            break
     assert rhs == "\n".join(map(str, prg))

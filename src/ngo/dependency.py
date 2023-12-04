@@ -223,7 +223,7 @@ class DomainPredicates:
         """yield all domain rules for all symbolic atoms in node"""
         for symbol in collect_ast(node, "SymbolicAtom"):
             symbol = symbol.symbol
-            dom_pred = (symbol.name, len(symbol.arguments))
+            dom_pred = Predicate(symbol.name, len(symbol.arguments))
             if symbol.ast_type == ASTType.Function:
                 orig_pred = [key for key, value in self.domains.items() if value == dom_pred]
                 if orig_pred:
@@ -244,7 +244,7 @@ class DomainPredicates:
             return
 
         for atom, bodies in self.domain_rules.items():
-            if atom.symbol.name != pred[0] or len(atom.symbol.arguments) != pred[1]:
+            if atom.symbol.name != pred.name or len(atom.symbol.arguments) != pred.arity:
                 continue
             for conditions in bodies:
                 newatom = SymbolicAtom(
@@ -272,7 +272,7 @@ class DomainPredicates:
             SymbolicAtom(
                 Function(
                     LOC,
-                    pred[0],
+                    pred.name,
                     vars_,
                     False,
                 )
@@ -554,7 +554,7 @@ class DomainPredicates:
             for atom in collect_ast(cond, "SymbolicAtom"):
                 name = atom.symbol.name
                 arity = len(atom.symbol.arguments)
-                if (name, arity) in self._too_complex:
+                if Predicate(name, arity) in self._too_complex:
                     return True
             return False
 
