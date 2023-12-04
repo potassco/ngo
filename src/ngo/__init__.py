@@ -1,6 +1,6 @@
 # pylint: disable=line-too-long
 """
-Make simple code fast.
+Impress your friends with faster encodings.
 
 # Quickstart - Command line version
 ngo converts an encoding read from stdin to an optimized encoding.
