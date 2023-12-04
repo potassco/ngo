@@ -2,6 +2,8 @@
  - remove equality trait, is now included in math trait
  - cleanup now removes constant booleans (#true, #false)
  - improved input predicate detection
+ - add API
+ - add documentation
 0.0.6:
  - add default options without duplication trait
  - translate symmetries to counting aggregate if possible

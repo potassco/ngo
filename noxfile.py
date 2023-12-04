@@ -33,7 +33,7 @@ def format(session):
 @nox.session
 def doc(session):
     session.install(*EXTRA_INSTALL, "-e", ".[doc]")
-    session.run("pdoc", "ngo", "-o", "docs")
+    session.run("pdoc", "ngo", "-o", "docs", "--no-show-source")
 
 
 @nox.session
