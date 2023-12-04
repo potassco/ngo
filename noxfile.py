@@ -2,7 +2,7 @@ import os
 
 import nox
 
-nox.options.sessions = "lint_ruff", "lint_pylint", "typecheck", "test"
+nox.options.sessions = "lint_ruff", "lint_pylint", "doc", "typecheck", "test"
 
 EDITABLE_TESTS = True
 PYTHON_VERSIONS = None
@@ -32,15 +32,8 @@ def format(session):
 
 @nox.session
 def doc(session):
-    target = "html"
-    options = []
-    if session.posargs:
-        target = session.posargs[0]
-        options = session.posargs[1:]
-
     session.install(*EXTRA_INSTALL, "-e", ".[doc]")
-    session.cd("doc")
-    session.run("sphinx-build", "-M", target, ".", "_build", *options)
+    session.run("pdoc", "ngo", "-o", "docs", "--no-show-source")
 
 
 @nox.session
@@ -60,6 +53,7 @@ def typecheck(session):
     session.install(*EXTRA_INSTALL, "-e", ".[typecheck]")
     session.run("mypy", "--version")
     session.run("mypy", "--strict", "--untyped-calls-exclude=sympy", "-p", "ngo", "-p", "tests")
+
 
 
 @nox.session(python=PYTHON_VERSIONS)

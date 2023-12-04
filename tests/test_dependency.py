@@ -521,8 +521,8 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
             a(X) :- d(X), c(X,Y) : b(Y).
             """,
             [
-                ("a", 1),
-                ("c", 2),
+                Predicate("a", 1),
+                Predicate("c", 2),
             ],
             ["__dom_c((1..2),(3..4)).", "__dom_a(X) :- d(X); __dom_c(X,Y): b(Y)."],
         ),
@@ -533,9 +533,9 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
             a(X) :- d(X); c(X,Y) : b(Y).
             """,
             [
-                ("a", 1),
-                ("b", 1),
-                ("c", 2),
+                Predicate("a", 1),
+                Predicate("b", 1),
+                Predicate("c", 2),
             ],
             ["__dom_c((1..2),(3..4)).", "__dom_b((1..4)).", "__dom_a(X) :- d(X); __dom_c(X,Y): __dom_b(Y)."],
         ),
@@ -544,7 +544,7 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
 size(S): S = (N*N) :- subgrid_size(N).
             """,
             [
-                ("size", 1),
+                Predicate("size", 1),
             ],
             ["__dom_size(S) :- S = (N*N); subgrid_size(N)."],
         ),

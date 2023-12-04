@@ -25,7 +25,13 @@ LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
 SIGNS = frozenset({Sign.NoSign, Sign.Negation, Sign.DoubleNegation})
 
 
-Predicate = NamedTuple("Predicate", [("name", str), ("arity", int)])
+@dataclass(frozen=True, order=True, eq=True)
+class Predicate:
+    """an (immutable) predicate consisting of a name and arity"""
+
+    name: str
+    arity: int
+
 
 SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predicate)])
 
