@@ -40,6 +40,7 @@ def main() -> None:
         minmax_chains="minmax_chains" in args.enable,
         sum_chains="sum_chains" in args.enable,
         math="math" in args.enable,
+        inline="inline" in args.enable,
     )
 
     for i in prg:
