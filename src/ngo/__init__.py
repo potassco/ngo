@@ -2,6 +2,14 @@
 """
 Impress your friends with faster encodings.
 
+# Install
+
+You can install the current development version using pip
+
+```shell
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ngo
+```
+
 # Quickstart - Command line version
 ngo converts an encoding read from stdin to an optimized encoding.
 

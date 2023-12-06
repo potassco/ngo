@@ -1,14 +1,6 @@
 # ngo
 
-## Installation
-
-You can install the current development version using pip
-
-```shell
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ngo
-```
-
-For details, please read [the documentation](https://potassco.org/ngo/).
+Please read [the documentation](https://potassco.org/ngo/).
 
 
 ## Development
