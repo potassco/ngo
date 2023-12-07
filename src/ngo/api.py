@@ -15,7 +15,8 @@ from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
 from ngo.utils.ast import Predicate
 
-#pylint: disable=too-many-arguments
+
+# pylint: disable=too-many-arguments
 def optimize(
     prg: Iterable[AST],
     input_predicates: list[Predicate],
