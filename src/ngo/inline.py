@@ -3,12 +3,25 @@
 """
 
 from itertools import chain
-from typing import Iterator
+from typing import Iterator, Optional
 
-from clingo.ast import AST, ASTType, Sign
+from clingo import Number
+from clingo.ast import AST, AggregateFunction, ASTType, Function, Sign, SymbolicTerm, Variable
 
 from ngo.dependency import RuleDependency
-from ngo.utils.ast import SIGNS, Predicate, body_predicates, collect_ast, minimize_predicates, predicates, transform_ast
+from ngo.utils.ast import (
+    LOC,
+    SIGNS,
+    AggAnalytics,
+    Predicate,
+    body_predicates,
+    collect_ast,
+    literal_predicate,
+    minimize_predicates,
+    potentially_unifying_sequence,
+    predicates,
+    transform_ast,
+)
 from ngo.utils.globals import UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
@@ -24,7 +37,7 @@ class InlineTranslator:
         self.output_predicates = output_predicates
 
     def single_rule(self, prg: list[AST]) -> Iterator[AST]:
-        """ iterate over all rules that have a predicate that only they produce
+        """iterate over all rules that have a predicate that only they produce
         and that is only used once somewhere else in the program"""
         rdp = RuleDependency(prg)
         for stm in prg:
@@ -91,15 +104,20 @@ class InlineTranslator:
 
     def inline_literal(self, rule: AST, lit: AST, unique_vars: UniqueVariables) -> list[AST]:
         """line rule into this body literal"""
-        num_aggs, num_cond, num_lits = self._info(rule)
+        hatom = rule.head.atom
+        hpred = Predicate(hatom.symbol.name, len(hatom.symbol.arguments))
+        _, _, num_lits = self._info(rule)
         orig_arguments = list(rule.head.atom.symbol.arguments)
         assert lit.ast_type == ASTType.Literal
-        if lit.atom.ast_type in (ASTType.Comparison, ASTType.BooleanConstant):
+        atom = lit.atom
+        if atom.ast_type in (ASTType.Comparison, ASTType.BooleanConstant):
             return [lit]
-        if lit.atom.ast_type == ASTType.SymbolicAtom:
-            if lit.atom.symbol.ast_type != ASTType.Function:
+        if atom.ast_type == ASTType.SymbolicAtom:
+            if atom.symbol.ast_type != ASTType.Function:
                 return [lit]
-            passed_arguments = list(lit.atom.symbol.arguments)
+            if hpred != Predicate(atom.symbol.name, len(atom.symbol.arguments)):
+                return [lit]
+            passed_arguments = list(atom.symbol.arguments)
             if lit.sign == Sign.DoubleNegation:
                 return [lit]
             if lit.sign == Sign.Negation:
@@ -116,6 +134,8 @@ class InlineTranslator:
                 return [newlit]
             # NoSign
             return self.transform_args(orig_arguments, passed_arguments, rule.body, unique_vars=unique_vars)
+        if atom.ast_type == ASTType.BodyAggregate:
+            return [lit.update(atom=self.inline_body_aggregate(rule, atom, unique_vars))]
 
         return [lit]
 
@@ -134,25 +154,101 @@ class InlineTranslator:
             new_condition.extend(self.inline_literal(rule, c, unique_vars))
         return lit.update(condition=new_condition)
 
+    def inline_body_aggregate(self, rule: AST, atom: AST, unique_vars: UniqueVariables) -> AST:
+        """inline rule into this body aggregate atom"""
+        hatom = rule.head.atom
+        hpred = Predicate(hatom.symbol.name, len(hatom.symbol.arguments))
+        num_aggs, num_cond, _ = self._info(rule)
+        if num_aggs + num_cond == 0:  # replace in condition without sum inlinement
+            new_elements: list[AST] = []
+            for elem in atom.elements:
+                new_condition: list[AST] = []
+                for cond in elem.condition:
+                    new_condition.extend(self.inline_literal(rule, cond, unique_vars))
+                new_elements.append(elem.update(condition=new_condition))
+            return atom.update(elements=new_elements)
+
+        if num_cond == 0 and num_aggs == 1:
+            # result of aggregate in rule may only be used in the head variable, called HV
+            agg = collect_ast(rule, "BodyAggregate")[0]
+
+            if agg.function != atom.function and not (
+                agg.function == AggregateFunction.Count
+                and atom.function in (AggregateFunction.Sum, AggregateFunction.SumPlus)
+            ):
+                return atom
+            agga = AggAnalytics(agg)
+            # only one equality
+            if len(agga.equal_variable_bound) != 1 or agga.bounds:
+                return atom
+            # result is actually used in head
+            for hv_pos, hv in enumerate(hatom.symbol.arguments):
+                if hv == Variable(LOC, agga.equal_variable_bound[0]):
+                    break
+            else:
+                return atom
+            # result is not used anywhere else (1 time in the head, 1 time in aggregate equal)
+            if sum(map(lambda x: x == hv, collect_ast(rule, "Variable"))) != 2:
+                return atom
+
+            replace_elem: Optional[AST] = None
+            replace_cond: AST
+            max_arity: int = 0
+            for elem in atom.elements:
+                max_arity = max(max_arity, len(elem.condition))
+                for cond in elem.condition:
+                    if hpred in set(p.pred for p in literal_predicate(cond, SIGNS)):
+                        replace_elem = elem
+                        replace_cond = cond
+            if replace_elem is None or replace_cond.ast_type != ASTType.Literal or replace_cond.sign != Sign.NoSign:
+                return atom
+            rest_elems = [elem for elem in atom.elements if elem != replace_elem]
+            if any(map(lambda x: potentially_unifying_sequence(x.terms, replace_elem.terms), rest_elems)):
+                log.info(f"Cannot inline {str(hpred)} into {str(atom)} as the tuple is not unique.")
+                return atom
+            # check if exactly the HV variable is also used as the weight in the new element
+            if not replace_elem.terms or replace_elem.terms[0] != replace_cond.atom.symbol.arguments[hv_pos]:
+                return atom
+            # replace headrule body aggregate with inlined version of the conditions
+            rbody = [
+                blit
+                for blit in rule.body
+                if not (blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate)
+            ]
+            new_elements = []
+            orig = hatom.symbol.arguments
+            pass_ = replace_cond.atom.symbol.arguments
+            for elem in agg.elements:
+                transformed = self.transform_args(  # transform all lists at the same time to get equal aux vars
+                    orig,
+                    pass_,
+                    list(elem.terms) + rbody + list(elem.condition),
+                    unique_vars,
+                )
+                terms = transformed[: len(elem.terms)]
+                if agg.function == AggregateFunction.Count and atom.function != AggregateFunction.Count:
+                    terms = [SymbolicTerm(LOC, Number(1))] + terms
+                transformed = transformed[len(elem.terms) :]
+                new_terms = terms + list(replace_elem.terms[1:])
+                new_terms.extend([Function(LOC, "unique", [], False)] * (max_arity - len(new_terms) + 1))
+                new_elements.append(elem.update(terms=new_terms, condition=transformed))
+            return atom.update(elements=rest_elems + new_elements)
+        return atom
+
     def inline(self, rule: AST, used: AST) -> AST:
         """given a rule that derives a predicate,
         replace this predicate in used and return the new used rule
         return the old used rule if this is not possible"""
-        hatom = rule.head.atom
-        hpred = Predicate(hatom.symbol.name, len(hatom.symbol.arguments))
         new_body: list[AST] = []
         for blit in used.body:
-            if hpred not in set(p.pred for p in predicates(blit, SIGNS)):
-                new_body.append(blit)
-                continue
             if blit.ast_type == ASTType.Literal:
                 new_body.extend(self.inline_literal(rule, blit, UniqueVariables(used)))
-            if blit.ast_type == ASTType.ConditionalLiteral:
+            elif blit.ast_type == ASTType.ConditionalLiteral:
                 new_body.append(self.inline_conditional_literal(rule, blit, UniqueVariables(used)))
         return used.update(body=new_body)
 
     def inline_rule(self, rule: AST, prg: list[AST]) -> list[AST]:
-        """ given rule, inline its singular predicate somewhere in the program"""
+        """given rule, inline its singular predicate somewhere in the program"""
         hatom = rule.head.atom
         hpred = Predicate(hatom.symbol.name, len(hatom.symbol.arguments))
 

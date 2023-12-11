@@ -109,44 +109,86 @@ foo(X) :- bar(X,Y): inline(X,Y).""",
         ),
         (  # no replacement in same aggregate as B is used in inline rule
             """
-inline(A,B) :- a(A,B), B = #sum {5;7}.
-foo(X) :- X = #sum {F,V : inline(V,F); A,B : test(A,B)}.
+suminline(A,B) :- a(A,B), B = #sum {5;7}.
+foo(X) :- X = #sum {F,V : suminline(V,F); A,B : test(A,B)}.
             """,
             [],
             [],
             """#program base.
-inline(A,B) :- a(A,B); B = #sum { 5; 7 }.
-foo(X) :- X = #sum { F,V: inline(V,F); A,B: test(A,B) }.""",
+suminline(A,B) :- a(A,B); B = #sum { 5; 7 }.
+foo(X) :- X = #sum { F,V: suminline(V,F); A,B: test(A,B) }.""",
+        ),
+        (  # replacement in agg condition without aggregates
+            """
+suminline(A,B) :- a(A,B).
+foo(X) :- X = #sum {F,V : suminline(V,F); A,B : test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+foo(X) :- X = #sum { F,V: a(V,F); A,B: test(A,B) }.""",
+        ),
+        (  # no replacement as ambigious term (F,V) = (A,B)
+            """
+nosuminline(A,B) :- a(A), B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: nosuminline(V,F); A,B: test(A,B) }.
+            """,
+            [],
+            [],
+            """#program base.
+nosuminline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: nosuminline(V,F); A,B: test(A,B) }.""",
         ),
         (  # replacement in same aggregate
             """
-inline(A,B) :- a(A), B = #sum { Y : person(A,Y) }.
-foo(X) :- X = #sum { F,V: inline(V,F); A,B: test(A,B }.
+suminline(A,B) :- a(A), B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.
             """,
             [],
             [],
             """#program base.
-foo(X) :- X = #sum { Y,inline1 : a(V), person(V,Y); A,B : test(A,B) }.""",
+foo(X) :- X = #sum { A: test(A,B); Y,V: a(V), person(V,Y) }.""",
+        ),
+        (  # replacement in same aggregate, several conditions
+            """
+suminline(A,B) :- a(A), B = #sum { Y,p: person(A,Y); Y,h: human(A,Y) }.
+foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.
+            """,
+            [],
+            [],
+            """#program base.
+foo(X) :- X = #sum { A: test(A,B); Y,p,V: a(V), person(V,Y); Y0,h,V: a(V), human(V,Y0) }.""",
         ),
         (  # replacement in same aggregate
             """
 inline(A,B) :- a(A), B = #min {Y : person(A,Y)}.
-foo(X) :- X = #sum {F,V : inline(V,F); A,B : test(A,B)}.
+foo(X) :- X = #min {F,V: inline(V,F); A: test(A,B)}.
             """,
             [],
             [],
             """#program base.
-foo(X) :- X = #min {Y,inline1: a(V), person(V,Y); A,B: test(A,B)}.""",
+foo(X) :- X = #min { A: test(A,B); Y,V: a(V), person(V,Y) }.""",
+        ),
+        (  # not replacement in same different
+            """
+inline(A,B) :- a(A), B = #min {Y : person(A,Y)}.
+foo(X) :- X = #sum {F,V: inline(V,F); A: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+inline(A,B) :- a(A); B = #min { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: inline(V,F); A: test(A,B) }.""",
         ),
         (  # replacement in similar aggregate
             """
-inline(A,B) :- a(A), B = #count {person(A,Y)}.
-foo(X) :- X = #sum {F,V : inline(V,F); A,B : test(A,B)}.
+inline(A,B) :- a(A), B = #count {A,Y : person(A,Y)}.
+foo(X) :- X = #sum {F,V: inline(V,F); A: test(A,B)}.
             """,
             [],
             [],
             """#program base.
-foo(X) :- X = #sum {1,person(V,Y),inline1: a(V), person(V,Y); A,B: test(A,B)}.""",
+foo(X) :- X = #sum { A: test(A,B); 1,V,Y,V: a(V), person(V,Y) }.""",
         ),
         (  # no replacement in minimize and warning about ambigious set
             """
@@ -156,6 +198,7 @@ inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
             [],
             [],
             """#program base.
+inline(A,B) :- a(A); B = #sum {Y : person(A,Y)}.
 :~ inline(V,F). [F@0,V]
 :~ test(A,B). [A@0,B]""",
         ),
