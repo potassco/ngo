@@ -37,6 +37,7 @@ from ngo.utils.ast import (
     collect_bound_variables,
     headderivable_predicates,
     literal_predicate,
+    minimize_predicates,
     transform_ast,
 )
 from ngo.utils.globals import CHAIN_STR, DOM_STR, MAX_STR, MIN_STR, NEXT_STR, UniqueNames
@@ -48,6 +49,8 @@ class RuleDependency:
     def __init__(self, prg: Iterable[AST]):
         self.head2bodies: dict[Predicate, list[AST]] = defaultdict(list)
         self.head2rules: dict[Predicate, list[AST]] = defaultdict(list)
+        self.pred2stm: dict[Predicate, list[AST]] = defaultdict(list)
+
         for stm in prg:
             if stm.ast_type == ASTType.Rule:
                 for head in map(
@@ -56,6 +59,8 @@ class RuleDependency:
                 ):
                     self.head2bodies[head].append(stm.body)
                     self.head2rules[head].append(stm)
+            for p in chain(body_predicates(stm, SIGNS), minimize_predicates(stm, SIGNS)):
+                self.pred2stm[p.pred].append(stm)
 
     def get_bodies(self, head: Predicate) -> list[AST]:
         """return all bodies of head predicate"""
@@ -68,6 +73,10 @@ class RuleDependency:
     def get_headderivable_predicates(self) -> list[Predicate]:
         """return all predicates that can possible be derived in a head"""
         return list(self.head2bodies.keys())
+
+    def get_statements_that_use(self, pred: Predicate) -> list[AST]:
+        """return all statements that use predicate in body or condition"""
+        return self.pred2stm[pred]
 
 
 # TODO: refactor all graphs
@@ -142,7 +151,7 @@ class DomainPredicates:
 
         ### remove predicates derived by using not_static predicates
         for node in nx.topological_sort(cycle_free_pdg):  # type: ignore
-            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):  # type: ignore
+            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):
                 self._not_static.add(node)
 
     def is_static(self, pred: Predicate) -> bool:

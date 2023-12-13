@@ -32,6 +32,10 @@ class Predicate:
     name: str
     arity: int
 
+    def __str__(self) -> str:
+        """Returns a string with the name/arity notation."""
+        return f"{self.name}/{str(self.arity)}"
+
 
 SignedPredicate = NamedTuple("SignedPredicate", [("sign", Sign), ("pred", Predicate)])
 
@@ -270,10 +274,7 @@ def body_predicates(rule: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """
     if rule.ast_type == ASTType.Rule:
         for blit in rule.body:
-            if blit.ast_type == ASTType.Literal:
-                yield from literal_predicate(blit, signs)
-                yield from headorbody_aggregate_predicate(blit.atom, signs)
-                yield from aggregate_predicate(blit.atom, signs)
+            yield from literal_predicate(blit, signs)
             yield from conditional_literal_predicate(blit, signs)
 
 
@@ -291,10 +292,13 @@ def minimize_predicates(stm: AST, signs: SignSetType) -> Iterator[SignedPredicat
 def literal_predicate(lit: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
     """converts ast Literal into (sign, name, arity) if sign is in signs"""
     if lit.ast_type == ASTType.Literal:
-        if lit.sign in signs and lit.atom.ast_type == ASTType.SymbolicAtom:
-            atom = lit.atom
+        atom = lit.atom
+        if lit.sign in signs and atom.ast_type == ASTType.SymbolicAtom:
             if atom.symbol.ast_type == ASTType.Function:
                 yield SignedPredicate(lit.sign, Predicate(atom.symbol.name, len(atom.symbol.arguments)))
+        yield from aggregate_predicate(atom, signs)
+        yield from headorbody_aggregate_predicate(atom, signs)
+        yield from conditional_literal_predicate(atom, signs)
 
 
 def conditional_literal_predicate(condlit: AST, signs: SignSetType) -> Iterator[SignedPredicate]:
@@ -319,7 +323,6 @@ def headorbody_aggregate_predicate(agg: AST, signs: SignSetType) -> Iterator[Sig
                 yield from conditional_literal_predicate(elem.condition, signs)
             elif elem.ast_type == ASTType.BodyAggregateElement:
                 for cond in elem.condition:
-                    # aggregate in body seems to have Literals as condition
                     yield from literal_predicate(cond, signs)
 
 
@@ -914,3 +917,11 @@ class TranslationMap:
                 ret.extend([None] * (index + 1 - len(ret)))
             ret[index] = arguments[oldidx]
         return ret
+
+
+def is_predicate(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    if lit.ast_type == ASTType.Literal:
+        atom = lit.atom
+        return bool(atom.ast_type == ASTType.SymbolicAtom and atom.symbol.ast_type == ASTType.Function)
+    return False

@@ -140,7 +140,7 @@ foobar :- { e: __aux_1 }.
 
 ## symmetry
 
-This modtrait replaces bodys with symmetry breaking rules that
+This trait replaces bodys with symmetry breaking rules that
 count different occurences of the same predicate with a counting aggregate
 if this preserves semantics. This can reduce the number of grounded
 rules.
@@ -195,6 +195,21 @@ gets replaces by something similar to
 a :- 0 = #sum { 1,a: a; 1,b: b; -2 }.
 ```Prolog
 This can reduce grounding drastically and might have an effect on solving.
+
+## inline
+
+This trait inlines rules that use aggregates into other aggregates or objective statements.
+
+```Prolog
+suminline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.
+```
+becomes
+```Prolog
+foo(X) :- X = #sum { A: test(A,B); Y,V: a(V), person(V,Y) }.
+```
+This is only possible if it is safe to change set semantics using the tuples in the aggregates.
+This trait also works for minimize statements and weak constraints.
 """
 
 from ngo.api import optimize

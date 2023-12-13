@@ -6,6 +6,7 @@ from typing import Iterable
 from clingo.ast import AST
 
 from ngo.cleanup import CleanupTranslator
+from ngo.inline import InlineTranslator
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
@@ -15,6 +16,7 @@ from ngo.unused import UnusedTranslator
 from ngo.utils.ast import Predicate
 
 
+# pylint: disable=too-many-arguments
 def optimize(
     prg: Iterable[AST],
     input_predicates: list[Predicate],
@@ -26,6 +28,7 @@ def optimize(
     minmax_chains: bool = True,
     sum_chains: bool = True,
     math: bool = True,
+    inline: bool = True,
 ) -> list[AST]:
     """convert a logic program in form of clingo.AST's into an optimized encoding
 
@@ -80,6 +83,10 @@ def optimize(
         if math:
             mmath = MathSimplification(input_)
             input_ = mmath.execute(input_)
+
+        if inline:
+            inl = InlineTranslator(input_, input_predicates, output_predicates)
+            input_ = inl.execute(input_)
 
         if input_ == old:
             break

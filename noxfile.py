@@ -52,7 +52,7 @@ def lint_pylint(session):
 def typecheck(session):
     session.install(*EXTRA_INSTALL, "-e", ".[typecheck]")
     session.run("mypy", "--version")
-    session.run("mypy", "--strict", "--untyped-calls-exclude=sympy", "-p", "ngo", "-p", "tests")
+    session.run("mypy", "--strict", "--untyped-calls-exclude=networkx", "--untyped-calls-exclude=sympy", "-p", "ngo", "-p", "tests")
 
 
 
