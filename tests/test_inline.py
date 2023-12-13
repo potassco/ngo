@@ -23,176 +23,6 @@ foo(X) :- inline(X,Y), not bar(X,Y).
 foo(X) :- inline(X,Y); not bar(X,Y).
 #show bar : foo(X).""",
         ),
-        (  # simple replacement in rule body
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- inline(X,Y), not bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-foo(X) :- a(X); b(Y); not c(X,Y); not bar(X,Y).""",
-        ),
-        (  # simple replacement in rule body, but input predicate
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- inline(X,Y), not bar(X,Y).
-            """,
-            [Predicate("inline", 2)],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline(A,B) :- a(A); b(B); not c(A,B).
-foo(X) :- inline(X,Y); not bar(X,Y).""",
-        ),
-        (  # simple replacement in rule body, but negated head
-            """
-{ a((1..3)) }.
-not inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- inline(X,Y), not bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-not inline(A,B) :- a(A); b(B); not c(A,B).
-foo(X) :- inline(X,Y); not bar(X,Y).""",
-        ),
-        (  # no replacement as multiple uses
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- inline(X,Y), not bar(X,Y).
-foo(X) :- inline(X,Y), not bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline(A,B) :- a(A); b(B); not c(A,B).
-foo(X) :- inline(X,Y); not bar(X,Y).
-foo(X) :- inline(X,Y); not bar(X,Y).""",
-        ),
-        (  # test aux variables
-            """
-{ a((1..3)) }.
-aux(A,B) :- a(A), b(B,C,D), not c(C).
-foo(X) :- aux(X,Y), not bar(X,Y), d(D).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-foo(X) :- a(X); b(Y,C,D0); not c(C); not bar(X,Y); d(D).""",
-        ),
-        (  # no replacement as complex negation
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- not inline(X,Y), bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline(A,B) :- a(A); b(B); not c(A,B).
-foo(X) :- not inline(X,Y); bar(X,Y).""",
-        ),
-        (  # simple negation
-            """
-
-{ person((1..3)) }.
-negation(X) :- X = #sum {Y: person(Y)}.
-foo(X) :- not negation(X), bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ person((1..3)) }.
-foo(X) :- not X = #sum { Y0: person(Y0) }; bar(X,Y).""",
-        ),
-        (  # double negation
-            """
-
-{ person((1..3)) }.
-negation :- not person(4).
-foo(X) :- not negation, bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ person((1..3)) }.
-negation :- not person(4).
-foo(X) :- not negation; bar(X,Y).""",
-        ),
-        (  # double negation II
-            """
-
-{ person((1..3)) }.
-negation(X) :- X = #sum { Y: person(Y) }.
-foo(X) :- not not negation(X), bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ person((1..3)) }.
-negation(X) :- X = #sum { Y: person(Y) }.
-foo(X) :- not not negation(X); bar(X,Y).""",
-        ),
-        (  # no replacement in condition head
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A), b(B).
-foo(X) :- inline(X,Y) :  bar(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline(A,B) :- a(A); b(B).
-foo(X) :- inline(X,Y): bar(X,Y).""",
-        ),
-        (  # replacement in condition condition
-            """
-{ a((1..3)) }.
-blub(A,B) :- a(A), b(B).
-foo(X) :- bar(X,Y) : blub(X,Y), X < 13.
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-foo(X) :- bar(X,Y): a(X), b(Y), X < 13.""",
-        ),
-        (  # no replacement in condition condition, too complex
-            """
-{ a((1..3)) }.
-inline2(A,B) :- a(A), b(B) : c(B).
-foo(X) :- bar(X,Y) : inline2(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline2(A,B) :- a(A); b(B): c(B).
-foo(X) :- bar(X,Y): inline2(X,Y).""",
-        ),
-        (  # no replacement in condition condition, too complex
-            """
-{ a((1..3)) }.
-inline(A,B) :- a(A); B = #sum { 5; 7 }.
-foo(X) :- bar(X,Y) : inline(X,Y).
-            """,
-            [],
-            [],
-            """#program base.
-{ a((1..3)) }.
-inline(A,B) :- a(A); B = #sum { 5; 7 }.
-foo(X) :- bar(X,Y): inline(X,Y).""",
-        ),
         (  # no replacement in same aggregate as B is used in inline rule
             """
 { a((1..3)) }.
@@ -206,7 +36,7 @@ foo(X) :- X = #sum {F,V : suminline(V,F); A,B : test(A,B)}.
 suminline(A,B) :- a(A,B); B = #sum { 5; 7 }.
 foo(X) :- X = #sum { F,V: suminline(V,F); A,B: test(A,B) }.""",
         ),
-        (  # replacement in agg condition without aggregates
+        (  # no replacement in agg condition without aggregates
             """
 { a((1..3),2) }.
 suminline(A,B) :- a(A,B).
@@ -216,7 +46,8 @@ foo(X) :- X = #sum {F,V : suminline(V,F); A,B : test(A,B)}.
             [],
             """#program base.
 { a((1..3),2) }.
-foo(X) :- X = #sum { F,V: a(V,F); A,B: test(A,B) }.""",
+suminline(A,B) :- a(A,B).
+foo(X) :- X = #sum { F,V: suminline(V,F); A,B: test(A,B) }.""",
         ),
         (  # no replacement as ambigious term (F,V) = (A,B)
             """
@@ -296,6 +127,19 @@ foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.
 suminline(A,B) :- a(A); B = #sum { Y: person(A,Y) } > 13.
 foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.""",
         ),
+        (  # replacement in same aggregate but negation
+            """
+{ a((1..3)) }.
+suminline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: not suminline(V,F); A: test(A,B) }.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3)) }.
+suminline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+foo(X) :- X = #sum { F,V: not suminline(V,F); A: test(A,B) }.""",
+        ),
         (  # replacement in same aggregate
             """
 { a((1..3)) }.
@@ -323,15 +167,15 @@ foo(X) :- X = #sum { A: test(A,B); Y,p,V: a(V), person(V,Y); Y0,h,V: a(V), human
         (  # replacement in same aggregate but negation
             """
 { a((1..3)) }.
-inline(A,B) :- a(A); B = #min {Y : person(A,Y)}.
-foo(X) :- X = #min {F,V: not inline(V,F); A: test(A,B)}.
+neginline(A,B) :- a(A); B = #min {Y : person(A,Y)}.
+foo(X) :- X = #min {F,V: not neginline(V,F); A: test(A,B)}.
             """,
             [],
             [],
             """#program base.
 { a((1..3)) }.
-inline(A,B) :- a(A); B = #min { Y: person(A,Y) }.
-foo(X) :- X = #min { F,V: not inline(V,F); A: test(A,B) }.""",
+neginline(A,B) :- a(A); B = #min { Y: person(A,Y) }.
+foo(X) :- X = #min { F,V: not neginline(V,F); A: test(A,B) }.""",
         ),
         (  # replacement in same aggregate
             """
@@ -362,19 +206,19 @@ foo(X) :- X = #sum { F,V: inline(V,F); A: test(A,B) }.""",
             """
 { a((1..3)) }.
 inline(A,B) :- a(A), B = #count {A,Y : person(A,Y)}.
-foo(X) :- X = #sum {F,V: inline(V,F); A: test(A,B)}.
+foo(X) :- X = #sum {F,V: inline(V,F); A: test(A,B)}, bar.
             """,
             [],
             [],
             """#program base.
 { a((1..3)) }.
-foo(X) :- X = #sum { A: test(A,B); 1,V,Y,V: a(V), person(V,Y) }.""",
+foo(X) :- X = #sum { A: test(A,B); 1,V,Y,V: a(V), person(V,Y) }; bar.""",
         ),
-        (  # no replacement in minimize and warning about ambigious set
+        (  # replacement in minimize and but no complete inlining because of ambigious set
             """
 { a((1..3)) }.
-inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
-#minimize {F,V : inline(V,F); A,B : test(A,B)}.
+mininline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
+#minimize {F,V : mininline(V,F); A,B : test(A,B)}.
             """,
             [],
             [],
@@ -387,13 +231,97 @@ inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
             """
 { a((1..3)) }.
 inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
+#minimize {F,V: inline(V,F), bar; A,B,test: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3)) }.
+:~ a(V); bar; person(V,Y). [Y@0,V,unique,unique]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize but input
+            """
+{ a((1..3)) }.
+inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
+#minimize {F,V: inline(V,F), bar; A,B,test: test(A,B)}.
+            """,
+            [Predicate("inline", 2)],
+            [],
+            """#program base.
+{ a((1..3)) }.
+inline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+:~ inline(V,F); bar. [F@0,V]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize with negation
+            """
+{ a((1..3)) }.
+inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
+#minimize {F,V: not inline(V,F); A,B,test: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3)) }.
+inline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
+:~ not inline(V,F). [F@0,V]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize with negation
+            """
+{ a((1..3)) }.
+inline(A,A) :- not a(A).
+#minimize {F,V: not inline(V,F); A,B,test: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3)) }.
+inline(A,A) :- not a(A).
+:~ not inline(V,F). [F@0,V]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize with negation
+            """
+{ a((1..3),2) }.
+inline(A,B) :- a(A,B).
+#minimize {F,V: not inline(V,F); A,B,test: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3),2) }.
+inline(A,B) :- a(A,B).
+:~ not inline(V,F). [F@0,V]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize with negation
+            """
+{ a((1..3)) }.
+inline(A,A) :- a(A).
 #minimize {F,V: inline(V,F); A,B,test: test(A,B)}.
             """,
             [],
             [],
             """#program base.
 { a((1..3)) }.
-:~ a(V); person(V,Y). [Y@0,V,unique,unique]
+inline(A,A) :- a(A).
+:~ inline(V,F). [F@0,V]
+:~ test(A,B). [A@0,B,test]""",
+        ),
+        (  # replacement in minimize with negation
+            """
+{ a((1..3)) }.
+inline(B) :- B = #sum {Y : person(A,Y)}.
+#minimize {F: not inline(F); A,B,test: test(A,B)}.
+            """,
+            [],
+            [],
+            """#program base.
+{ a((1..3)) }.
+inline(B) :- B = #sum { Y: person(A,Y) }.
+:~ not inline(F). [F@0]
 :~ test(A,B). [A@0,B,test]""",
         ),
         (  # replacement in weak constraint
@@ -473,6 +401,100 @@ inline(A,B) :- a(A), B = #sum {Y : person(A,Y)}.
 { a((1..3)) }.
 :~ a(A); person(A,Y). [1@0,A,unique]""",
         ),
+        (  # replacement in combined aggregates
+            """
+{ mirror_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+{ direct_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+ghost(X, Y, N) :- count(X, Y, TN),
+         N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+dracula(X, Y, N) :- count(X, Y, TN),
+         N = #count { DX, DY, D : direct_visible(X, Y, DX, DY, D), dracula(DX, DY) }.
+:- count(X, Y, N), ghost(X, Y, G), dracula(X, Y, D), zombie(X, Y, Z), N != G + D + Z.
+            """,
+            [],
+            [],
+            """#program base.
+{ mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+{ direct_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+#false :- count(X,Y,N); count(X,Y,TN);\
+ G = #count { GX,GY,D0: mirror_visible(X,Y,GX,GY,D0), ghost(GX,GY) };\
+ count(X,Y,TN0);\
+ D = #count { DX,DY,D1: direct_visible(X,Y,DX,DY,D1), dracula(DX,DY) };\
+ zombie(X,Y,Z); N != ((G+D)+Z).""",
+        ),
+        (  # not replacement in if not in agg
+            """
+{ mirror_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+ghost(X, Y, N) :- count(X, Y, TN),
+         N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+:- count(X, Y, N), ghost(X, Y, G1), dracula(X, Y, D), zombie(X, Y, Z), N != G + D + Z.
+            """,
+            [],
+            [],
+            """#program base.
+{ mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+ghost(X,Y,N) :- count(X,Y,TN); N = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) }.
+#false :- count(X,Y,N); ghost(X,Y,G1); dracula(X,Y,D); zombie(X,Y,Z); N != ((G+D)+Z).""",
+        ),
+        (  # replacement if directly in agg, lhs
+            """
+{ mirror_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+ghost(X, Y, N) :- count(X, Y, TN),
+         N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+:- count(X, Y, N), ghost(X, Y, G1), G1 = #sum { Z,O : zombie(Z,O) }.
+            """,
+            [],
+            [],
+            """#program base.
+{ mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+#false :- count(X,Y,N);\
+ count(X,Y,TN);\
+ G1 = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
+ G1 = #sum { Z,O: zombie(Z,O) }.""",
+        ),
+        (  # replacement if directly in agg, rhs
+            """
+{ mirror_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+ghost(X, Y, N) :- count(X, Y, TN),
+         N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+:- count(X, Y, N), ghost(X, Y, G1), 0 = #sum { Z,O : zombie(Z,O) } = G1.
+            """,
+            [],
+            [],
+            """#program base.
+{ mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+#false :- count(X,Y,N);\
+ count(X,Y,TN);\
+ G1 = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
+ 0 = #sum { Z,O: zombie(Z,O) } = G1.""",
+        ),
+        (  # replacement if directly in agg, negation
+            """
+{ mirror_visible(X,Y,GX,GY,D) : dom(X,Y,GX,GY,D) }.
+ghost(N) :- N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+:- count(X, Y, N), not ghost(G1), 0 = #sum { Z,O : zombie(Z,O) } = G1.
+            """,
+            [],
+            [],
+            """#program base.
+{ mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
+#false :- count(X,Y,N);\
+ not G1 = #count { GX,GY,D: mirror_visible(X0,Y0,GX,GY,D), ghost(GX,GY) };\
+ 0 = #sum { Z,O: zombie(Z,O) } = G1.""",
+        ),
+        (  # anonymous variables
+            """
+{ hint(X,Y,Z): dom(X,Y,Z) }.
+bend_sums(X,Y,S) :- S = #sum { N,X',Y': hint_path(X',Y',_,_,N,X,Y) }; hint(X,Y,_).
+#false :- bend_sums(_,_,S); S != #sum { X : person(X) }.
+            """,
+            [],
+            [],
+            """#program base.
+{ hint(X,Y,Z): dom(X,Y,Z) }.
+bend_sums(X,Y,S) :- S = #sum { N,X',Y': hint_path(X',Y',_,_,N,X,Y) }; hint(X,Y,_).
+#false :- bend_sums(_,_,S); S != #sum { X: person(X) }.""",
+        ),
     ),
 )
 def test_inline_translation(
@@ -483,4 +505,4 @@ def test_inline_translation(
     parse_string(lhs, ast.append)
     utr = InlineTranslator(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, utr.execute(ast)))
-    assert rhs == output
+    assert output == rhs

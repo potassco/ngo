@@ -151,7 +151,7 @@ class DomainPredicates:
 
         ### remove predicates derived by using not_static predicates
         for node in nx.topological_sort(cycle_free_pdg):  # type: ignore
-            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):  # type: ignore
+            if any(map(lambda pre: pre in self._not_static, graph.predecessors(node))):
                 self._not_static.add(node)
 
     def is_static(self, pred: Predicate) -> bool:

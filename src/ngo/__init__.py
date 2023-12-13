@@ -198,17 +198,8 @@ This can reduce grounding drastically and might have an effect on solving.
 
 ## inline
 
-This trait inlines rules that are only used once in a program.
+This trait inlines rules that use aggregates into other aggregates or objective statements.
 
-```Prolog
-inline(A,B) :- a(A), b(B), not c(A,B).
-foo(X) :- inline(X,Y), not bar(X,Y).
-```
-gets replaced by
-```Prolog
-foo(X) :- a(X); b(Y); not c(X,Y); not bar(X,Y).
-```
-For more complex rules envolving the results of aggregates, the aggregates themselves can be inlined:
 ```Prolog
 suminline(A,B) :- a(A); B = #sum { Y: person(A,Y) }.
 foo(X) :- X = #sum { F,V: suminline(V,F); A: test(A,B) }.

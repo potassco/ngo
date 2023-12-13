@@ -917,3 +917,11 @@ class TranslationMap:
                 ret.extend([None] * (index + 1 - len(ret)))
             ret[index] = arguments[oldidx]
         return ret
+
+
+def is_predicate(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    if lit.ast_type == ASTType.Literal:
+        atom = lit.atom
+        return bool(atom.ast_type == ASTType.SymbolicAtom and atom.symbol.ast_type == ASTType.Function)
+    return False
