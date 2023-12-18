@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates
+from ngo.normalize import normalize
 from ngo.utils.ast import AnnotatedPredicate, Predicate, SignedPredicate, body_predicates, head_predicates
 from ngo.utils.globals import UniqueNames
 
@@ -257,6 +258,7 @@ def test_domain_predicates(
     non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = normalize(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
     for pred in static:
@@ -312,6 +314,7 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
     """test computation of non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = normalize(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
     for pred in hasnodomain:
@@ -555,6 +558,7 @@ def test_domain_predicates_condition(prg: str, predicates: list[Predicate], doma
     ast: list[AST] = []
     parse_string(prg, ast.append)
     unique = UniqueNames(ast, [])
+    ast = normalize(ast)
     dp = DomainPredicates(unique, ast)
     strlist: list[str] = []
     for pred in predicates:
@@ -568,6 +572,7 @@ def test_domain_predicates_exceptions() -> None:
     """test domain computation exceptions"""
     ast: list[AST] = []
     parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
+    ast = normalize(ast)
     with pytest.raises(Exception):
         unique = UniqueNames(ast, [])
         dp = DomainPredicates(unique, ast)

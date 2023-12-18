@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.api import optimize
+from ngo.normalize import normalize
 from ngo.utils.globals import auto_detect_input
 
 
@@ -79,6 +80,7 @@ def test_all(lhs: str, rhs: str) -> None:
     """test removal of superseeded literals on whole programs"""
     prg: list[AST] = []
     parse_string(lhs, prg.append)
+    prg = normalize(prg)
     input_predicates = auto_detect_input(prg)
 
     prg = optimize(prg, input_predicates, [], duplication=True)

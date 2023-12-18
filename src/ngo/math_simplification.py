@@ -11,7 +11,6 @@ from clingo.ast import (
     ASTType,
     BinaryOperation,
     BinaryOperator,
-    BodyAggregate,
     BodyAggregateElement,
     BooleanConstant,
     Comparison,
@@ -91,74 +90,10 @@ class MathSimplification:
                 comparisons += len(comparison2comparisonlist(blit.atom))
         return (numaggs, comparisons)
 
-    @staticmethod
-    def _convert_agg_to_sum(agg: AST) -> AST:
-        assert agg.ast_type == ASTType.BodyAggregate
-        new_elements: list[AST] = []
-        for old_elem in agg.elements:
-            terms: list[AST] = [SymbolicTerm(LOC, clingo.Number(1)), *old_elem.terms]
-            new_elements.append(old_elem.update(terms=terms))
-        return agg.update(function=AggregateFunction.SumPlus, elements=new_elements)
-
-    @staticmethod
-    def _convert_old_agg(agg: AST) -> AST:
-        assert agg.ast_type == ASTType.Aggregate
-        nm = {Sign.NoSign: 0, Sign.Negation: 1, Sign.DoubleNegation: 2}
-        bm = {True: 0, False: 1}
-        new_elements: list[AST] = []
-        comparison_counter = 2
-        for old_elem in agg.elements:
-            terms: list[AST] = []
-            atom = old_elem.literal.atom
-            terms.append(SymbolicTerm(LOC, clingo.Number(1)))
-            terms.append(SymbolicTerm(LOC, clingo.Number(nm[old_elem.literal.sign])))
-            if atom.ast_type == ASTType.Comparison:
-                terms.append(SymbolicTerm(LOC, clingo.Number(comparison_counter)))
-                comparison_counter += 1
-                terms.extend(sorted(collect_ast(atom, "Variable")))
-            elif atom.ast_type == ASTType.BooleanConstant:
-                terms.append(SymbolicTerm(LOC, clingo.Number(bm[atom.value])))
-                comparison_counter += 1
-            elif atom.ast_type == ASTType.SymbolicAtom:
-                terms.append(atom.symbol)
-            else:
-                assert False, f"Invalid atom {atom}"
-
-            new_elements.append(BodyAggregateElement(terms, [old_elem.literal, *old_elem.condition]))
-        return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
-
-    @staticmethod
-    def replace_old_aggregates(prg: list[AST]) -> list[AST]:
-        """replace all oldstyle Aggregate`s in the head by BodyAggregate Sum
-        Also replace count aggregates with sum aggregates with weight of 1"""
-        newprg: list[AST] = []
-        for stm in prg:
-            if stm.ast_type != ASTType.Rule:
-                newprg.append(stm)
-                continue
-            if not stm.body:
-                newprg.append(stm)
-                continue
-            newbody: list[AST] = []
-            for blit in stm.body:
-                if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Aggregate:
-                    newbody.append(blit.update(atom=MathSimplification._convert_old_agg(blit.atom)))
-                elif (
-                    blit.ast_type == ASTType.Literal
-                    and blit.atom.ast_type == ASTType.BodyAggregate
-                    and blit.atom.function == AggregateFunction.Count
-                ):
-                    newbody.append(blit.update(atom=MathSimplification._convert_agg_to_sum(blit.atom)))
-
-                else:
-                    newbody.append(blit)
-            newprg.append(stm.update(body=newbody))
-        return newprg
-
     def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
         """return a simplified version of the program"""
         ret: list[AST] = []
-        newprg = self.replace_old_aggregates(prg)
+        newprg = list(prg)
         for oldstm, stm in zip(prg, newprg):
             if stm.ast_type != ASTType.Rule:
                 ret.append(oldstm)

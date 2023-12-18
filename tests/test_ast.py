@@ -2,6 +2,7 @@
 import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
+from ngo.normalize import normalize
 from ngo.utils.ast import (
     Predicate,
     SignedPredicate,
@@ -413,6 +414,7 @@ def test_replace_simple_assignments(input_: str, output: str) -> None:
     """test replacing assignments in rules"""
     ast: list[AST] = []
     parse_string(input_, ast.append)
+    ast = normalize(ast)
     assert output == str(replace_simple_assignments(ast[1]))
 
 

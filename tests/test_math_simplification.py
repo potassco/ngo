@@ -5,6 +5,8 @@ import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
 from ngo.math_simplification import Goebner, MathSimplification
+from ngo.normalize import normalize
+from ngo.utils.ast import replace_old_aggregates
 
 to_str = {
     ComparisonOperator.Equal: "=",
@@ -62,7 +64,8 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    prg = MathSimplification.replace_old_aggregates(prg)
+    # prg = normalize(prg) I want to test versions to handle nary operators
+    prg = replace_old_aggregates(prg)
     for r in prg:
         gb = Goebner()
         if r.ast_type == ASTType.Rule:
@@ -284,10 +287,10 @@ a :- not a(X); X = 0; 0 = #sum { 1,0,b: b }.""",
         ),
         (
             """
-a :- c(Z), X = {b}; Y = {1>Z}; Z = 3 * Y * X.
+foo1 :- c(Z), X = {b}; Y = {1>Z}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- c(Z); X = { b }; Y = { 1 > Z }; Z = ((3*Y)*X).""",
+foo1 :- c(Z); X = #sum { 1,0,b: b }; Y = #sum { 1,0,2,Z: 1 > Z }; Z = ((3*Y)*X).""",
         ),
         (
             """
@@ -308,14 +311,14 @@ a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
 a :- X=#max{1,a : a}, Y=#count{b: b}, X+Y=2.
             """,
             """#program base.
-a :- X = #max { 1,a: a }; Y = #count { b: b }; (X+Y) = 2.""",
+a :- X = #max { 1,a: a }; Y = #sum+ { 1,b: b }; (X+Y) = 2.""",
         ),
         (
             """
 a :- X=#count{a : a}, Y=#max{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- X = #count { a: a }; Y = #max { 1,b: b }; (X+Y) = 2.""",
+a :- X = #sum+ { 1,a: a }; Y = #max { 1,b: b }; (X+Y) = 2.""",
         ),
         (
             """
@@ -344,7 +347,7 @@ a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); constant,__agg(2) }.
         (  # refuse has 2 inequalities are combined in groebner basis
             """bb :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, not X = #sum {1,e: e;1,f: f;1,g: g} 3, X>=2>1, 5>3.""",
             """#program base.
-bb :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2; not X = #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; X >= 2 > 1; 5 > 3.""",
+bb :- 1 <= #sum { 1,a: a; 1,b: b; 1,c: c } <= 2; not X = #sum { 1,e: e; 1,f: f; 1,g: g } <= 3; X >= 2; 2 > 1; 5 > 3.""",
         ),
         (
             """#false :- 1 <= #sum {1,a : a;1,b: b;1,c: c} <= 2, X = #sum {1,e: e;1,f: f;1,g: g} 3, X!=2.""",
@@ -452,6 +455,7 @@ def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
+    prg = normalize(prg)
     math = MathSimplification(prg)
     newprg = "\n".join(map(str, math.execute(prg, False)))
     assert newprg == output
@@ -507,7 +511,7 @@ a :- b(X).""",
 a :- b(X,Y,Z), X=Y=Z.
             """,
             """#program base.
-a :- b(X,Y,Z); X = Y = Z.""",
+a :- b(X,Y,Z); X = Y; Y = Z.""",
         ),
         (
             """
@@ -634,6 +638,7 @@ def test_math_simplification_execute_opt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
+    prg = normalize(prg)
     math = MathSimplification(prg)
     newprg = "\n".join(map(str, math.execute(prg)))
     assert newprg == output

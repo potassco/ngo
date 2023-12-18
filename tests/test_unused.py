@@ -4,6 +4,7 @@ from typing import Optional
 import pytest
 from clingo.ast import AST, parse_string
 
+from ngo.normalize import normalize
 from ngo.unused import UnusedTranslator
 from ngo.utils.ast import Predicate
 
@@ -114,7 +115,7 @@ b2 :- c(X); x.
             [],
             [],
             """#program base.
-#false :- not 1 <= { order(T,S) } <= 1; S = (1..N); task_nr(N).""",
+#false :- not 1 <= #sum { 1,0,order(T,S): order(T,S) } <= 1; S = (1..N); task_nr(N).""",
         ),
     ),
 )
@@ -124,6 +125,7 @@ def test_unused_translation(
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = normalize(ast)
     utr = UnusedTranslator(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, utr.execute(ast)))
     assert rhs == output
@@ -258,7 +260,7 @@ __aux_1(W) :- __dom_match(W); 3 <= #count { M1: match(M1,W) }.
             [Predicate("person", 1)],
             [Predicate("__aux_1", 1)],
             """#program base.
-__aux_1(W) :- person(W); 3 <= #count { M1: match(M1,W) }.""",
+__aux_1(W) :- person(W); 3 <= #sum+ { 1,M1: match(M1,W) }.""",
         ),
         (
             """
@@ -354,6 +356,7 @@ def test_unused_translation_fixpoint(
     new_ast: Optional[list[AST]] = []
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = normalize(ast)
     while True:
         utr = UnusedTranslator(ast, input_predicates, output_predicates)
         new_ast = utr.execute(ast)

@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.normalize import normalize
 
 # diable line too long warnings
 # ruff: noqa: E501
@@ -1038,6 +1039,7 @@ def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     """test minmax aggregates on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = normalize(ast)
     mma = MinMaxAggregator(ast, [])
     output = "\n".join(map(str, mma.execute(ast)))
     assert converted_prg == output

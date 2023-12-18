@@ -10,6 +10,7 @@ from ngo.inline import InlineTranslator
 from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.normalize import normalize
 from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
@@ -52,7 +53,7 @@ def optimize(
     There is a selection of different traits available that can be turned on or off.
     Please see [Traits](#traits) for a detailed description.
     """
-    input_: list[AST] = list(prg)
+    input_: list[AST] = normalize(prg)
     while True:
         old = deepcopy(input_)
         ### call transformers

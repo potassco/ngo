@@ -4,6 +4,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.inline import InlineTranslator
+from ngo.normalize import normalize
 from ngo.utils.ast import Predicate
 
 
@@ -417,9 +418,9 @@ dracula(X, Y, N) :- count(X, Y, TN),
 { mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
 { direct_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
 #false :- count(X,Y,N); count(X,Y,TN);\
- G = #count { GX,GY,D0: mirror_visible(X,Y,GX,GY,D0), ghost(GX,GY) };\
+ G = #sum+ { 1,GX,GY,D0: mirror_visible(X,Y,GX,GY,D0), ghost(GX,GY) };\
  count(X,Y,TN0);\
- D = #count { DX,DY,D1: direct_visible(X,Y,DX,DY,D1), dracula(DX,DY) };\
+ D = #sum+ { 1,DX,DY,D1: direct_visible(X,Y,DX,DY,D1), dracula(DX,DY) };\
  zombie(X,Y,Z); N != ((G+D)+Z).""",
         ),
         (  # not replacement in if not in agg
@@ -433,7 +434,7 @@ ghost(X, Y, N) :- count(X, Y, TN),
             [],
             """#program base.
 { mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
-ghost(X,Y,N) :- count(X,Y,TN); N = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) }.
+ghost(X,Y,N) :- count(X,Y,TN); N = #sum+ { 1,GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) }.
 #false :- count(X,Y,N); ghost(X,Y,G1); dracula(X,Y,D); zombie(X,Y,Z); N != ((G+D)+Z).""",
         ),
         (  # replacement if directly in agg, lhs
@@ -449,7 +450,7 @@ ghost(X, Y, N) :- count(X, Y, TN),
 { mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
 #false :- count(X,Y,N);\
  count(X,Y,TN);\
- G1 = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
+ G1 = #sum+ { 1,GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
  G1 = #sum { Z,O: zombie(Z,O) }.""",
         ),
         (  # replacement if directly in agg, rhs
@@ -465,7 +466,7 @@ ghost(X, Y, N) :- count(X, Y, TN),
 { mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
 #false :- count(X,Y,N);\
  count(X,Y,TN);\
- G1 = #count { GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
+ G1 = #sum+ { 1,GX,GY,D: mirror_visible(X,Y,GX,GY,D), ghost(GX,GY) };\
  0 = #sum { Z,O: zombie(Z,O) } = G1.""",
         ),
         (  # replacement if directly in agg, negation
@@ -479,7 +480,7 @@ ghost(N) :- N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, 
             """#program base.
 { mirror_visible(X,Y,GX,GY,D): dom(X,Y,GX,GY,D) }.
 #false :- count(X,Y,N);\
- not G1 = #count { GX,GY,D: mirror_visible(X0,Y0,GX,GY,D), ghost(GX,GY) };\
+ not G1 = #sum+ { 1,GX,GY,D: mirror_visible(X0,Y0,GX,GY,D), ghost(GX,GY) };\
  0 = #sum { Z,O: zombie(Z,O) } = G1.""",
         ),
         (  # anonymous variables
@@ -503,6 +504,7 @@ def test_inline_translation(
     """test inlining literals"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = normalize(ast)
     utr = InlineTranslator(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, utr.execute(ast)))
     assert output == rhs

@@ -56,7 +56,6 @@ class LiteralCollector:
             if stm.ast_type == ASTType.Rule:
                 self._add_occurences_from_body(stm.body, index)
                 self._add_occurences_from_conditionals(stm.body, index)
-                self._add_occurences_from_aggregate_in_body(stm.body, index)
                 self._add_occurences_from_body_aggregate(stm.body, index)
             elif stm.ast_type == ASTType.Minimize:
                 self._add_occurences_from_body(stm.body, index)
@@ -110,29 +109,6 @@ class LiteralCollector:
                             )
                         )
 
-    def _add_occurences_from_aggregate_in_body(self, body: Iterable[AST], index: int) -> None:
-        """add all combinations of self.size from literals from a conditional inside an aggregate in the body"""
-        for lit in body:
-            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Aggregate:
-                for element in lit.atom.elements:
-                    assert element.ast_type == ASTType.ConditionalLiteral
-                    for original_subset in combinations(element.condition, self.size):
-                        _, unbound = collect_binding_information_body(original_subset)
-                        if not unbound:
-                            new_subset, oldvars2newvars = anonymize_variables(original_subset)
-                            newvars2oldvars = {v: k for k, v in oldvars2newvars.items()}
-                            self.occurences[tuple(new_subset)].append(
-                                RuleRebuilder(
-                                    index,
-                                    lit,
-                                    element,
-                                    original_subset,
-                                    tuple(new_subset),
-                                    oldvars2newvars,
-                                    newvars2oldvars,
-                                )
-                            )
-
     def _add_occurences_from_body_aggregate(self, body: Iterable[AST], index: int) -> None:
         """add all combinations of self.size from literals from a conditional inside a bodyaggregate"""
         for lit in body:
@@ -171,21 +147,6 @@ class LiteralCollector:
                 Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False)))
             )
             new_body.append(rule_builder.sub_ast.update(condition=new_condition))
-        elif (
-            rule_builder.sub_ast.ast_type == ASTType.Literal and rule_builder.sub_ast.atom.ast_type == ASTType.Aggregate
-        ):
-            assert rule_builder.sub_sub_ast is not None
-            new_body = [lit for lit in rule.body if lit != rule_builder.sub_ast]
-            new_condition = [
-                lit for lit in rule_builder.sub_sub_ast.condition if lit not in rule_builder.original_literals
-            ]
-            new_condition.append(
-                Literal(LOC, Sign.NoSign, SymbolicAtom(Function(LOC, predicate_name, variables, False)))
-            )
-            new_conditions = [clit for clit in rule_builder.sub_ast.atom.elements if clit != rule_builder.sub_sub_ast]
-            new_conditions.append(rule_builder.sub_sub_ast.update(condition=new_condition))
-            new_aggregate = rule_builder.sub_ast.atom.update(elements=new_conditions)
-            new_body.append(rule_builder.sub_ast.update(atom=new_aggregate))
         elif (
             rule_builder.sub_ast.ast_type == ASTType.Literal
             and rule_builder.sub_ast.atom.ast_type == ASTType.BodyAggregate
@@ -305,18 +266,6 @@ class LiteralDuplicationTranslator:
         return max_size
 
     @staticmethod
-    def compute_max_size_from_aggregate_in_body(rule: AST) -> int:
-        """compute maximum size of conditionals in oldstyle aggregates in body"""
-        assert rule.ast_type == ASTType.Rule
-        max_size = 0
-        for lit in rule.body:
-            if lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Aggregate:
-                for element in lit.atom.elements:
-                    assert element.ast_type == ASTType.ConditionalLiteral
-                    max_size = max(max_size, len(element.condition))
-        return max_size
-
-    @staticmethod
     def compute_max_size_from_body_aggregate(rule: AST) -> int:
         """compute maximum size of conditions in body aggregates"""
         assert rule.ast_type == ASTType.Rule
@@ -352,7 +301,6 @@ class LiteralDuplicationTranslator:
             if stm.ast_type == ASTType.Rule:
                 maxsize = max(maxsize, self.compute_size_from_body(newprogram[-1]))
                 maxsize = max(maxsize, self.compute_max_size_from_conditionals(newprogram[-1]))
-                maxsize = max(maxsize, self.compute_max_size_from_aggregate_in_body(newprogram[-1]))
                 maxsize = max(maxsize, self.compute_max_size_from_body_aggregate(newprogram[-1]))
             else:
                 if stm.ast_type == ASTType.Minimize:
