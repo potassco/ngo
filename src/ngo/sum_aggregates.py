@@ -30,6 +30,8 @@ from ngo.utils.ast import (
     Predicate,
     collect_ast,
     collect_binding_information_body,
+    is_conditional,
+    is_predicate,
     loc2str,
     potentially_unifying_sequence,
     predicates,
@@ -160,9 +162,9 @@ class SumAggregator:
 
     def _get_trigger(self, minimize_var: AST, body: list[AST]) -> Optional[tuple[AST, int, AnnotatedPredicate]]:
         for lit in body:
-            if lit.ast_type == ASTType.ConditionalLiteral:  # currently not supported, happens in soft constraints
+            if is_conditional(lit):  # currently not supported, happens in soft constraints
                 return None
-            if lit.atom.ast_type != ASTType.SymbolicAtom or lit.atom.symbol.ast_type != ASTType.Function:
+            if not is_predicate(lit):
                 continue
             symbol = lit.atom.symbol
             for next_anon_pred in self._atmost_preds:

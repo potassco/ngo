@@ -3,7 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.cleanup import CleanupTranslator
-from ngo.normalize import normalize
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import Predicate
 
 
@@ -193,9 +193,11 @@ def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: s
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     clt = CleanupTranslator(input_predicates)
-    output = "\n".join(map(str, clt.execute(ast)))
+    ast = clt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output
 
 
@@ -296,7 +298,9 @@ def test_cleanup_booleans(lhs: str, input_predicates: list[Predicate], rhs: str)
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     clt = CleanupTranslator(input_predicates)
-    output = "\n".join(map(str, clt.execute(ast)))
+    ast = clt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output

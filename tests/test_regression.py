@@ -3,7 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.api import optimize
-from ngo.normalize import normalize
+from ngo.normalize import preprocess
 from ngo.utils.globals import auto_detect_input
 
 
@@ -70,9 +70,9 @@ size(S): S = (N*N) :- subgrid_size(N).
 sudoku(X,Y,V) :- initial(X,Y,V).
 1 = { sudoku(X,Y,V): V = (1..N) } :- size(N); X = (1..N); Y = (1..N).
 __dom_sudoku(X,V) :- initial(X,_,V).
-__dom_size(S) :- S = (N*N); subgrid_size(N).
+__dom_size((N*N)) :- subgrid_size(N).
 __dom_sudoku(X,V) :- V = (1..N); __dom_size(N); X = (1..N); _ = (1..N).
-#false :- __dom_sudoku(X1,V1); 2 <= #count { Y1: sudoku(X1,Y1,V1) }.""",
+#false :- __dom_sudoku(X2,V2); 2 <= #count { Y1: sudoku(X2,Y1,V2) }.""",
         ),
     ),
 )
@@ -80,7 +80,7 @@ def test_all(lhs: str, rhs: str) -> None:
     """test removal of superseeded literals on whole programs"""
     prg: list[AST] = []
     parse_string(lhs, prg.append)
-    prg = normalize(prg)
+    prg = preprocess(prg)
     input_predicates = auto_detect_input(prg)
 
     prg = optimize(prg, input_predicates, [], duplication=True)

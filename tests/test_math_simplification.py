@@ -5,8 +5,7 @@ import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
 from ngo.math_simplification import Goebner, MathSimplification
-from ngo.normalize import normalize
-from ngo.utils.ast import replace_old_aggregates
+from ngo.normalize import postprocess, preprocess
 
 to_str = {
     ComparisonOperator.Equal: "=",
@@ -44,12 +43,6 @@ to_str = {
         (":- X < 2**Y.", ["-2**Y - _temp + X"], ["_temp < 0"]),
         (':- X < "2"+Y.', None, None),
         (":- X < 2&Y.", None, None),
-        (
-            ":- X < 2 >= Y != Z.",
-            ["-_temp + X - 2", "-_temp - Y + 2", "-_temp + Y - Z"],
-            ["_temp < 0", "_temp >= 0", "_temp != 0"],
-        ),
-        (":- not X < 2 >= Y != Z.", ["-_temp + X - 2", "-_temp - Y + 2", "-Y + Z"], ["_temp >= 0", "_temp < 0"]),
         (":- X < #sum{1,a}.", ["-_agg4 - _temp + X"], ["_temp < 0"]),
         (":- #sum{1,a} < X.", ["-_agg4 - _temp + X"], ["_temp > 0"]),
         (":- -3 < #sum+{1,a}.", ["-_agg4 - _temp - 3"], ["_temp < 0"]),
@@ -64,8 +57,7 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    # prg = normalize(prg) I want to test versions to handle nary operators
-    prg = replace_old_aggregates(prg)
+    prg = preprocess(prg)
     for r in prg:
         gb = Goebner()
         if r.ast_type == ASTType.Rule:
@@ -101,7 +93,7 @@ def test_to_sympy(rule: str, sympy: Optional[list[str]], ineqs: list[str]) -> No
 a(X) :- X=1+3.
             """,
             """#program base.
-a(X) :- X = 4.""",
+a(4).""",
         ),
         (
             """
@@ -122,7 +114,7 @@ a :- b(X).""",
 a :- b(X), X=X*3.
             """,
             """#program base.
-a :- b(X); 0 = X.""",
+a :- b(0).""",
         ),
         (
             """
@@ -192,14 +184,14 @@ a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
 a :- b(Y), c(Z), X = #max{1,b : b}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- b(Y); c(Z); X = #max { 1,b: b }; Z = ((3*Y)*X).""",
+a :- b(Y); c(((3*Y)*X)); X = #max { 1,b: b }.""",
         ),
         (
             """
 a :- c(Z), X = #sum{1,b : b}; Y = #sum{1,c: c}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- c(Z); X = #sum { 1,b: b }; Y = #sum { 1,c: c }; Z = ((3*Y)*X).""",
+a :- c(((3*Y)*X)); X = #sum { 1,b: b }; Y = #sum { 1,c: c }.""",
         ),
         (
             """
@@ -213,14 +205,14 @@ a :- b(X,Y); 0 = (X+(-1*(Y**2))).""",
 a :- not a(X); b(Y), Y = #sum{1,b : b}; Y=X*X.
             """,
             """#program base.
-a :- not a(X); b(Y); Y = #sum { 1,b: b }; Y = (X*X).""",
+a :- not a(X); b((X*X)); (X*X) = #sum { 1,b: b }.""",
         ),
         (
             """
 a :- not a(X); Y = #sum{1,b : b}; X=Y*Y.
             """,
             """#program base.
-a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
+a :- not a((Y*Y)); Y = #sum { 1,b: b }.""",
         ),
         (
             """
@@ -248,14 +240,14 @@ a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
 a :- b(X,Y), X=|Y|.
             """,
             """#program base.
-a :- b(X,Y); X = |Y|.""",
+a :- b(|Y|,Y).""",
         ),
         (
             """
 a :- b(X,Y), X=Y \\ 2.
             """,
             """#program base.
-a :- b(X,Y); X = (Y\\2).""",
+a :- b((Y\\2),Y).""",
         ),
         (
             """
@@ -283,14 +275,14 @@ a :- not a(X); X = #sum { (1*2),0,b: b }.""",
 a :- not a(X), Y = {b} = X; X=Y*2.
             """,
             """#program base.
-a :- not a(X); X = 0; 0 = #sum { 1,0,b: b }.""",
+a :- not a(0); 0 = #sum { 1,0,b: b }.""",
         ),
         (
             """
 foo1 :- c(Z), X = {b}; Y = {1>Z}; Z = 3 * Y * X.
                     """,
             """#program base.
-foo1 :- c(Z); X = #sum { 1,0,b: b }; Y = #sum { 1,0,2,Z: 1 > Z }; Z = ((3*Y)*X).""",
+foo1 :- c(((3*Y)*X)); X = #sum { 1,0,b: b }; Y = #sum { 1,0,2,((3*Y)*X): 1 > ((3*Y)*X) }.""",
         ),
         (
             """
@@ -455,9 +447,11 @@ def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    prg = normalize(prg)
+    prg = preprocess(prg)
     math = MathSimplification(prg)
-    newprg = "\n".join(map(str, math.execute(prg, False)))
+    prg = math.execute(prg, False)
+    prg = postprocess(prg)
+    newprg = "\n".join(map(str, prg))
     assert newprg == output
 
 
@@ -476,14 +470,14 @@ def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
 a(X) :- X=1+3.
             """,
             """#program base.
-a(X) :- X = (1+3).""",
+a((1+3)).""",
         ),
         (
             """
 a :- b(X), X=1+3.
             """,
             """#program base.
-a :- b(X); X = (1+3).""",
+a :- b((1+3)).""",
         ),
         (
             """
@@ -497,7 +491,7 @@ a :- b(X).""",
 a :- b(X), X=X*3.
             """,
             """#program base.
-a :- b(X); X = (X*3).""",
+a :- b((X*3)).""",
         ),
         (
             """
@@ -511,7 +505,7 @@ a :- b(X).""",
 a :- b(X,Y,Z), X=Y=Z.
             """,
             """#program base.
-a :- b(X,Y,Z); X = Y; Y = Z.""",
+a :- b(Z,Z,Z).""",
         ),
         (
             """
@@ -567,35 +561,35 @@ a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
 a :- b(Y), c(Z), X = #max{1,b : b}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- b(Y); c(Z); X = #max { 1,b: b }; Z = ((3*Y)*X).""",
+a :- b(Y); c(((3*Y)*X)); X = #max { 1,b: b }.""",
         ),
         (
             """
 a :- c(Z), X = #sum{1,b : b}; Y = #sum{1,c: c}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- c(Z); X = #sum { 1,b: b }; Y = #sum { 1,c: c }; Z = ((3*Y)*X).""",
+a :- c(((3*Y)*X)); X = #sum { 1,b: b }; Y = #sum { 1,c: c }.""",
         ),
         (
             """
 a :- b(X,Y), X=Y*Y.
             """,
             """#program base.
-a :- b(X,Y); X = (Y*Y).""",
+a :- b((Y*Y),Y).""",
         ),
         (
             """
 a :- not a(X); b(Y), Y = #sum{1,b : b}; Y=X*X.
             """,
             """#program base.
-a :- not a(X); b(Y); Y = #sum { 1,b: b }; Y = (X*X).""",
+a :- not a(X); b((X*X)); (X*X) = #sum { 1,b: b }.""",
         ),
         (
             """
 a :- not a(X); Y = #sum{1,b : b}; X=Y*Y.
             """,
             """#program base.
-a :- not a(X); Y = #sum { 1,b: b }; X = (Y*Y).""",
+a :- not a((Y*Y)); Y = #sum { 1,b: b }.""",
         ),
         (
             """
@@ -623,14 +617,14 @@ a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
 a :- b(X,Y), X=|Y|.
             """,
             """#program base.
-a :- b(X,Y); X = |Y|.""",
+a :- b(|Y|,Y).""",
         ),
         (
             """
 a :- b(X,Y), X=Y \\ 2.
             """,
             """#program base.
-a :- b(X,Y); X = (Y\\2).""",
+a :- b((Y\\2),Y).""",
         ),
     ],
 )
@@ -638,7 +632,9 @@ def test_math_simplification_execute_opt(rule: str, output: str) -> None:
     """test if equality variable replacement works"""
     prg: list[AST] = []
     parse_string(rule, prg.append)
-    prg = normalize(prg)
+    prg = preprocess(prg)
     math = MathSimplification(prg)
-    newprg = "\n".join(map(str, math.execute(prg)))
+    prg = math.execute(prg)
+    prg = postprocess(prg)
+    newprg = "\n".join(map(str, prg))
     assert newprg == output

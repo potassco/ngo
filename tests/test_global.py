@@ -2,7 +2,7 @@
 import pytest
 from clingo.ast import AST, Variable, parse_string
 
-from ngo.normalize import normalize
+from ngo.normalize import preprocess
 from ngo.utils.ast import LOC, Predicate
 from ngo.utils.globals import UniqueNames, UniqueVariables, auto_detect_input, auto_detect_output
 
@@ -16,7 +16,7 @@ f(x,y) :- __aux_1(a,b,c).
 
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     unique_names = UniqueNames(ast, [])
     assert unique_names.new_predicate("b", 0) == Predicate("b", 0)
     assert unique_names.new_predicate("a", 0) == Predicate("a1", 0)
@@ -31,7 +31,7 @@ f(X,C) :- b(X,A,B).
 
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     unique_names = UniqueVariables(ast[1])
     assert unique_names.make_unique(Variable(LOC, "X")).name == "X0"
     assert unique_names.make_unique(Variable(LOC, "Y")).name == "Y"
@@ -67,7 +67,7 @@ def test_auto_input(lhs: str, input_predicates: set[Predicate]) -> None:
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     auto_detected = auto_detect_input(ast)
     assert input_predicates == set(auto_detected)
 
@@ -89,6 +89,6 @@ def test_auto_output(lhs: str, output_predicates: set[Predicate]) -> None:
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     auto_detected = auto_detect_output(ast)
     assert output_predicates == set(auto_detected)

@@ -27,6 +27,7 @@ DOM_STR = "__dom_"
 AGG_STR = "__agg"
 NEXT = Variable(LOC, "__NEXT")
 PREV = Variable(LOC, "__PREV")
+AUX_VAR = Variable(LOC, "AUX")
 
 log = singleton_factory_logger("general")
 

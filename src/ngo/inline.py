@@ -320,11 +320,7 @@ class InlineTranslator:
 
         blit: AST
         for blit in orig.body:
-            if (
-                blit.ast_type != ASTType.Literal
-                or blit.atom.ast_type != ASTType.SymbolicAtom
-                or blit.atom.symbol.ast_type != ASTType.Function
-            ):
+            if not is_predicate(blit):
                 continue
             atom = blit.atom
 

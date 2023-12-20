@@ -4,7 +4,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.inline import InlineTranslator
-from ngo.normalize import normalize
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import Predicate
 
 
@@ -504,7 +504,9 @@ def test_inline_translation(
     """test inlining literals"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     utr = InlineTranslator(ast, input_predicates, output_predicates)
-    output = "\n".join(map(str, utr.execute(ast)))
+    ast = utr.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert output == rhs

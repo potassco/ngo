@@ -1,6 +1,7 @@
 # pylint: disable=line-too-long
 """
 Impress your friends with faster encodings.
+ngo is a program and python library to optimize non ground logic ASP encodings for performance.
 
 # Install
 

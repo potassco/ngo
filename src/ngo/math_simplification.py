@@ -51,13 +51,13 @@ from sympy import (
 from sympy.core.numbers import NegativeOne, One, Zero
 
 from ngo.dependency import RuleDependency
+from ngo.normalize import exline_arithmetic
 from ngo.utils.ast import (
     LOC,
     collect_ast,
     collect_binding_information_body,
     collect_binding_information_head,
     compare,
-    comparison2comparisonlist,
     conditions_of_body_agg,
     negate_agg,
     negate_comparison,
@@ -87,12 +87,13 @@ class MathSimplification:
         for blit in body:
             numaggs += len(collect_ast(blit, "BodyAggregate"))
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Comparison:
-                comparisons += len(comparison2comparisonlist(blit.atom))
+                comparisons += 1
         return (numaggs, comparisons)
 
     def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
         """return a simplified version of the program"""
         ret: list[AST] = []
+        prg = exline_arithmetic(prg)
         newprg = list(prg)
         for oldstm, stm in zip(prg, newprg):
             if stm.ast_type != ASTType.Rule:
@@ -280,14 +281,11 @@ class Goebner:
             atom = ast.atom
             ret: Optional[list[Expr]]
             if atom.ast_type == ASTType.Comparison:
-                ret = []
-                cl = comparison2comparisonlist(atom)
-                for c in cl:
-                    rel = self._to_sympy_comparison(c, sign == Sign.Negation)
-                    if rel is None:
-                        return None
-                    ret.append(rel)
-                return ret
+                c = (atom.term, atom.guards[0].comparison, atom.guards[0].term)
+                rel = self._to_sympy_comparison(c, sign == Sign.Negation)
+                if rel is None:
+                    return None
+                return [rel]
             if atom.ast_type == ASTType.BodyAggregate:
                 ret = self._to_sympy_bodyaggregate(atom, sign == Sign.Negation)
                 if ret is None:

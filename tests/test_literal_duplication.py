@@ -3,7 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables
-from ngo.normalize import normalize
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import replace_assignments
 
 
@@ -48,13 +48,13 @@ def test_literal_set_equal(lhs: str, rhs: str) -> None:
     """test removal of duplicate literals on whole programs"""
     lhs_ast: list[AST] = []
     parse_string(lhs, lhs_ast.append)
-    lhs_ast = normalize(lhs_ast)
+    lhs_ast = preprocess(lhs_ast)
     lhs_ast, _ = anonymize_variables(replace_assignments(lhs_ast[1]).body)
     rhs_ast: list[AST] = []
     parse_string(rhs, rhs_ast.append)
-    rhs_ast = normalize(rhs_ast)
+    rhs_ast = preprocess(rhs_ast)
     rhs_ast, _ = anonymize_variables(replace_assignments(rhs_ast[1]).body)
-    assert tuple(lhs_ast) == tuple(rhs_ast)
+    assert tuple(postprocess(lhs_ast)) == tuple(postprocess(rhs_ast))
 
 
 @pytest.mark.parametrize(
@@ -65,7 +65,7 @@ def test_literal_set_equal(lhs: str, rhs: str) -> None:
 foo :- a(X), b(Y + 1), c, X = Y.
             """,
             """#program base.
-foo :- a(X); b((Y+1)); c; X = Y.""",
+foo :- a(Y); b((Y+1)); c.""",
         ),
         (
             """
@@ -84,7 +84,7 @@ bar(U,W) :- a(U,V,W), b(U,V,W+1), d, V = U.
             """,
             """#program base.
 foo(X,Z) :- a(X,Y,Z); b(X,X,(Z+1)); c.
-bar(U,W) :- a(U,V,W); b(U,V,(W+1)); d; V = U.""",
+bar(U,W) :- a(U,U,W); b(U,U,(W+1)); d.""",
         ),
         (
             """
@@ -378,7 +378,9 @@ def test_duplication(prg: str, converted_prg: str) -> None:
     """test removal of duplicate literals on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     ldt = LiteralDuplicationTranslator(ast, [])
-    output = "\n".join(map(str, ldt.execute(ast)))
+    ast = ldt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert converted_prg == output

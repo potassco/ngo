@@ -2,7 +2,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.normalize import normalize
+from ngo.normalize import postprocess, preprocess
 from ngo.symmetry import SymmetryTranslator
 
 
@@ -109,9 +109,11 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     """test symmetry breaking on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    ast = normalize(ast)
+    ast = preprocess(ast)
     st = SymmetryTranslator(ast, [])
-    output = "\n".join(map(str, st.execute(ast)))
+    ast = st.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert converted_prg == output
 
 

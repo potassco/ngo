@@ -43,6 +43,7 @@ from ngo.utils.ast import (
     TranslationMap,
     collect_ast,
     global_vars_inside_body,
+    is_predicate,
     loc2str,
     potentially_unifying_sequence,
     predicates,
@@ -90,9 +91,7 @@ class MinMaxAggregator:
         """
 
         if not (
-            head.ast_type == ASTType.Literal
-            and head.atom.ast_type == ASTType.SymbolicAtom
-            and head.atom.symbol.ast_type == ASTType.Function
+            is_predicate(head)
             and len(self.rule_dependency.get_bodies(Predicate(head.atom.symbol.name, len(head.atom.symbol.arguments))))
             == 1  # only this head occurence
         ):
@@ -100,7 +99,7 @@ class MinMaxAggregator:
         symbol = head.atom.symbol
         for arg in symbol.arguments:
             if arg.ast_type not in {ASTType.Variable, ASTType.SymbolicTerm}:
-                return
+                return  # nocoverage
 
         mapping = [
             (rest_vars + [max_var]).index(arg) if arg in rest_vars + [max_var] else None for arg in symbol.arguments

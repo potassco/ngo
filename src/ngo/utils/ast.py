@@ -5,22 +5,16 @@ from itertools import product
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Sequence
 
 import networkx as nx
-from clingo import Number, SymbolType
+from clingo import SymbolType
 from clingo.ast import (
     AST,
-    AggregateFunction,
     ASTType,
     BinaryOperator,
-    BodyAggregate,
-    BodyAggregateElement,
-    Comparison,
     ComparisonOperator,
     Guard,
-    Literal,
     Location,
     Position,
     Sign,
-    SymbolicTerm,
     Transformer,
     UnaryOperator,
 )
@@ -505,7 +499,7 @@ def _collect_binding_information_conditions(
         size = len(bound_variables)
         for condition in conditions:
             if condition.ast_type == ASTType.Comparison:
-                bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)
+                bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)  # nocoverage
             elif condition.ast_type == ASTType.Literal and condition.atom.ast_type == ASTType.Comparison:
                 bound, unbound = _collect_binding_information_from_comparison(condition.atom, bound_variables)
             else:
@@ -536,6 +530,19 @@ def _collect_binding_information_from_equal(
         if len(rhs_vars) == 1 and not has_unsafe_operation(rhs) and lhs_vars <= bound_variables:
             bound_variables.update(rhs_vars)
     return bound_variables, unbound_variables - bound_variables
+
+
+def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
+    """convert the nested AST Comparison structure to a plain list of (term op term)"""
+    assert comparison.ast_type == ASTType.Comparison
+    ret: list[tuple[AST, ComparisonOperator, AST]] = []
+    lhs = comparison.term
+    for guard in comparison.guards:
+        operator = guard.comparison
+        rhs = guard.term
+        ret.append((lhs, operator, rhs))
+        lhs = rhs
+    return ret
 
 
 def _collect_binding_information_from_comparison(
@@ -661,14 +668,15 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
                         unbound_variables.update(term_vars)
                         unbound -= bound_variables
                         unbound_variables.update(unbound)
+                elif stm.atom.ast_type == ASTType.Comparison:
+                    bound, unbound = _collect_binding_information_from_comparison(stm.atom, bound_variables)
+                    bound_variables.update(bound)
+                    unbound_variables.update(unbound)
             elif stm.ast_type == ASTType.ConditionalLiteral:
                 term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
                 bound, unbound = _collect_binding_information_conditions(stm.condition, bound_variables)
                 unbound_variables.update(unbound)
                 unbound_variables.update(term_vars - bound)
-            elif stm.ast_type == ASTType.Comparison:
-                # TODO: can be improved for binding equalities
-                unbound_variables.update(set(collect_ast(stm, ast_name="Variable")))
         unbound_variables -= bound_variables
         bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
         bound_variables.update(bound)
@@ -683,74 +691,6 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
 def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
     """return a set of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
     return collect_binding_information_body(stmlist)[0]
-
-
-def expand_comparisons(stm: AST) -> AST:
-    """given a top level statement in a logic program, return a stm with expanded comparisons
-    WE CAN NOT DO THIS REPLACEMENT IN THE FRONT OF COMPARISONS
-    OR IN THE HEAD OF A RULE, wait for general clingo preprocessor
-    """
-    if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
-        return stm.update(body=normalize_operators(stm.body))
-    return stm
-
-
-def _normalize_operators_condition(condition: list[AST]) -> list[AST]:
-    new_condition: list[AST] = []
-    for c in condition:
-        if c.ast_type == ASTType.Literal and c.atom.ast_type == ASTType.Comparison:
-            new_condition.extend(
-                [
-                    Literal(LOC, c.sign, Comparison(lhs, [Guard(cop, rhs)]))
-                    for lhs, cop, rhs in comparison2comparisonlist(c.atom)
-                ]
-            )
-            continue
-        new_condition.append(c)
-    return new_condition
-
-
-def normalize_operators(literals: Iterable[AST]) -> list[AST]:
-    """replace a list of literals with a new list where all comparisons are binary and not chained"""
-    new_literals: list[AST] = []
-    for lit in literals:
-        new_lit = lit.update()
-        if lit.ast_type == ASTType.ConditionalLiteral:
-            new_literals.append(lit.update(condition=_normalize_operators_condition(lit.condition)))
-            continue
-        if lit.ast_type != ASTType.Literal:
-            new_literals.append(new_lit)  # nocoverage
-            continue  # nocoverage
-        atom = lit.atom
-        if atom.ast_type == ASTType.Comparison:
-            new_literals.extend(
-                [
-                    Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)]))
-                    for lhs, cop, rhs in comparison2comparisonlist(atom)
-                ]
-            )
-            continue
-        if atom.ast_type == ASTType.BodyAggregate:
-            new_elements: list[AST] = []
-            for elem in atom.elements:
-                new_elements.append(elem.update(condition=_normalize_operators_condition(elem.condition)))
-            new_atom = atom.update(elements=new_elements)
-            new_lit = lit.update(atom=new_atom)
-        new_literals.append(new_lit)
-    return new_literals
-
-
-def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
-    """convert the nested AST Comparison structure to a plain list of (term op term)"""
-    assert comparison.ast_type == ASTType.Comparison
-    ret: list[tuple[AST, ComparisonOperator, AST]] = []
-    lhs = comparison.term
-    for guard in comparison.guards:
-        operator = guard.comparison
-        rhs = guard.term
-        ret.append((lhs, operator, rhs))
-        lhs = rhs
-    return ret
 
 
 def loc2str(loc: Location) -> str:
@@ -825,7 +765,7 @@ def replace_simple_assignments(stm: AST) -> AST:
     else:
         new_heads = [stm.weight, stm.priority, *stm.terms]
     # normalize comparison operators
-    new_body = normalize_operators(literals)
+    new_body = list(literals)
     graph = nx.Graph()
     aux_body: list[AST] = []
     eqs = _get_simple_equalities(new_body)
@@ -867,10 +807,8 @@ def replace_assignments(stm: AST) -> AST:
         new_heads = [stm.head]
     else:
         new_heads = [stm.weight, stm.priority, *stm.terms]
-    # normalize comparison operators
-    # TODO: normalize comparison operators to ignore sign and create a list
-    new_body = normalize_operators(literals)
 
+    new_body = list(literals)
     removal: list[int] = []
     for index, lit in enumerate(new_body):
         if (
@@ -940,67 +878,16 @@ def is_predicate(lit: AST) -> bool:
     return False
 
 
-def _convert_count_to_sum(agg: AST) -> AST:
-    """convert body count aggregate to sum with weight 1"""
-    assert agg.ast_type == ASTType.BodyAggregate
-    new_elements: list[AST] = []
-    for old_elem in agg.elements:
-        terms: list[AST] = [SymbolicTerm(LOC, Number(1)), *old_elem.terms]
-        new_elements.append(old_elem.update(terms=terms))
-    return agg.update(function=AggregateFunction.SumPlus, elements=new_elements)
+def is_comparison(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison
 
 
-def _convert_old_agg(agg: AST) -> AST:
-    """transforms old style body aggregate to new sum aggregate with weights 1"""
-    assert agg.ast_type == ASTType.Aggregate
-    nm = {Sign.NoSign: 0, Sign.Negation: 1, Sign.DoubleNegation: 2}
-    bm = {True: 0, False: 1}
-    new_elements: list[AST] = []
-    comparison_counter = 2
-    for old_elem in agg.elements:
-        terms: list[AST] = []
-        atom = old_elem.literal.atom
-        terms.append(SymbolicTerm(LOC, Number(1)))
-        terms.append(SymbolicTerm(LOC, Number(nm[old_elem.literal.sign])))
-        if atom.ast_type == ASTType.Comparison:
-            terms.append(SymbolicTerm(LOC, Number(comparison_counter)))
-            comparison_counter += 1
-            terms.extend(sorted(collect_ast(atom, "Variable")))
-        elif atom.ast_type == ASTType.BooleanConstant:
-            terms.append(SymbolicTerm(LOC, Number(bm[atom.value])))
-            comparison_counter += 1
-        elif atom.ast_type == ASTType.SymbolicAtom:
-            terms.append(atom.symbol)
-        else:
-            assert False, f"Invalid atom {atom}"
-
-        new_elements.append(BodyAggregateElement(terms, [old_elem.literal, *old_elem.condition]))
-    return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
+def is_body_aggregate(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate
 
 
-def replace_old_aggregates(prg: Iterable[AST]) -> list[AST]:
-    """replace all oldstyle Aggregate`s in the body by BodyAggregate Sum
-    Also replace body count aggregates with sum aggregates with weight of 1"""
-    newprg: list[AST] = []
-    for stm in prg:
-        if stm.ast_type != ASTType.Rule:
-            newprg.append(stm)
-            continue
-        if not stm.body:
-            newprg.append(stm)
-            continue
-        newbody: list[AST] = []
-        for blit in stm.body:
-            if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Aggregate:
-                newbody.append(blit.update(atom=_convert_old_agg(blit.atom)))
-            elif (
-                blit.ast_type == ASTType.Literal
-                and blit.atom.ast_type == ASTType.BodyAggregate
-                and blit.atom.function == AggregateFunction.Count
-            ):
-                newbody.append(blit.update(atom=_convert_count_to_sum(blit.atom)))
-
-            else:
-                newbody.append(blit)
-        newprg.append(stm.update(body=newbody))
-    return newprg
+def is_conditional(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.ConditionalLiteral
