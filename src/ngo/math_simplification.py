@@ -127,17 +127,17 @@ class MathSimplification:
             try:
                 new_conditions = gb.simplify_equalities(needed, unbound)
                 for cond in new_conditions:
-                    conditions = set(conditions_of_body_agg(cond))
+                    conditions = set(conditions_of_body_agg(cond.atom))
                     if (
                         stm.head == Literal(LOC, Sign.NoSign, BooleanConstant(False))
                         or not conditions
                         or conditions.issubset(agg_conditions[Sign.NoSign])
                     ):
-                        newbody.append(Literal(LOC, Sign.NoSign, cond))
+                        newbody.append(Literal(LOC, Sign.NoSign, cond.atom))
                     elif conditions.issubset(agg_conditions[Sign.DoubleNegation]):
-                        newbody.append(Literal(LOC, Sign.DoubleNegation, cond))
+                        newbody.append(Literal(LOC, Sign.DoubleNegation, cond.atom))
                     elif conditions.issubset(agg_conditions[Sign.Negation]):
-                        newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond)))
+                        newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond.atom)))
                     else:
                         raise SympyApi(f"Couldn't preserve dependency graph, skipping {stm}")  # nocoverage
 
@@ -615,7 +615,9 @@ class Goebner:
                         lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
                         if len(lexpr) != 1:  # negative squareroots etc...
                             continue
-                        ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
+                        ret.append(
+                            Literal(LOC, Sign.NoSign, self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
+                        )
                         solved_for.add(solve_for)
                         simplified_expressions.remove(expr)
                         solved = True
@@ -634,7 +636,7 @@ class Goebner:
 
         for rel in sorted(self.compress_relations(relations), key=default_sort_key):
             if len(rel) == 3:
-                ret.append(self.relation2ast(*rel))
+                ret.append(Literal(LOC, Sign.NoSign, self.relation2ast(*rel)))
                 continue
-            ret.append(self.double_relation2ast(*rel))
+            ret.append(Literal(LOC, Sign.NoSign, self.double_relation2ast(*rel)))
         return ret

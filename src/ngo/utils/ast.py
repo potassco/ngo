@@ -457,9 +457,11 @@ def has_unsafe_operation(ast: AST) -> bool:
     )
 
 
-def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set[AST]]:
-    bound_variables: set[AST] = set()
-    unbound_variables: set[AST] = set()
+def _collect_binding_information_simple_literal(
+    lit: AST, in_bound_vars: set[AST], in_unbound_vars: set[AST]
+) -> tuple[set[AST], set[AST]]:
+    bound_variables: set[AST] = set(in_bound_vars)
+    unbound_variables: set[AST] = set(in_unbound_vars)
     assert lit.ast_type == ASTType.Literal
     if lit.atom.ast_type == ASTType.SymbolicAtom:
         # simple operations (no absolute with more than 1 variable) can bind exactly one variable
@@ -479,9 +481,9 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
         else:
             unbound_variables.update(collect_ast(lit, "Variable"))
     elif lit.atom.ast_type == ASTType.Comparison:
-        # i dont have enough information here to know what is already bound
-        # bound, unbound =_collect_binding_information_from_comparison(lit.atom, bound_variables)
-        unbound_variables.update(collect_ast(lit, "Variable"))
+        bound, unbound = _collect_binding_information_from_comparison(lit.atom, bound_variables)
+        bound_variables.update(bound)
+        unbound_variables.update(unbound)
     return bound_variables, unbound_variables
 
 
@@ -503,7 +505,9 @@ def _collect_binding_information_conditions(
             elif condition.ast_type == ASTType.Literal and condition.atom.ast_type == ASTType.Comparison:
                 bound, unbound = _collect_binding_information_from_comparison(condition.atom, bound_variables)
             else:
-                bound, unbound = _collect_binding_information_simple_literal(condition)
+                bound, unbound = _collect_binding_information_simple_literal(
+                    condition, bound_variables, unbound_variables
+                )
             bound_variables.update(bound)
             unbound_variables.update(unbound)
     unbound_variables -= bound_variables
@@ -549,7 +553,7 @@ def _collect_binding_information_from_comparison(
     comparison: AST, input_bound_variables: set[AST]
 ) -> tuple[set[AST], set[AST]]:
     assert comparison.ast_type == ASTType.Comparison
-    bound_variables: set[AST] = input_bound_variables
+    bound_variables: set[AST] = set(input_bound_variables)
     unbound_variables: set[AST] = set(collect_ast(comparison, "Variable"))
     for lhs, operator, rhs in comparison2comparisonlist(comparison):
         if operator == ComparisonOperator.Equal:
@@ -642,7 +646,7 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
     while len(bound_variables) > size_before:
         for stm in stmlist:
             if stm.ast_type == ASTType.Literal:
-                bound, unbound = _collect_binding_information_simple_literal(stm)
+                bound, unbound = _collect_binding_information_simple_literal(stm, bound_variables, unbound_variables)
                 bound_variables.update(bound)
                 unbound_variables.update(unbound)
                 if stm.atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
