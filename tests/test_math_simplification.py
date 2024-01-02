@@ -37,7 +37,7 @@ to_str = {
         (":- X = 1..2.", None, None),
         (":- X < 2+Y.", ["-_temp + X - Y - 2"], ["_temp < 0"]),
         (":- X < 2-Y.", ["-_temp + X + Y - 2"], ["_temp < 0"]),
-        (":- X < 2/Y.", ["-_temp + X - 2/Y"], ["_temp < 0"]),
+        (":- X < 2/Y.", ["-_temp + X - floor(2/Y)"], ["_temp < 0"]),
         (":- X < 2\\Y.", ["-_temp + X - Mod(2, Y)"], ["_temp < 0"]),
         (":- X < 2*Y.", ["-_temp + X - 2*Y"], ["_temp < 0"]),
         (":- X < 2**Y.", ["-2**Y - _temp + X"], ["_temp < 0"]),
@@ -100,7 +100,7 @@ a(4).""",
 a :- b(X), X=1+3.
             """,
             """#program base.
-a :- b(X); 0 = (-4+X).""",
+a :- b(4).""",
         ),
         (
             """
@@ -128,7 +128,7 @@ a :- b(X).""",
 a :- b(X,Y,Z), X=Y=Z.
             """,
             """#program base.
-a :- b(X,Y,Z); 0 = (X+(-1*Z)); 0 = (Y+(-1*Z)).""",
+a :- b(Z,Z,Z).""",
         ),
         (
             """
@@ -142,14 +142,49 @@ a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
 a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- b(X); 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }; 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); X,__agg(2) }.""",
+a :- b(X); X = #sum { (1*-1),b,__agg(0): b; 2,__agg(1) }; 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }.""",
+        ),
+        (
+            """
+a :- b(Z), c(Y), X=#max{1,a : a}, X*Y=Z.
+            """,
+            """#program base.
+a :- b((X*Y)); c(Y); X = #max { 1,a: a }.""",
+        ),
+        (
+            """
+a :- X=#max{1,a : a}, Y=#sum{1,a : a}, X*2 = 3*Y.
+            """,
+            """#program base.
+a :- X = #max { 1,a: a }; Y = #sum { 1,a: a }; (X*2) = (3*Y).""",
+        ),
+        (
+            """
+a :- X=#max{1,a : a}, c(Y); d(Z), X*2 = Z*3*Y.
+            """,
+            """#program base.
+a :- X = #max { 1,a: a }; c(Y); d(Z); (X*2) = ((Z*3)*Y).""",
+        ),
+        (
+            """
+mul(Z,Y,X) :- X=#sum{W,a(W) : a(W)}, y(Y); z(Z), X = Z*Y.
+            """,
+            """#program base.
+mul(Z,Y,(Y*Z)) :- y(Y); z(Z); 0 = #sum { W,a(W),__agg(0): a(W); ((-1*Y)*Z),__agg(1) }.""",
+        ),
+        (
+            """
+a :- X=#sum{1,a : a}, c(Y); d(Z), X = Z*Y.
+            """,
+            """#program base.
+a :- c(Y); d(Z); 0 = #sum { 1,a,__agg(0): a; ((-1*Y)*Z),__agg(1) }.""",
         ),
         (
             """
 a :- b(X), X=#sum{1,b : b}.
                     """,
             """#program base.
-a :- b(X); 0 = #sum { 1,b,__agg(0): b; (-1*X),__agg(1) }.""",
+a :- b(X); X = #sum { 1,b: b }.""",
         ),
         (
             """
@@ -167,17 +202,17 @@ a(X) :- 3 < #sum { 1,b: b }.""",
         ),
         (
             """
-a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
+ab :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
+ab :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
         ),
         (
             """
-a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
+a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X. 
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
+a :- b(Y); c(Z); Z = #sum { (1*(3*Y)),b: b }.""",
         ),
         (
             """
@@ -198,7 +233,7 @@ a :- c(((3*Y)*X)); X = #sum { 1,b: b }; Y = #sum { 1,c: c }.""",
 a :- b(X,Y), X=Y*Y.
             """,
             """#program base.
-a :- b(X,Y); 0 = (X+(-1*(Y**2))).""",
+a :- b((Y**2),Y).""",
         ),
         (
             """
@@ -223,10 +258,10 @@ a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) }.""",
         ),
         (
             """
-a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
+ac :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""",
+ac :- a(X); not not X = #sum { 1,b,__agg(0): b; -2,__agg(1) }.""",
         ),
         (
             """
@@ -441,6 +476,11 @@ f(X) :- b(X); #false; 0 >= (-2+X).""",
             """#program base.
 f(X) :- b(X,Y,Z); 0 > (X+(-1*Y)); 0 > (Y+(-1*Z)).""",
         ),
+        (
+            """f(X,Y,Z) :- b(X,Y); Z=X/Y.""",
+            """#program base.
+f(X,Y,(X/Y)) :- b(X,Y).""",
+        ),
     ],
 )
 def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
@@ -516,10 +556,10 @@ a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
         ),
         (
             """
-a :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
+ab :- b(X), X=#sum{1,a : a}, Y=#sum{1,b: b}, X+Y=2.
             """,
             """#program base.
-a :- b(X); 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }; 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); X,__agg(2) }.""",
+ab :- b(X); X = #sum { (1*-1),b,__agg(0): b; 2,__agg(1) }; 0 = #sum { 1,a,__agg(0): a; (-1*X),__agg(1) }.""",
         ),
         (
             """
@@ -544,17 +584,17 @@ a(X) :- 3 < #sum { 1,b: b }.""",
         ),
         (
             """
-a :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
+ac :- b(Y), c(Z), X = #sum{1,b : b}; X = 3 * Y * Z.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
+ac :- b(Y); c(Z); 0 = #sum { 1,b,__agg(0): b; ((-3*Y)*Z),__agg(1) }.""",
         ),
         (
             """
 a :- b(Y), c(Z), X = #sum{1,b : b}; Z = 3 * Y * X.
                     """,
             """#program base.
-a :- b(Y); c(Z); 0 = #sum { (1*(3*Y)),b,__agg(0): b; (-1*Z),__agg(1) }.""",
+a :- b(Y); c(Z); Z = #sum { (1*(3*Y)),b: b }.""",
         ),
         (
             """
@@ -603,7 +643,7 @@ a :- a(X); not 0 = #sum { (1*-1),b,__agg(0): b; 2,__agg(1); X,__agg(2) }.""",
 a :- a(X); not not Y = #sum{1,b : b}, X = Y-2.
             """,
             """#program base.
-a :- a(X); not not 0 = #sum { 1,b,__agg(0): b; -2,__agg(1); (-1*X),__agg(2) }.""",
+a :- a(X); not not X = #sum { 1,b,__agg(0): b; -2,__agg(1) }.""",
         ),
         (
             """

@@ -150,7 +150,7 @@ class CleanupTranslator:
 
     def _superseeded(self, lhs: AST, rhs: AST) -> bool:
         """use the mappings to check if lhs Literal superseeds rhs literal"""
-        if not is_predicate(lhs):
+        if not (is_predicate(lhs) and lhs.sign == Sign.NoSign):
             return False
         if not is_predicate(rhs):
             return False

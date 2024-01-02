@@ -1,5 +1,6 @@
 """ convert an AST to a simplified normal form """
 
+from functools import partial
 from typing import Iterable, Optional
 
 from clingo.ast import (
@@ -10,10 +11,12 @@ from clingo.ast import (
     BodyAggregateElement,
     Comparison,
     ComparisonOperator,
+    Function,
     Guard,
     Literal,
     Sign,
     SymbolicTerm,
+    Variable,
 )
 from clingo.symbol import Number
 
@@ -26,6 +29,7 @@ from ngo.utils.ast import (
     is_comparison,
     is_conditional,
     is_predicate,
+    replace_var_name,
     transform_ast,
 )
 from ngo.utils.globals import AUX_VAR, UniqueVariables
@@ -96,16 +100,29 @@ def _convert_count_to_sum(agg: AST) -> AST:
     return agg.update(function=AggregateFunction.SumPlus, elements=new_elements)
 
 
-def _convert_old_agg(agg: AST) -> AST:
+def _replace_anon(symbol: AST) -> AST:
+    return transform_ast(
+        symbol, "Variable", partial(replace_var_name, Variable(LOC, "_"), Function(LOC, "anon__ngo", [], False))
+    )
+
+
+def _convert_old_agg(agg: AST, unqiue_vars: UniqueVariables) -> AST:
     """transforms old style body aggregate to new sum aggregate with weights 1"""
     assert agg.ast_type == ASTType.Aggregate
     nm = {Sign.NoSign: 0, Sign.Negation: 1, Sign.DoubleNegation: 2}
     bm = {True: 0, False: 1}
     new_elements: list[AST] = []
     comparison_counter = 2
+
+    def replace_with_new(var: AST) -> AST:
+        if var.name == "_":
+            return unqiue_vars.make_unique(AUX_VAR)
+        return var
+
     for old_elem in agg.elements:
         terms: list[AST] = []
         atom = old_elem.literal.atom
+        new_literal = old_elem.literal
         terms.append(SymbolicTerm(LOC, Number(1)))
         terms.append(SymbolicTerm(LOC, Number(nm[old_elem.literal.sign])))
         if atom.ast_type == ASTType.Comparison:
@@ -116,11 +133,12 @@ def _convert_old_agg(agg: AST) -> AST:
             terms.append(SymbolicTerm(LOC, Number(bm[atom.value])))
             comparison_counter += 1
         elif atom.ast_type == ASTType.SymbolicAtom:
-            terms.append(atom.symbol)
+            if new_literal.sign in (Sign.NoSign, Sign.DoubleNegation):
+                new_literal = transform_ast(new_literal, "Variable", replace_with_new)
+            terms.append(_replace_anon(new_literal.atom.symbol))
         else:
             assert False, f"Invalid atom {atom}"
-
-        new_elements.append(BodyAggregateElement(terms, [old_elem.literal, *old_elem.condition]))
+        new_elements.append(BodyAggregateElement(terms, [new_literal, *old_elem.condition]))
     return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
 
 
@@ -136,9 +154,10 @@ def replace_old_aggregates(prg: Iterable[AST]) -> list[AST]:
             newprg.append(stm)
             continue
         newbody: list[AST] = []
+        unique_vars = UniqueVariables(stm)
         for blit in stm.body:
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Aggregate:
-                newbody.append(blit.update(atom=_convert_old_agg(blit.atom)))
+                newbody.append(blit.update(atom=_convert_old_agg(blit.atom, unique_vars)))
             elif (
                 blit.ast_type == ASTType.Literal
                 and blit.atom.ast_type == ASTType.BodyAggregate

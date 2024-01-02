@@ -353,8 +353,9 @@ foobar :- __aux_1; #sum { 1,0,e: e, __aux_2 }.""",
 #false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(_) }.
             """,
             """#program base.
-1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = #sum { 1,0,job(_): job(_) }.
-#false :- 2 <= #sum { 1,0,perm(_,M,P): perm(_,M,P) }; machine(M); P = (1..N); N = #sum { 1,0,job(_): job(_) }.""",
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = #sum { 1,0,job(AUX): job(AUX) }.
+#false :- 2 <= #sum { 1,0,perm(AUX,M,P): perm(AUX,M,P) };\
+ machine(M); P = (1..N); N = #sum { 1,0,job(AUX0): job(AUX0) }.""",
         ),
         (
             """
@@ -363,7 +364,8 @@ foobar :- __aux_1; #sum { 1,0,e: e, __aux_2 }.""",
             """,
             """#program base.
 1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = #sum { 1,0,job(O): job(O) }.
-#false :- 2 <= #sum { 1,0,perm(_,M,P): perm(_,M,P) }; machine(M); P = (1..N); N = #sum { 1,0,job(O): job(O) }.""",
+#false :- 2 <= #sum { 1,0,perm(AUX,M,P): perm(AUX,M,P) };\
+ machine(M); P = (1..N); N = #sum { 1,0,job(O): job(O) }.""",
         ),
         (
             """

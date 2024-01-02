@@ -1,5 +1,6 @@
 """ does math simplification for FO formulas and aggregates"""
 from collections import OrderedDict, defaultdict
+from itertools import chain
 from math import lcm
 from typing import Any, Optional, cast
 
@@ -43,6 +44,7 @@ from sympy import (
     Unequality,
     collect,
     default_sort_key,
+    floor,
     groebner,
     oo,
     ordered,
@@ -59,6 +61,7 @@ from ngo.utils.ast import (
     collect_binding_information_head,
     compare,
     conditions_of_body_agg,
+    global_vars_inside_body,
     negate_agg,
     negate_comparison,
     rhs2lhs_comparison,
@@ -90,7 +93,9 @@ class MathSimplification:
                 comparisons += 1
         return (numaggs, comparisons)
 
-    def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
+    def execute(  # pylint: disable=too-many-branches, too-many-statements
+        self, prg: list[AST], optimize: bool = True
+    ) -> list[AST]:
         """return a simplified version of the program"""
         ret: list[AST] = []
         prg = exline_arithmetic(prg)
@@ -114,6 +119,11 @@ class MathSimplification:
             bound_body, unbound_body = collect_binding_information_body(newbody)
             needed = set.union(bound_body, unbound_body, need_bound, no_bound_needed)
             unbound = set.union(need_bound, unbound_body) - bound_body
+            # add all variables that became local and were global
+            allvars = set()
+            for blit in newbody:
+                allvars.update(set(collect_ast(blit, "Variable")))
+            needed.update((global_vars_inside_body(stm.body) - global_vars_inside_body(newbody)) & allvars)
             try:
                 new_conditions = gb.simplify_equalities(needed, unbound)
                 for cond in new_conditions:
@@ -224,7 +234,7 @@ class Goebner:
             if lhs is None or rhs is None:
                 return None
             if t.operator_type == BinaryOperator.Division:
-                return cast(Expr, lhs / rhs)
+                return cast(Expr, floor(lhs / rhs))
             if t.operator_type == BinaryOperator.Minus:
                 return cast(Expr, lhs - rhs)
             if t.operator_type == BinaryOperator.Modulo:
@@ -397,12 +407,14 @@ class Goebner:
         if expr.func == Mul:
             return self.new_mul(asts)
         if expr.func == Pow:
-            return self.new_pow(asts)
+            if len(expr.args) == 2 and expr.args[1].is_positive is True:  # type: ignore
+                return self.new_pow(asts)
+            raise SympyApi("Division by negative pow not supported, skipping.")
         if expr.func == Abs:  # nocoverage # sympy has problams with abs
             return self.new_abs(asts)
         if expr.func == Mod:  # nocoverage # sympy has problams with mod
             raise SympyApi("Modulo not supported, skipping.")
-        raise SympyApi(f"Not Implemented conversion {expr.func}")  # nocoverage
+        raise SympyApi(f"Not Implemented conversion {expr.func}")  # e.g. rationals
 
     @staticmethod
     def is_const(lhs: Expr) -> bool:
@@ -544,7 +556,9 @@ class Goebner:
 
         return ret
 
-    def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
+    def simplify_equalities(  # pylint: disable=too-many-branches, too-many-statements
+        self, needed_vars: set[AST], need_bound: set[AST]
+    ) -> list[AST]:
         """Given self.equalities, return a simplified list using the needed variables"""
         assert need_bound.issubset(needed_vars)
         unbound = need_bound - set(self._fo_vars.values())
@@ -573,6 +587,7 @@ class Goebner:
 
         relations: list[tuple[Expr, ComparisonOperator, Expr]] = []
         # try to bind all needed variables
+        solved_for = set()
         for expr in reversed(simplified_expressions):
             free = cast(set[Symbol], set(list(expr.free_symbols)))
             neq_vars = set.intersection(free, self.help_neq_vars.keys())
@@ -585,23 +600,37 @@ class Goebner:
                     return nothing  # nocoverage
                 relations.append((S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
                 continue
-            # rearrange expr such that variable binding is ok
-            # #TODO: find a coverage of all needed variables
+
             common = list(ordered(set.intersection(free, needed_vars_symbols)))
             if common:
                 # solve for some random needed variable
-                solve_for = next((v for v in common if v in needed_bound_symbols), None)
-                if solve_for is not None:
-                    lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
-                    if len(lexpr) != 1:  # negative squareroots etc...
-                        return nothing
-                    ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
-                    needed_bound_symbols.remove(solve_for)
-                    simplified_expressions.remove(expr)
+                solved = False
+                for solve_for in chain(
+                    sorted(needed_bound_symbols, key=default_sort_key),
+                    sorted(needed_vars_symbols, key=default_sort_key),
+                ):
+                    if solve_for in solved_for:
+                        continue
+                    try:
+                        lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
+                        if len(lexpr) != 1:  # negative squareroots etc...
+                            continue
+                        ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
+                        solved_for.add(solve_for)
+                        simplified_expressions.remove(expr)
+                        solved = True
+                        break
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        continue
+                if solved:
                     continue
+
             # 2. Equality
             if common or not set.intersection(free, self._fo_vars.keys()):
                 relations.append((S(0), ComparisonOperator.Equal, expr))
+
+        if not needed_bound_symbols.issubset(solved_for):
+            return nothing
 
         for rel in sorted(self.compress_relations(relations), key=default_sort_key):
             if len(rel) == 3:

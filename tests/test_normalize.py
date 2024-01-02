@@ -15,6 +15,20 @@ a :- b(X); X = #sum {Y : Y=1..X}.
             """#program base.
 a :- b(X); X = #sum { Y: Y = (1..X) }.""",
         ),
+        (
+            """
+#false :- sudoku(X,_,N); 1 != { sudoku(X,_,N) }.
+""",
+            """#program base.
+#false :- sudoku(X,_,N); 1 != #sum { 1,0,sudoku(X,AUX,N): sudoku(X,AUX,N) }.""",
+        ),
+        (
+            """
+#false :- sudoku(X,_,N); 1 != { not sudoku(X,_,N) }.
+""",
+            """#program base.
+#false :- sudoku(X,_,N); 1 != #sum { 1,1,sudoku(X,anon__ngo,N): not sudoku(X,_,N) }.""",
+        ),
     ],
 )
 def test_preprocess(input_: str, output: str) -> None:

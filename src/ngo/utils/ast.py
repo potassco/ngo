@@ -824,12 +824,12 @@ def replace_assignments(stm: AST) -> AST:
                     if other == index:
                         continue
                     new_body[other] = transform_ast(
-                        elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                        elem, "Variable", partial(replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                     )
                 removal.append(index)
                 for i, head in enumerate(new_heads):
                     new_heads[i] = transform_ast(
-                        head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                        head, "Variable", partial(replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                     )
                 continue
     for index in reversed(removal):
@@ -839,9 +839,9 @@ def replace_assignments(stm: AST) -> AST:
     return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=new_body)
 
 
-def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
+def replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
+    """replace orig variable with replace, if var == orig"""
     assert orig.ast_type == ASTType.Variable
-    assert var.ast_type == ASTType.Variable
     if var == orig:
         return replace
     return var
