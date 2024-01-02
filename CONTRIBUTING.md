@@ -1,4 +1,4 @@
-# Contributing to Clingo
+# Contributing to NGO
 
 First off, thanks for taking the time to contribute! ❤️
 
