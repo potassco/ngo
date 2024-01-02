@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.cleanup import CleanupTranslator
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import Predicate
 
 
@@ -164,7 +165,7 @@ a :- 42 {c : b(X,Y), dom(X), dom(Y)}.
             [Predicate("dom", 1)],
             """#program base.
 b(X,Y) :- dom(X); dom(Y); (X+Y) > 42.
-a :- 42 <= { c: b(X,Y) }.""",
+a :- 42 <= #sum { 1,0,c: c, b(X,Y) }.""",
         ),
         (  # technicly not wrong but weird,
             # if there is a seed to seq this is broken except it superseeds task/1 too, like
@@ -192,8 +193,11 @@ def test_cleanup_translation(lhs: str, input_predicates: list[Predicate], rhs: s
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = preprocess(ast)
     clt = CleanupTranslator(input_predicates)
-    output = "\n".join(map(str, clt.execute(ast)))
+    ast = clt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output
 
 
@@ -294,6 +298,9 @@ def test_cleanup_booleans(lhs: str, input_predicates: list[Predicate], rhs: str)
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = preprocess(ast)
     clt = CleanupTranslator(input_predicates)
-    output = "\n".join(map(str, clt.execute(ast)))
+    ast = clt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output

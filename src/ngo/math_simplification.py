@@ -1,5 +1,6 @@
 """ does math simplification for FO formulas and aggregates"""
 from collections import OrderedDict, defaultdict
+from itertools import chain
 from math import lcm
 from typing import Any, Optional, cast
 
@@ -11,7 +12,6 @@ from clingo.ast import (
     ASTType,
     BinaryOperation,
     BinaryOperator,
-    BodyAggregate,
     BodyAggregateElement,
     BooleanConstant,
     Comparison,
@@ -44,6 +44,7 @@ from sympy import (
     Unequality,
     collect,
     default_sort_key,
+    floor,
     groebner,
     oo,
     ordered,
@@ -52,14 +53,15 @@ from sympy import (
 from sympy.core.numbers import NegativeOne, One, Zero
 
 from ngo.dependency import RuleDependency
+from ngo.normalize import exline_arithmetic
 from ngo.utils.ast import (
     LOC,
     collect_ast,
     collect_binding_information_body,
     collect_binding_information_head,
     compare,
-    comparison2comparisonlist,
     conditions_of_body_agg,
+    global_vars_inside_body,
     negate_agg,
     negate_comparison,
     rhs2lhs_comparison,
@@ -88,77 +90,16 @@ class MathSimplification:
         for blit in body:
             numaggs += len(collect_ast(blit, "BodyAggregate"))
             if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Comparison:
-                comparisons += len(comparison2comparisonlist(blit.atom))
+                comparisons += 1
         return (numaggs, comparisons)
 
-    @staticmethod
-    def _convert_agg_to_sum(agg: AST) -> AST:
-        assert agg.ast_type == ASTType.BodyAggregate
-        new_elements: list[AST] = []
-        for old_elem in agg.elements:
-            terms: list[AST] = [SymbolicTerm(LOC, clingo.Number(1)), *old_elem.terms]
-            new_elements.append(old_elem.update(terms=terms))
-        return agg.update(function=AggregateFunction.SumPlus, elements=new_elements)
-
-    @staticmethod
-    def _convert_old_agg(agg: AST) -> AST:
-        assert agg.ast_type == ASTType.Aggregate
-        nm = {Sign.NoSign: 0, Sign.Negation: 1, Sign.DoubleNegation: 2}
-        bm = {True: 0, False: 1}
-        new_elements: list[AST] = []
-        comparison_counter = 2
-        for old_elem in agg.elements:
-            terms: list[AST] = []
-            atom = old_elem.literal.atom
-            terms.append(SymbolicTerm(LOC, clingo.Number(1)))
-            terms.append(SymbolicTerm(LOC, clingo.Number(nm[old_elem.literal.sign])))
-            if atom.ast_type == ASTType.Comparison:
-                terms.append(SymbolicTerm(LOC, clingo.Number(comparison_counter)))
-                comparison_counter += 1
-                terms.extend(sorted(collect_ast(atom, "Variable")))
-            elif atom.ast_type == ASTType.BooleanConstant:
-                terms.append(SymbolicTerm(LOC, clingo.Number(bm[atom.value])))
-                comparison_counter += 1
-            elif atom.ast_type == ASTType.SymbolicAtom:
-                terms.append(atom.symbol)
-            else:
-                assert False, f"Invalid atom {atom}"
-
-            new_elements.append(BodyAggregateElement(terms, [old_elem.literal, *old_elem.condition]))
-        return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
-
-    @staticmethod
-    def replace_old_aggregates(prg: list[AST]) -> list[AST]:
-        """replace all oldstyle Aggregate`s in the head by BodyAggregate Sum
-        Also replace count aggregates with sum aggregates with weight of 1"""
-        newprg: list[AST] = []
-        for stm in prg:
-            if stm.ast_type != ASTType.Rule:
-                newprg.append(stm)
-                continue
-            if not stm.body:
-                newprg.append(stm)
-                continue
-            newbody: list[AST] = []
-            for blit in stm.body:
-                if blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.Aggregate:
-                    newbody.append(blit.update(atom=MathSimplification._convert_old_agg(blit.atom)))
-                elif (
-                    blit.ast_type == ASTType.Literal
-                    and blit.atom.ast_type == ASTType.BodyAggregate
-                    and blit.atom.function == AggregateFunction.Count
-                ):
-                    newbody.append(blit.update(atom=MathSimplification._convert_agg_to_sum(blit.atom)))
-
-                else:
-                    newbody.append(blit)
-            newprg.append(stm.update(body=newbody))
-        return newprg
-
-    def execute(self, prg: list[AST], optimize: bool = True) -> list[AST]:  # pylint: disable=too-many-branches
+    def execute(  # pylint: disable=too-many-branches, too-many-statements
+        self, prg: list[AST], optimize: bool = True
+    ) -> list[AST]:
         """return a simplified version of the program"""
         ret: list[AST] = []
-        newprg = self.replace_old_aggregates(prg)
+        prg = exline_arithmetic(prg)
+        newprg = list(prg)
         for oldstm, stm in zip(prg, newprg):
             if stm.ast_type != ASTType.Rule:
                 ret.append(oldstm)
@@ -178,20 +119,25 @@ class MathSimplification:
             bound_body, unbound_body = collect_binding_information_body(newbody)
             needed = set.union(bound_body, unbound_body, need_bound, no_bound_needed)
             unbound = set.union(need_bound, unbound_body) - bound_body
+            # add all variables that became local and were global
+            allvars = set()
+            for blit in newbody:
+                allvars.update(set(collect_ast(blit, "Variable")))
+            needed.update((global_vars_inside_body(stm.body) - global_vars_inside_body(newbody)) & allvars)
             try:
                 new_conditions = gb.simplify_equalities(needed, unbound)
                 for cond in new_conditions:
-                    conditions = set(conditions_of_body_agg(cond))
+                    conditions = set(conditions_of_body_agg(cond.atom))
                     if (
                         stm.head == Literal(LOC, Sign.NoSign, BooleanConstant(False))
                         or not conditions
                         or conditions.issubset(agg_conditions[Sign.NoSign])
                     ):
-                        newbody.append(Literal(LOC, Sign.NoSign, cond))
+                        newbody.append(Literal(LOC, Sign.NoSign, cond.atom))
                     elif conditions.issubset(agg_conditions[Sign.DoubleNegation]):
-                        newbody.append(Literal(LOC, Sign.DoubleNegation, cond))
+                        newbody.append(Literal(LOC, Sign.DoubleNegation, cond.atom))
                     elif conditions.issubset(agg_conditions[Sign.Negation]):
-                        newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond)))
+                        newbody.append(Literal(LOC, Sign.Negation, negate_agg(cond.atom)))
                     else:
                         raise SympyApi(f"Couldn't preserve dependency graph, skipping {stm}")  # nocoverage
 
@@ -288,7 +234,7 @@ class Goebner:
             if lhs is None or rhs is None:
                 return None
             if t.operator_type == BinaryOperator.Division:
-                return cast(Expr, lhs / rhs)
+                return cast(Expr, floor(lhs / rhs))
             if t.operator_type == BinaryOperator.Minus:
                 return cast(Expr, lhs - rhs)
             if t.operator_type == BinaryOperator.Modulo:
@@ -345,14 +291,11 @@ class Goebner:
             atom = ast.atom
             ret: Optional[list[Expr]]
             if atom.ast_type == ASTType.Comparison:
-                ret = []
-                cl = comparison2comparisonlist(atom)
-                for c in cl:
-                    rel = self._to_sympy_comparison(c, sign == Sign.Negation)
-                    if rel is None:
-                        return None
-                    ret.append(rel)
-                return ret
+                c = (atom.term, atom.guards[0].comparison, atom.guards[0].term)
+                rel = self._to_sympy_comparison(c, sign == Sign.Negation)
+                if rel is None:
+                    return None
+                return [rel]
             if atom.ast_type == ASTType.BodyAggregate:
                 ret = self._to_sympy_bodyaggregate(atom, sign == Sign.Negation)
                 if ret is None:
@@ -464,12 +407,14 @@ class Goebner:
         if expr.func == Mul:
             return self.new_mul(asts)
         if expr.func == Pow:
-            return self.new_pow(asts)
+            if len(expr.args) == 2 and expr.args[1].is_positive is True:  # type: ignore
+                return self.new_pow(asts)
+            raise SympyApi("Division by negative pow not supported, skipping.")
         if expr.func == Abs:  # nocoverage # sympy has problams with abs
             return self.new_abs(asts)
         if expr.func == Mod:  # nocoverage # sympy has problams with mod
             raise SympyApi("Modulo not supported, skipping.")
-        raise SympyApi(f"Not Implemented conversion {expr.func}")  # nocoverage
+        raise SympyApi(f"Not Implemented conversion {expr.func}")  # e.g. rationals
 
     @staticmethod
     def is_const(lhs: Expr) -> bool:
@@ -611,7 +556,9 @@ class Goebner:
 
         return ret
 
-    def simplify_equalities(self, needed_vars: set[AST], need_bound: set[AST]) -> list[AST]:
+    def simplify_equalities(  # pylint: disable=too-many-branches, too-many-statements
+        self, needed_vars: set[AST], need_bound: set[AST]
+    ) -> list[AST]:
         """Given self.equalities, return a simplified list using the needed variables"""
         assert need_bound.issubset(needed_vars)
         unbound = need_bound - set(self._fo_vars.values())
@@ -640,6 +587,7 @@ class Goebner:
 
         relations: list[tuple[Expr, ComparisonOperator, Expr]] = []
         # try to bind all needed variables
+        solved_for = set()
         for expr in reversed(simplified_expressions):
             free = cast(set[Symbol], set(list(expr.free_symbols)))
             neq_vars = set.intersection(free, self.help_neq_vars.keys())
@@ -652,27 +600,43 @@ class Goebner:
                     return nothing  # nocoverage
                 relations.append((S(0), rhs2lhs_comparison(self.help_neq_vars[v]), lexpr[0]))
                 continue
-            # rearrange expr such that variable binding is ok
-            # #TODO: find a coverage of all needed variables
+
             common = list(ordered(set.intersection(free, needed_vars_symbols)))
             if common:
                 # solve for some random needed variable
-                solve_for = next((v for v in common if v in needed_bound_symbols), None)
-                if solve_for is not None:
-                    lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
-                    if len(lexpr) != 1:  # negative squareroots etc...
-                        return nothing
-                    ret.append(self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
-                    needed_bound_symbols.remove(solve_for)
-                    simplified_expressions.remove(expr)
+                solved = False
+                for solve_for in chain(
+                    sorted(needed_bound_symbols, key=default_sort_key),
+                    sorted(needed_vars_symbols, key=default_sort_key),
+                ):
+                    if solve_for in solved_for:
+                        continue
+                    try:
+                        lexpr = solve(expr, solve_for)  # solve for the first one, have to think of a valid strategy
+                        if len(lexpr) != 1:  # negative squareroots etc...
+                            continue
+                        ret.append(
+                            Literal(LOC, Sign.NoSign, self.relation2ast(solve_for, ComparisonOperator.Equal, lexpr[0]))
+                        )
+                        solved_for.add(solve_for)
+                        simplified_expressions.remove(expr)
+                        solved = True
+                        break
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        continue
+                if solved:
                     continue
+
             # 2. Equality
             if common or not set.intersection(free, self._fo_vars.keys()):
                 relations.append((S(0), ComparisonOperator.Equal, expr))
 
+        if not needed_bound_symbols.issubset(solved_for):
+            return nothing
+
         for rel in sorted(self.compress_relations(relations), key=default_sort_key):
             if len(rel) == 3:
-                ret.append(self.relation2ast(*rel))
+                ret.append(Literal(LOC, Sign.NoSign, self.relation2ast(*rel)))
                 continue
-            ret.append(self.double_relation2ast(*rel))
+            ret.append(Literal(LOC, Sign.NoSign, self.double_relation2ast(*rel)))
         return ret

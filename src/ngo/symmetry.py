@@ -34,7 +34,6 @@ from ngo.utils.ast import (
     LOC,
     Predicate,
     collect_ast,
-    expand_comparisons,
     global_vars_inside_body,
     global_vars_inside_head,
     replace_simple_assignments,
@@ -440,7 +439,6 @@ class SymmetryTranslator:
         prg: list[AST] = []
         for rule in orig:
             if rule.ast_type == ASTType.Rule:
-                rule = expand_comparisons(rule)
                 prg.append(replace_simple_assignments(rule))
                 continue
             prg.append(rule)

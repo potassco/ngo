@@ -2,6 +2,7 @@
 import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import (
     Predicate,
     SignedPredicate,
@@ -404,8 +405,8 @@ a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)
 working(J2,1,D) :- perm(J1,P1); working(J1,1,D1); perm(J2,P2);\
  duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).
 """,
-            """working(J2,1,D) :- perm(J1,P1); working(J1,1,D1);\
- perm(J2,P2); duration(J2,1,D2); P2 = (P1+1); D = (D2+D1); D <= S; sum_duration(S).""",
+            """working(J2,1,(D2+D1)) :- perm(J1,P1); working(J1,1,D1);\
+ perm(J2,(P1+1)); duration(J2,1,D2); (D2+D1) <= S; sum_duration(S).""",
         ),
     ],
 )
@@ -413,7 +414,10 @@ def test_replace_simple_assignments(input_: str, output: str) -> None:
     """test replacing assignments in rules"""
     ast: list[AST] = []
     parse_string(input_, ast.append)
-    assert output == str(replace_simple_assignments(ast[1]))
+    ast = preprocess(ast)
+    ast[1] = replace_simple_assignments(ast[1])
+    ast = postprocess(ast)
+    assert output == str(ast[1])
 
 
 def test_translation_mapping() -> None:

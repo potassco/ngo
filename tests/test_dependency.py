@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, Sign, Transformer, parse_string
 
 from ngo.dependency import DomainPredicates
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import AnnotatedPredicate, Predicate, SignedPredicate, body_predicates, head_predicates
 from ngo.utils.globals import UniqueNames
 
@@ -257,6 +258,7 @@ def test_domain_predicates(
     non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = preprocess(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
     for pred in static:
@@ -312,6 +314,7 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
     """test computation of non cyclic domain inference"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = preprocess(ast)
     unique = UniqueNames(ast, [])
     dp = DomainPredicates(unique, ast)
     for pred in hasnodomain:
@@ -355,7 +358,7 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
                 "__dom_i(X) :- a(X).",
                 "__dom_j(X) :- a(X).",
                 "__dom_j(Y) :- b(X,Y).",
-                "__dom_k(Y) :- Y = (X+1); a(X).",
+                "__dom_k((X+1)) :- a(X).",
             ],
         ),
         (
@@ -500,7 +503,7 @@ def test_nodomain_predicates(prg: str, hasnodomain: list[Predicate]) -> None:
                 Predicate("c", 1),
             ],
             [
-                "__dom_a(Z) :- Y = Z; c(Y).",
+                "__dom_a(Z) :- c(Z).",
             ],
         ),
         (
@@ -546,7 +549,7 @@ size(S): S = (N*N) :- subgrid_size(N).
             [
                 Predicate("size", 1),
             ],
-            ["__dom_size(S) :- S = (N*N); subgrid_size(N)."],
+            ["__dom_size((N*N)) :- subgrid_size(N)."],
         ),
     ],
 )
@@ -555,11 +558,12 @@ def test_domain_predicates_condition(prg: str, predicates: list[Predicate], doma
     ast: list[AST] = []
     parse_string(prg, ast.append)
     unique = UniqueNames(ast, [])
+    ast = preprocess(ast)
     dp = DomainPredicates(unique, ast)
     strlist: list[str] = []
     for pred in predicates:
         if dp.has_domain(pred):
-            strlist.extend(map(str, dp.create_domain(pred)))
+            strlist.extend(map(str, postprocess(dp.create_domain(pred))))
     assert sorted(strlist) == sorted(domain_program)
 
 
@@ -568,6 +572,7 @@ def test_domain_predicates_exceptions() -> None:
     """test domain computation exceptions"""
     ast: list[AST] = []
     parse_string("a(X) :- b(X). b(X) :- a(X).", ast.append)
+    ast = preprocess(ast)
     with pytest.raises(Exception):
         unique = UniqueNames(ast, [])
         dp = DomainPredicates(unique, ast)

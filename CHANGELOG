@@ -1,5 +1,6 @@
 0.0.8:
  - added inline trait
+ - normalize program first
 0.0.7:
  - remove equality trait, is now included in math trait
  - cleanup now removes constant booleans (#true, #false)

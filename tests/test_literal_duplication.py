@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.literal_duplication import LiteralDuplicationTranslator, anonymize_variables
+from ngo.normalize import postprocess, preprocess
 from ngo.utils.ast import replace_assignments
 
 
@@ -47,11 +48,13 @@ def test_literal_set_equal(lhs: str, rhs: str) -> None:
     """test removal of duplicate literals on whole programs"""
     lhs_ast: list[AST] = []
     parse_string(lhs, lhs_ast.append)
+    lhs_ast = preprocess(lhs_ast)
     lhs_ast, _ = anonymize_variables(replace_assignments(lhs_ast[1]).body)
     rhs_ast: list[AST] = []
     parse_string(rhs, rhs_ast.append)
+    rhs_ast = preprocess(rhs_ast)
     rhs_ast, _ = anonymize_variables(replace_assignments(rhs_ast[1]).body)
-    assert tuple(lhs_ast) == tuple(rhs_ast)
+    assert tuple(postprocess(lhs_ast)) == tuple(postprocess(rhs_ast))
 
 
 @pytest.mark.parametrize(
@@ -62,7 +65,7 @@ def test_literal_set_equal(lhs: str, rhs: str) -> None:
 foo :- a(X), b(Y + 1), c, X = Y.
             """,
             """#program base.
-foo :- a(X); b((Y+1)); c; X = Y.""",
+foo :- a(Y); b((Y+1)); c.""",
         ),
         (
             """
@@ -81,7 +84,7 @@ bar(U,W) :- a(U,V,W), b(U,V,W+1), d, V = U.
             """,
             """#program base.
 foo(X,Z) :- a(X,Y,Z); b(X,X,(Z+1)); c.
-bar(U,W) :- a(U,V,W); b(U,V,(W+1)); d; V = U.""",
+bar(U,W) :- a(U,U,W); b(U,U,(W+1)); d.""",
         ),
         (
             """
@@ -150,7 +153,7 @@ foobar :- {e : a, b}.
 __aux_1 :- a; b.
 foo :- c; __aux_1.
 bar :- d; __aux_1.
-foobar :- { e: __aux_1 }.""",
+foobar :- #sum { 1,0,e: e, __aux_1 }.""",
         ),
         (
             """
@@ -342,7 +345,7 @@ __aux_2 :- a; b.
 __aux_1 :- __aux_2.
 foo :- c; __aux_1.
 bar :- d; __aux_1.
-foobar :- __aux_1; { e: __aux_2 }.""",
+foobar :- __aux_1; #sum { 1,0,e: e, __aux_2 }.""",
         ),
         (
             """
@@ -350,8 +353,9 @@ foobar :- __aux_1; { e: __aux_2 }.""",
 #false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(_) }.
             """,
             """#program base.
-1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(_) }.
-#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(_) }.""",
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = #sum { 1,0,job(AUX): job(AUX) }.
+#false :- 2 <= #sum { 1,0,perm(AUX,M,P): perm(AUX,M,P) };\
+ machine(M); P = (1..N); N = #sum { 1,0,job(AUX0): job(AUX0) }.""",
         ),
         (
             """
@@ -359,15 +363,16 @@ foobar :- __aux_1; { e: __aux_2 }.""",
 #false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(O) }.
             """,
             """#program base.
-1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = { job(O) }.
-#false :- 2 <= { perm(_,M,P) }; machine(M); P = (1..N); N = { job(O) }.""",
+1 = { perm(J,M,(1..N)) } :- job(J); machine(M); N = #sum { 1,0,job(O): job(O) }.
+#false :- 2 <= #sum { 1,0,perm(AUX,M,P): perm(AUX,M,P) };\
+ machine(M); P = (1..N); N = #sum { 1,0,job(O): job(O) }.""",
         ),
         (
             """
 #false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.
             """,
             """#program base.
-#false :- 2 <= #count { W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.""",
+#false :- 2 <= #sum+ { 1,W: match(M1,W), match(M2,W), match(M3,W), M1 < M2, M2 < M3 }.""",
         ),
     ),
 )
@@ -375,6 +380,9 @@ def test_duplication(prg: str, converted_prg: str) -> None:
     """test removal of duplicate literals on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = preprocess(ast)
     ldt = LiteralDuplicationTranslator(ast, [])
-    output = "\n".join(map(str, ldt.execute(ast)))
+    ast = ldt.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert converted_prg == output

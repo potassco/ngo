@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.minmax_aggregates import MinMaxAggregator
+from ngo.normalize import postprocess, preprocess
 
 # diable line too long warnings
 # ruff: noqa: E501
@@ -864,7 +865,7 @@ __chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
 __chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
-#false :- __max_0_11(P,__VAR__max_0_11); __VAR__max_0_11 = 42.""",
+#false :- __max_0_11(P,42).""",
         ),
         (
             """
@@ -899,7 +900,7 @@ __chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
 __chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
-#false :- __max_0_11(P,X); X = Y.""",
+#false :- __max_0_11(P,Y).""",
         ),
         (
             """
@@ -943,12 +944,12 @@ __dom_skill(b,t("cooking",(1..10)),10).
 __dom_skill(b,t("knitting",(1..10)),1).
 __dom_person(a).
 __dom_person(b).
-__dom___max_0_11(V) :- P = 42; __dom_skill(P,ID,V); __dom_person(P).
+__dom___max_0_11(V) :- __dom_skill(42,ID,V); __dom_person(42).
 __min_0_0__dom___max_0_11(X) :- X = #min { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
 __max_0_0__dom___max_0_11(X) :- X = #max { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
 __next_0_0__dom___max_0_11(P,N) :- __min_0_0__dom___max_0_11(P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
 __next_0_0__dom___max_0_11(P,N) :- __next_0_0__dom___max_0_11(_,P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
-__chain_0_0__max___dom___max_0_11(P,V) :- P = 42; skill(P,ID,V); person(P).
+__chain_0_0__max___dom___max_0_11(42,V) :- skill(42,ID,V); person(42).
 __chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
 __max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
@@ -1038,6 +1039,9 @@ def test_minmax_aggregates(prg: str, converted_prg: str) -> None:
     """test minmax aggregates on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = preprocess(ast)
     mma = MinMaxAggregator(ast, [])
-    output = "\n".join(map(str, mma.execute(ast)))
+    ast = mma.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert converted_prg == output

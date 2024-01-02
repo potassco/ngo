@@ -10,10 +10,8 @@ from clingo.ast import (
     AST,
     ASTType,
     BinaryOperator,
-    Comparison,
     ComparisonOperator,
     Guard,
-    Literal,
     Location,
     Position,
     Sign,
@@ -23,6 +21,8 @@ from clingo.ast import (
 
 LOC = Location(Position("<string>", 1, 1), Position("<string>", 1, 1))
 SIGNS = frozenset({Sign.NoSign, Sign.Negation, Sign.DoubleNegation})
+
+# pylint: disable=too-many-lines
 
 
 @dataclass(frozen=True, order=True, eq=True)
@@ -457,9 +457,11 @@ def has_unsafe_operation(ast: AST) -> bool:
     )
 
 
-def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set[AST]]:
-    bound_variables: set[AST] = set()
-    unbound_variables: set[AST] = set()
+def _collect_binding_information_simple_literal(
+    lit: AST, in_bound_vars: set[AST], in_unbound_vars: set[AST]
+) -> tuple[set[AST], set[AST]]:
+    bound_variables: set[AST] = set(in_bound_vars)
+    unbound_variables: set[AST] = set(in_unbound_vars)
     assert lit.ast_type == ASTType.Literal
     if lit.atom.ast_type == ASTType.SymbolicAtom:
         # simple operations (no absolute with more than 1 variable) can bind exactly one variable
@@ -479,9 +481,9 @@ def _collect_binding_information_simple_literal(lit: AST) -> tuple[set[AST], set
         else:
             unbound_variables.update(collect_ast(lit, "Variable"))
     elif lit.atom.ast_type == ASTType.Comparison:
-        # i dont have enough information here to know what is already bound
-        # bound, unbound =_collect_binding_information_from_comparison(lit.atom, bound_variables)
-        unbound_variables.update(collect_ast(lit, "Variable"))
+        bound, unbound = _collect_binding_information_from_comparison(lit.atom, bound_variables)
+        bound_variables.update(bound)
+        unbound_variables.update(unbound)
     return bound_variables, unbound_variables
 
 
@@ -499,11 +501,13 @@ def _collect_binding_information_conditions(
         size = len(bound_variables)
         for condition in conditions:
             if condition.ast_type == ASTType.Comparison:
-                bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)
+                bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)  # nocoverage
             elif condition.ast_type == ASTType.Literal and condition.atom.ast_type == ASTType.Comparison:
                 bound, unbound = _collect_binding_information_from_comparison(condition.atom, bound_variables)
             else:
-                bound, unbound = _collect_binding_information_simple_literal(condition)
+                bound, unbound = _collect_binding_information_simple_literal(
+                    condition, bound_variables, unbound_variables
+                )
             bound_variables.update(bound)
             unbound_variables.update(unbound)
     unbound_variables -= bound_variables
@@ -532,11 +536,24 @@ def _collect_binding_information_from_equal(
     return bound_variables, unbound_variables - bound_variables
 
 
+def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
+    """convert the nested AST Comparison structure to a plain list of (term op term)"""
+    assert comparison.ast_type == ASTType.Comparison
+    ret: list[tuple[AST, ComparisonOperator, AST]] = []
+    lhs = comparison.term
+    for guard in comparison.guards:
+        operator = guard.comparison
+        rhs = guard.term
+        ret.append((lhs, operator, rhs))
+        lhs = rhs
+    return ret
+
+
 def _collect_binding_information_from_comparison(
     comparison: AST, input_bound_variables: set[AST]
 ) -> tuple[set[AST], set[AST]]:
     assert comparison.ast_type == ASTType.Comparison
-    bound_variables: set[AST] = input_bound_variables
+    bound_variables: set[AST] = set(input_bound_variables)
     unbound_variables: set[AST] = set(collect_ast(comparison, "Variable"))
     for lhs, operator, rhs in comparison2comparisonlist(comparison):
         if operator == ComparisonOperator.Equal:
@@ -629,7 +646,7 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
     while len(bound_variables) > size_before:
         for stm in stmlist:
             if stm.ast_type == ASTType.Literal:
-                bound, unbound = _collect_binding_information_simple_literal(stm)
+                bound, unbound = _collect_binding_information_simple_literal(stm, bound_variables, unbound_variables)
                 bound_variables.update(bound)
                 unbound_variables.update(unbound)
                 if stm.atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
@@ -648,25 +665,22 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
                         if stm.atom.ast_type == ASTType.BodyAggregate:
                             term_vars = set().union(*map(partial(collect_ast, ast_name="Variable"), element.terms))
                             bound, unbound = _collect_binding_information_conditions(element.condition, bound_variables)
-                        if stm.atom.ast_type == ASTType.Aggregate:
-                            bound, unbound = _collect_binding_information_conditions(element.condition, bound_variables)
-                            boundl, unboundl = _collect_binding_information_simple_literal(element.literal)
-                            bound.update(boundl)
-                            unbound.update(unboundl)
+                        assert stm.atom.ast_type != ASTType.Aggregate
 
                         term_vars -= bound
                         term_vars -= bound_variables
                         unbound_variables.update(term_vars)
                         unbound -= bound_variables
                         unbound_variables.update(unbound)
+                elif stm.atom.ast_type == ASTType.Comparison:
+                    bound, unbound = _collect_binding_information_from_comparison(stm.atom, bound_variables)
+                    bound_variables.update(bound)
+                    unbound_variables.update(unbound)
             elif stm.ast_type == ASTType.ConditionalLiteral:
                 term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
                 bound, unbound = _collect_binding_information_conditions(stm.condition, bound_variables)
                 unbound_variables.update(unbound)
                 unbound_variables.update(term_vars - bound)
-            elif stm.ast_type == ASTType.Comparison:
-                # TODO: can be improved for binding equalities
-                unbound_variables.update(set(collect_ast(stm, ast_name="Variable")))
         unbound_variables -= bound_variables
         bound, unbound = _collect_binding_information_from_comparisons(stmlist, bound_variables)
         bound_variables.update(bound)
@@ -681,63 +695,6 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
 def collect_bound_variables(stmlist: Iterable[AST]) -> set[AST]:
     """return a set of all ast of type Variable that are in a positive symbolic literal or in a eq relation"""
     return collect_binding_information_body(stmlist)[0]
-
-
-def expand_comparisons(rule: AST) -> AST:
-    """given a rule, return a rule with expanded comparisons"""
-    assert rule.ast_type == ASTType.Rule
-    return rule.update(body=normalize_operators(rule.body))
-
-
-def normalize_operators(literals: Iterable[AST]) -> list[AST]:
-    """replace a list of literals with a new list where all comparisons are binary and not chained"""
-    new_literals: list[AST] = []
-    for lit in literals:
-        new_lit = lit.update()
-        if lit.ast_type != ASTType.Literal:
-            new_literals.append(new_lit)
-            continue
-        atom = lit.atom
-        if atom.ast_type == ASTType.Comparison:
-            new_literals.extend(
-                [
-                    Literal(LOC, lit.sign, Comparison(lhs, [Guard(cop, rhs)]))
-                    for lhs, cop, rhs in comparison2comparisonlist(atom)
-                ]
-            )
-            continue
-        if atom.ast_type in (ASTType.BodyAggregate, ASTType.Aggregate):
-            new_elements: list[AST] = []
-            for elem in atom.elements:
-                new_condition: list[AST] = []
-                for c in elem.condition:
-                    if c.atom.ast_type == ASTType.Comparison:
-                        new_condition.extend(
-                            [
-                                Literal(LOC, c.sign, Comparison(lhs, [Guard(cop, rhs)]))
-                                for lhs, cop, rhs in comparison2comparisonlist(c.atom)
-                            ]
-                        )
-                        continue
-                    new_condition.append(c)
-                new_elements.append(elem.update(condition=new_condition))
-            new_atom = atom.update(elements=new_elements)
-            new_lit = lit.update(atom=new_atom)
-        new_literals.append(new_lit)
-    return new_literals
-
-
-def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOperator, AST]]:
-    """convert the nested AST Comparison structure to a plain list of (term op term)"""
-    assert comparison.ast_type == ASTType.Comparison
-    ret: list[tuple[AST, ComparisonOperator, AST]] = []
-    lhs = comparison.term
-    for guard in comparison.guards:
-        operator = guard.comparison
-        rhs = guard.term
-        ret.append((lhs, operator, rhs))
-        lhs = rhs
-    return ret
 
 
 def loc2str(loc: Location) -> str:
@@ -812,7 +769,7 @@ def replace_simple_assignments(stm: AST) -> AST:
     else:
         new_heads = [stm.weight, stm.priority, *stm.terms]
     # normalize comparison operators
-    new_body = normalize_operators(literals)
+    new_body = list(literals)
     graph = nx.Graph()
     aux_body: list[AST] = []
     eqs = _get_simple_equalities(new_body)
@@ -854,10 +811,8 @@ def replace_assignments(stm: AST) -> AST:
         new_heads = [stm.head]
     else:
         new_heads = [stm.weight, stm.priority, *stm.terms]
-    # normalize comparison operators
-    # TODO: normalize comparison operators to ignore sign and create a list
-    new_body = normalize_operators(literals)
 
+    new_body = list(literals)
     removal: list[int] = []
     for index, lit in enumerate(new_body):
         if (
@@ -873,12 +828,12 @@ def replace_assignments(stm: AST) -> AST:
                     if other == index:
                         continue
                     new_body[other] = transform_ast(
-                        elem, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                        elem, "Variable", partial(replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                     )
                 removal.append(index)
                 for i, head in enumerate(new_heads):
                     new_heads[i] = transform_ast(
-                        head, "Variable", partial(_replace_var_name, lit.atom.term, lit.atom.guards[0].term)
+                        head, "Variable", partial(replace_var_name, lit.atom.term, lit.atom.guards[0].term)
                     )
                 continue
     for index in reversed(removal):
@@ -888,9 +843,9 @@ def replace_assignments(stm: AST) -> AST:
     return stm.update(weight=new_heads[0], priority=new_heads[1], terms=new_heads[2:], body=new_body)
 
 
-def _replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
+def replace_var_name(orig: AST, replace: AST, var: AST) -> AST:
+    """replace orig variable with replace, if var == orig"""
     assert orig.ast_type == ASTType.Variable
-    assert var.ast_type == ASTType.Variable
     if var == orig:
         return replace
     return var
@@ -925,3 +880,18 @@ def is_predicate(lit: AST) -> bool:
         atom = lit.atom
         return bool(atom.ast_type == ASTType.SymbolicAtom and atom.symbol.ast_type == ASTType.Function)
     return False
+
+
+def is_comparison(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.Comparison
+
+
+def is_body_aggregate(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.Literal and lit.atom.ast_type == ASTType.BodyAggregate
+
+
+def is_conditional(lit: AST) -> bool:
+    """true if lit is a literal with a named predicate"""
+    return lit.ast_type == ASTType.ConditionalLiteral

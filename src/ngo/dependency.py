@@ -472,12 +472,16 @@ class DomainPredicates:
                     self._create_projected_lit(dom_pred, var_global_map | {position: var_b}, Sign.Negation),
                     [
                         self._create_projected_lit(dom_pred, var_global_map | {position: var_b}),
-                        Comparison(
-                            var_p,
-                            [
-                                Guard(ComparisonOperator.LessThan, var_b),
-                                Guard(ComparisonOperator.LessThan, var_n),
-                            ],
+                        Literal(
+                            LOC,
+                            Sign.NoSign,
+                            Comparison(
+                                var_p,
+                                [
+                                    Guard(ComparisonOperator.LessThan, var_b),
+                                    Guard(ComparisonOperator.LessThan, var_n),
+                                ],
+                            ),
                         ),
                     ],
                 ),
@@ -506,12 +510,16 @@ class DomainPredicates:
                     self._create_projected_lit(dom_pred, var_global_map | {position: var_b}, Sign.Negation),
                     [
                         self._create_projected_lit(dom_pred, var_global_map | {position: var_b}),
-                        Comparison(
-                            var_p,
-                            [
-                                Guard(ComparisonOperator.LessThan, var_b),
-                                Guard(ComparisonOperator.LessThan, var_n),
-                            ],
+                        Literal(
+                            LOC,
+                            Sign.NoSign,
+                            Comparison(
+                                var_p,
+                                [
+                                    Guard(ComparisonOperator.LessThan, var_b),
+                                    Guard(ComparisonOperator.LessThan, var_n),
+                                ],
+                            ),
                         ),
                     ],
                 ),

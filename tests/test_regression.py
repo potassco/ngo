@@ -3,6 +3,7 @@ import pytest
 from clingo.ast import AST, parse_string
 
 from ngo.api import optimize
+from ngo.normalize import preprocess
 from ngo.utils.globals import auto_detect_input
 
 
@@ -69,9 +70,64 @@ size(S): S = (N*N) :- subgrid_size(N).
 sudoku(X,Y,V) :- initial(X,Y,V).
 1 = { sudoku(X,Y,V): V = (1..N) } :- size(N); X = (1..N); Y = (1..N).
 __dom_sudoku(X,V) :- initial(X,_,V).
-__dom_size(S) :- S = (N*N); subgrid_size(N).
+__dom_size((N*N)) :- subgrid_size(N).
 __dom_sudoku(X,V) :- V = (1..N); __dom_size(N); X = (1..N); _ = (1..N).
-#false :- __dom_sudoku(X1,V1); 2 <= #count { Y1: sudoku(X1,Y1,V1) }.""",
+#false :- __dom_sudoku(X2,V2); 2 <= #count { Y1: sudoku(X2,Y1,V2) }.""",
+        ),
+        (
+            """
+{max(P, X)} :- X = #max {V, ID : P=42, skill(P, ID, V); 23 : #true}, person(P), random(Y).
+            """,  # currently not handled but in future, see #9
+            """#program base.
+{ max(P,X) } :- X = #max { V,ID: P = 42, skill(P,ID,V); 23 }; person(P); random(_).""",
+        ),
+        (
+            """
+grid(X, Y) :- X = 1..n, Y = 1..n.
+
+{ ghost(X, Y) : grid(X, Y) } = N :- ghost(N).
+{ dracula(X, Y) : grid(X, Y) } = N :- dracula(N).
+{ zombie(X, Y) : grid(X, Y) } = N :- zombie(N).
+
+:- ghost(X, Y), mirror(X, Y, T).
+:- dracula(X, Y), mirror(X, Y, T).
+:- zombie(X, Y), mirror(X, Y, T).
+:- ghost(X, Y), dracula(X, Y).
+:- ghost(X, Y), zombie(X, Y).
+:- dracula(X, Y), zombie(X, Y).
+
+ghost(X, Y, N) :- count(X, Y, TN),
+         N = #count { GX, GY, D : mirror_visible(X, Y, GX, GY, D), ghost(GX, GY) }.
+dracula(X, Y, N) :- count(X, Y, TN),
+         N = #count { DX, DY, D : direct_visible(X, Y, DX, DY, D), dracula(DX, DY) }.
+zombie(X, Y, N1 + N2) :- count(X, Y, TN),
+         N1 = #count { ZX, ZY, D : mirror_visible(X, Y, ZX, ZY, D), zombie(ZX, ZY) },
+         N2 = #count { ZX, ZY, D : direct_visible(X, Y, ZX, ZY, D), zombie(ZX, ZY) }.
+
+:- count(X, Y, N), ghost(X, Y, G), dracula(X, Y, D), zombie(X, Y, Z), N != G + D + Z.
+
+#show ghost/2.
+#show dracula/2.
+#show zombie/2.
+            """,
+            """#program base.
+grid(X,Y) :- X = (1..n); Y = (1..n).
+N = { ghost(X,Y): grid(X,Y) } :- ghost(N).
+N = { dracula(X,Y): grid(X,Y) } :- dracula(N).
+N = { zombie(X,Y): grid(X,Y) } :- zombie(N).
+#false :- ghost(X,Y); mirror(X,Y,_).
+#false :- dracula(X,Y); mirror(X,Y,_).
+#false :- zombie(X,Y); mirror(X,Y,_).
+#false :- ghost(X,Y); dracula(X,Y).
+#false :- ghost(X,Y); zombie(X,Y).
+#false :- dracula(X,Y); zombie(X,Y).
+#false :- count(X,Y,N); 0 != #sum { (1*-1),ZX,ZY,D2,__agg(0),__agg(0): mirror_visible(X,Y,ZX,ZY,D2), zombie(ZX,ZY);\
+ (1*-1),ZX,ZY,D2,__agg(1),__agg(0): direct_visible(X,Y,ZX,ZY,D2), zombie(ZX,ZY);\
+ (1*-1),GX,GY,D0,__agg(1): mirror_visible(X,Y,GX,GY,D0), ghost(GX,GY);\
+ (1*-1),DX,DY,D1,__agg(2): direct_visible(X,Y,DX,DY,D1), dracula(DX,DY); N,__agg(3) }.
+#show ghost/2.
+#show dracula/2.
+#show zombie/2.""",
         ),
     ),
 )
@@ -79,6 +135,7 @@ def test_all(lhs: str, rhs: str) -> None:
     """test removal of superseeded literals on whole programs"""
     prg: list[AST] = []
     parse_string(lhs, prg.append)
+    prg = preprocess(prg)
     input_predicates = auto_detect_input(prg)
 
     prg = optimize(prg, input_predicates, [], duplication=True)

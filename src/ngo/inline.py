@@ -121,8 +121,6 @@ class InlineTranslator:
                 unique_vars,
             )
             terms = transformed[: len(elem.terms)]
-            if agg.function == AggregateFunction.Count and atom.function != AggregateFunction.Count:
-                terms = [SymbolicTerm(LOC, Number(1))] + terms
             transformed = transformed[len(elem.terms) :]
             new_terms = terms + list(replace_elem.terms[1:])
             new_terms.extend([Function(LOC, "unique", [], False)] * (max_arity - len(new_terms) + 1))
@@ -140,10 +138,27 @@ class InlineTranslator:
             # result of aggregate in rule may only be used in the head variable, called HV
             agg = collect_ast(rule, "BodyAggregate")[0]
 
-            if agg.function != atom.function and not (
-                agg.function == AggregateFunction.Count
-                and atom.function in (AggregateFunction.Sum, AggregateFunction.SumPlus)
-            ):
+            good = {
+                AggregateFunction.Min: (AggregateFunction.Min,),
+                AggregateFunction.Max: (AggregateFunction.Max,),
+                AggregateFunction.Count: (
+                    AggregateFunction.Count,
+                    AggregateFunction.Sum,
+                    AggregateFunction.SumPlus,
+                ),
+                AggregateFunction.Sum: (
+                    AggregateFunction.Sum,
+                    AggregateFunction.SumPlus,
+                ),
+                AggregateFunction.SumPlus: (
+                    AggregateFunction.Sum,
+                    AggregateFunction.SumPlus,
+                ),
+            }
+            result_function = atom.function
+            if agg.function == AggregateFunction.Sum:
+                result_function = AggregateFunction.Sum
+            if atom.function not in good[agg.function]:
                 return atom
             agga = AggAnalytics(agg)
             # result is actually used in head
@@ -179,7 +194,7 @@ class InlineTranslator:
                 return atom
             # replace headrule body aggregate with inlined version of the conditions
             new_elements = self.compute_new_body_elements(rule, replace_cond, replace_elem, agg, atom, unique_vars)
-            return atom.update(elements=rest_elems + new_elements)
+            return atom.update(function=result_function, elements=rest_elems + new_elements)
         return atom
 
     def inline_minimize(self, stm: AST) -> list[AST]:
@@ -305,11 +320,7 @@ class InlineTranslator:
 
         blit: AST
         for blit in orig.body:
-            if (
-                blit.ast_type != ASTType.Literal
-                or blit.atom.ast_type != ASTType.SymbolicAtom
-                or blit.atom.symbol.ast_type != ASTType.Function
-            ):
+            if not is_predicate(blit):
                 continue
             atom = blit.atom
 

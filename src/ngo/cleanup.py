@@ -9,7 +9,8 @@ from typing import Iterable, Iterator, Optional
 
 from clingo.ast import AST, ASTType, Sign
 
-from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates
+from ngo.normalize import inline_arithmetic
+from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates, is_predicate
 from ngo.utils.logger import singleton_factory_logger
 
 log = singleton_factory_logger("cleanup")
@@ -40,7 +41,7 @@ class CleanupTranslator:
         head_pred = Predicate(head_symbol.name, len(head_symbol.arguments))
         for cond in body_lits:
             assert cond.ast_type == ASTType.Literal
-            if cond.atom.ast_type == ASTType.SymbolicAtom and cond.atom.symbol.ast_type == ASTType.Function:
+            if is_predicate(cond):
                 body_symbol = cond.atom.symbol
                 var_map: list[int] = []
                 for arg in body_symbol.arguments:
@@ -68,11 +69,7 @@ class CleanupTranslator:
         head_symbols: list[AST] = []
         assert rule.ast_type == ASTType.Rule
         head = rule.head
-        if (
-            head.ast_type == ASTType.Literal
-            and head.atom.ast_type == ASTType.SymbolicAtom
-            and head.atom.symbol.ast_type == ASTType.Function
-        ):
+        if is_predicate(head):
             symbol = head.atom.symbol
             if pred == Predicate(symbol.name, len(symbol.arguments)):
                 head_symbols.append(symbol)
@@ -91,7 +88,7 @@ class CleanupTranslator:
             for element in head.elements:
                 lit = element.literal
                 assert lit.ast_type == ASTType.Literal
-                if lit.atom.ast_type == ASTType.SymbolicAtom and lit.atom.symbol.ast_type == ASTType.Function:
+                if is_predicate(lit):
                     symbol = lit.atom.symbol
                     if pred != Predicate(symbol.name, len(symbol.arguments)):
                         continue
@@ -153,18 +150,9 @@ class CleanupTranslator:
 
     def _superseeded(self, lhs: AST, rhs: AST) -> bool:
         """use the mappings to check if lhs Literal superseeds rhs literal"""
-        if (
-            lhs.ast_type != ASTType.Literal
-            or lhs.atom.ast_type != ASTType.SymbolicAtom
-            or lhs.atom.symbol.ast_type != ASTType.Function
-            or lhs.sign != Sign.NoSign
-        ):
+        if not (is_predicate(lhs) and lhs.sign == Sign.NoSign):
             return False
-        if (
-            rhs.ast_type != ASTType.Literal
-            or rhs.atom.ast_type != ASTType.SymbolicAtom
-            or rhs.atom.symbol.ast_type != ASTType.Function
-        ):
+        if not is_predicate(rhs):
             return False
         lhs_symbol = lhs.atom.symbol
         lhs_pred = Predicate(lhs_symbol.name, len(lhs_symbol.arguments))
@@ -310,8 +298,10 @@ class CleanupTranslator:
         """
         remove all literals that are weaker than another one from bodies/conditionals
         """
+        prg = inline_arithmetic(prg)
         self._find_superseeded(prg)
-        new_prg = []
+
+        new_prg: list[AST] = []
         for stm in prg:
             r = self.remove_boolean(self._apply_superseeding(stm))
             if r:

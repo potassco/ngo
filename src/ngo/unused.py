@@ -11,7 +11,8 @@ from typing import Callable, Sequence
 from clingo.ast import AST, ASTType, Function, Sign, SymbolicAtom, Variable
 
 from ngo.dependency import RuleDependency
-from ngo.utils.ast import LOC, Predicate, collect_ast, transform_ast
+from ngo.normalize import exline_arithmetic
+from ngo.utils.ast import LOC, Predicate, collect_ast, is_predicate, transform_ast
 from ngo.utils.globals import UniqueNames, UniqueVariables
 from ngo.utils.logger import singleton_factory_logger
 
@@ -159,15 +160,6 @@ class UnusedTranslator:
             new_prg.append(stm)
         return new_prg
 
-    @staticmethod
-    def simple_term(t: AST) -> bool:
-        """true if term is variable, symbolicterm, or function consisting of these three options"""
-        if t.ast_type in (ASTType.Variable, ASTType.SymbolicTerm):
-            return True
-        if t.ast_type == ASTType.Function:
-            return all(map(UnusedTranslator.simple_term, t.arguments))
-        return False
-
     class Mapper:
         """maps a singular rule of the form a(X) :- b(X)."""
 
@@ -224,10 +216,6 @@ class UnusedTranslator:
         # create a mapping for all 1to1 replaceable predicates
         mapping: dict[Predicate, "UnusedTranslator.Mapper"] = {}
         rd = RuleDependency(prg)
-        # unpool everything
-        for stm in prg:
-            ret.extend(stm.unpool())
-        ret, prg = [], ret
 
         for head in rd.get_headderivable_predicates():
             if head in self.input_predicates or head in self.output_predicates:
@@ -237,27 +225,15 @@ class UnusedTranslator:
             if not len(rules) == 1:
                 continue
             hlit = rules[0].head
-            if not (
-                hlit.ast_type == ASTType.Literal
-                and hlit.sign == Sign.NoSign
-                and hlit.atom.ast_type == ASTType.SymbolicAtom
-                and hlit.atom.symbol.ast_type == ASTType.Function
-            ):
+            if not (is_predicate(hlit) and hlit.sign == Sign.NoSign):
                 continue
             if not len(rules[0].body) == 1:
                 continue
             blit = rules[0].body[0]
-            if not (
-                blit.ast_type == ASTType.Literal
-                and blit.sign == Sign.NoSign
-                and blit.atom.ast_type == ASTType.SymbolicAtom
-                and blit.atom.symbol.ast_type == ASTType.Function
-            ):
+            if not (is_predicate(blit) and blit.sign == Sign.NoSign):
                 continue
             # very simple
             if not all(map(lambda x: x.ast_type == ASTType.Variable, hlit.atom.symbol.arguments)):
-                continue
-            if not all(map(UnusedTranslator.simple_term, blit.atom.symbol.arguments)):
                 continue
             if not len(hlit.atom.symbol.arguments) == len(blit.atom.symbol.arguments):
                 continue
@@ -285,6 +261,9 @@ class UnusedTranslator:
         remove all predicates that are unconstrained and
         additionally do not change the number of answer sets
         """
+        new_prg: list[AST] = []
+        new_prg = exline_arithmetic(prg)
+        prg = new_prg
         prg = self._anonymize_variables(prg)
         self.analyze_usage(prg)
         prg = self.project_unused(prg)

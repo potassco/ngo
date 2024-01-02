@@ -2,6 +2,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
+from ngo.normalize import postprocess, preprocess
 from ngo.symmetry import SymmetryTranslator
 
 
@@ -65,12 +66,12 @@ from ngo.symmetry import SymmetryTranslator
             ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
             """#program base.
 __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
-#false :- 2 <= #count { W: __aux_1(W) }.""",
+#false :- 2 <= #sum+ { 1,W: __aux_1(W) }.""",
         ),
         (
             ":- #count{X,Y : player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2} >= 2.",
             """#program base.
-#false :- 2 <= #count { X,Y: player(P1,X,Y,V1), player(P2,X,Y,V2), V1 != V2, P1 < P2 }.""",
+#false :- 2 <= #sum+ { 1,X,Y: player(P1,X,Y,V1), player(P2,X,Y,V2), V1 != V2, P1 < P2 }.""",
         ),
         (
             "#minimize {a}.",
@@ -108,8 +109,11 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     """test symmetry breaking on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
+    ast = preprocess(ast)
     st = SymmetryTranslator(ast, [])
-    output = "\n".join(map(str, st.execute(ast)))
+    ast = st.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert converted_prg == output
 
 

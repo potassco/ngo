@@ -4,6 +4,7 @@ from typing import Optional
 import pytest
 from clingo.ast import AST, parse_string
 
+from ngo.normalize import postprocess, preprocess
 from ngo.unused import UnusedTranslator
 from ngo.utils.ast import Predicate
 
@@ -102,8 +103,8 @@ b(X,X+1,23) :- c(X), x.
             [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X); x.
-b2 :- c(X); x.
+b1 :- c(X); x; AUX = (X+1).
+b2 :- c(X); x; AUX = (X+1).
 { a } :- b1.
 { a } :- b2.""",
         ),
@@ -114,7 +115,18 @@ b2 :- c(X); x.
             [],
             [],
             """#program base.
-#false :- not 1 <= { order(T,S) } <= 1; S = (1..N); task_nr(N).""",
+#false :- not 1 <= #sum { 1,0,order(T,S): order(T,S) } <= 1; S = (1..N); task_nr(N).""",
+        ),
+        (
+            """
+b(1) :- c(X).
+{ a } :- b(1).
+            """,
+            [Predicate("c", 1)],
+            [],
+            """#program base.
+b(1) :- c(_).
+{ a } :- b(1).""",
         ),
     ),
 )
@@ -124,8 +136,11 @@ def test_unused_translation(
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = preprocess(ast)
     utr = UnusedTranslator(ast, input_predicates, output_predicates)
-    output = "\n".join(map(str, utr.execute(ast)))
+    ast = utr.execute(ast)
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output
 
 
@@ -222,8 +237,8 @@ b(X,X+1,23) :- c(X), x.
             [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c; x.
-b2 :- c; x.
+b1 :- c(X); x; _ = (X+1).
+b2 :- c(X); x; _ = (X+1).
 { a } :- b1.
 { a } :- b2.""",
         ),
@@ -258,7 +273,7 @@ __aux_1(W) :- __dom_match(W); 3 <= #count { M1: match(M1,W) }.
             [Predicate("person", 1)],
             [Predicate("__aux_1", 1)],
             """#program base.
-__aux_1(W) :- person(W); 3 <= #count { M1: match(M1,W) }.""",
+__aux_1(W) :- person(W); 3 <= #sum+ { 1,M1: match(M1,W) }.""",
         ),
         (
             """
@@ -354,11 +369,13 @@ def test_unused_translation_fixpoint(
     new_ast: Optional[list[AST]] = []
     ast: list[AST] = []
     parse_string(lhs, ast.append)
+    ast = preprocess(ast)
     while True:
         utr = UnusedTranslator(ast, input_predicates, output_predicates)
         new_ast = utr.execute(ast)
         if new_ast == ast:
             break
         ast = new_ast
-    output = "\n".join(map(str, utr.execute(ast)))
+    ast = postprocess(ast)
+    output = "\n".join(map(str, ast))
     assert rhs == output
