@@ -2,6 +2,7 @@
  This module inlines predicates using aggregates that are only used in one rule
 """
 
+import logging
 from itertools import permutations
 from typing import Iterable, Optional
 
@@ -24,9 +25,8 @@ from ngo.utils.ast import (
     transform_ast,
 )
 from ngo.utils.globals import UniqueNames, UniqueVariables
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("inline")
+log = logging.getLogger(__name__)
 
 
 class InlineTranslator:

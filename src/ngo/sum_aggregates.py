@@ -3,6 +3,7 @@
  with an order encoding, if part of the predicate that is used inside the aggregate
  as an at most one restriction somewhere else in the program.
 """
+import logging
 from collections import defaultdict
 from typing import Optional, cast
 
@@ -37,9 +38,8 @@ from ngo.utils.ast import (
     predicates,
 )
 from ngo.utils.globals import PREV, UniqueNames
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("sum_chains")
+log = logging.getLogger(__name__)
 
 
 class SumAggregator:

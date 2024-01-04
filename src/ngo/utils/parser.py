@@ -8,7 +8,6 @@ from textwrap import dedent
 from typing import Any, Optional
 
 from ngo.utils.ast import Predicate
-from ngo.utils.logger import LEVELS
 
 __all__ = ["get_parser"]
 
@@ -22,6 +21,8 @@ VERSION = metadata.version("ngo")
 
 ALL_OPTIONS = ["minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math", "inline"]
 DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math", "inline"]
+
+LEVELS = ["ERROR", "WARNING", "INFO", "DEBUG"]
 
 
 class PredicateList(Action):
@@ -92,8 +93,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument(
         "--log",
         default="info",
-        choices=LEVELS.keys(),
-        metavar=f"{{{','.join(LEVELS.keys())}}}",
+        choices=LEVELS,
+        type=str.upper,
+        metavar=f"{{{','.join(LEVELS)}}}",
         help="set log level [%(default)s]",
     )
 

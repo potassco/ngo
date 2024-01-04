@@ -3,6 +3,7 @@
  with X1 < X2 if this preserves semantics.
 """
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
@@ -39,9 +40,8 @@ from ngo.utils.ast import (
     replace_simple_assignments,
 )
 from ngo.utils.globals import UniqueNames
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("symmetry")
+log = logging.getLogger(__name__)
 
 
 class SymmetryTranslator:

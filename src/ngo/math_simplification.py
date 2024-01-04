@@ -1,4 +1,5 @@
 """ does math simplification for FO formulas and aggregates"""
+import logging
 from collections import OrderedDict, defaultdict
 from itertools import chain
 from math import lcm
@@ -67,9 +68,8 @@ from ngo.utils.ast import (
     rhs2lhs_comparison,
 )
 from ngo.utils.globals import AGG_STR
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("math_simplification")
+log = logging.getLogger(__name__)
 
 
 class SympyApi(Exception):

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import combinations
@@ -23,9 +24,8 @@ from ngo.utils.ast import (
     transform_ast,
 )
 from ngo.utils.globals import UniqueNames
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("literal_duplication")
+log = logging.getLogger(__name__)
 
 AUX_VAR = "__AUX_"
 

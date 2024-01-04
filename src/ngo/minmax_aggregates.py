@@ -4,6 +4,7 @@
  Might also replace the usage of the resulting predicate with the order literals.
 """
 
+import logging
 from collections import defaultdict
 from itertools import chain
 from typing import Callable, Iterator, Optional
@@ -50,9 +51,8 @@ from ngo.utils.ast import (
     transform_ast,
 )
 from ngo.utils.globals import NEXT, PREV, UniqueNames, UniqueVariables
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("minmax_chains")
+log = logging.getLogger(__name__)
 
 
 def _characteristic_variables(term: AST) -> Iterator[AST]:

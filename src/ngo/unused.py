@@ -2,6 +2,7 @@
  This module removes unused predicates and arities
 """
 
+import logging
 from collections import Counter, defaultdict
 from copy import deepcopy
 from functools import partial
@@ -14,9 +15,8 @@ from ngo.dependency import RuleDependency
 from ngo.normalize import exline_arithmetic
 from ngo.utils.ast import LOC, Predicate, collect_ast, is_predicate, transform_ast
 from ngo.utils.globals import UniqueNames, UniqueVariables
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("unused")
+log = logging.getLogger(__name__)
 
 
 class UnusedTranslator:

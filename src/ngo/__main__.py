@@ -1,11 +1,13 @@
 """
 The main entry point for the application.
 """
+import logging
+import sys
+
 from clingo.ast import AST, parse_files
 
 from ngo.api import optimize
 from ngo.utils.globals import auto_detect_input, auto_detect_output
-from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import get_parser
 
 
@@ -16,11 +18,10 @@ def main() -> None:
     # pylint: disable=too-many-branches # will be refactored
     parser = get_parser()
     args = parser.parse_args()
-
-    log = singleton_factory_logger("main", args.log)
+    logging.basicConfig(stream=sys.stdout, level=args.log)
 
     prg: list[AST] = []
-    parse_files(["-"], prg.append, logger=log.warn)
+    parse_files(["-"], prg.append, logger=logging.warning)
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
         args.input_predicates = auto_detect_input(prg)

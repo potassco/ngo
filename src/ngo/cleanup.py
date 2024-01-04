@@ -2,6 +2,7 @@
  This module removes literals that are subsumed by others
 """
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import permutations
@@ -11,9 +12,8 @@ from clingo.ast import AST, ASTType, Sign
 
 from ngo.normalize import inline_arithmetic
 from ngo.utils.ast import Predicate, SignedPredicate, headderivable_predicates, is_predicate
-from ngo.utils.logger import singleton_factory_logger
 
-log = singleton_factory_logger("cleanup")
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)

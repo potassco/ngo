@@ -1,5 +1,6 @@
 """ general util functions and classes """
 
+import logging
 from collections import defaultdict
 from itertools import chain
 from typing import Iterable
@@ -16,7 +17,6 @@ from ngo.utils.ast import (
     minimize_predicates,
     predicates,
 )
-from ngo.utils.logger import singleton_factory_logger
 
 AUX_FUNC = "__aux_"
 CHAIN_STR = "__chain"
@@ -29,7 +29,7 @@ NEXT = Variable(LOC, "__NEXT")
 PREV = Variable(LOC, "__PREV")
 AUX_VAR = Variable(LOC, "AUX")
 
-log = singleton_factory_logger("general")
+log = logging.getLogger(__name__)
 
 
 def auto_detect_input(prg: Iterable[AST]) -> list[Predicate]:

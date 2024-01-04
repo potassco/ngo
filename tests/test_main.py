@@ -2,25 +2,11 @@
 Test cases for main application functionality.
 """
 from argparse import ArgumentTypeError
-from io import StringIO
 
 import pytest
 
 from ngo.utils.ast import Predicate
-from ngo.utils.logger import singleton_factory_logger
 from ngo.utils.parser import ALL_OPTIONS, DEFAULT_OPTIONS, get_parser
-
-
-def test_logger() -> None:
-    """
-    Test the logger.
-    """
-    log = singleton_factory_logger("global", "debug")
-    sio = StringIO()
-    for handler in log.handlers:
-        handler.setStream(sio)  # type: ignore
-    log.info("test123")
-    assert str(sio.getvalue()).find("test123") != -1
 
 
 def test_parser() -> None:
