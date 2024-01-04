@@ -1,5 +1,6 @@
 0.0.9:
-
+ - simplified logging, also usable via API of python logging class
+ - extend most simplifications to optimize constraints
 0.0.8:
  - added inline trait
  - normalize program first
