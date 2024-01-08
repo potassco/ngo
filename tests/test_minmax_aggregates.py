@@ -50,6 +50,41 @@ max(P,X) :- __max_0_11(P,X); random(Y).""",
         ),
         (
             """
+{person(a,0);person(b,1)}.
+{
+skill(a, ("some",1), 3);
+skill(a, ("thing",1), 5);
+skill(a, ("programming",1..10), 10);
+skill(a, ("knitting",1..10), 100);
+skill(b, t("cooking",1..10), 10);
+skill(b, t("knitting",1..10), 1)
+}.
+max(P, X) :- X = #max {V, ID : skill(P, ID, V)}, person(P,Y).
+""",
+            """#program base.
+{ person(a,0); person(b,1) }.
+{ skill(a,("some",1),3); skill(a,("thing",1),5); skill(a,("programming",(1..10)),10); skill(a,("knitting",(1..10)),100); skill(b,t("cooking",(1..10)),10); skill(b,t("knitting",(1..10)),1) }.
+__dom_skill(a,("some",1),3).
+__dom_skill(a,("thing",1),5).
+__dom_skill(a,("programming",(1..10)),10).
+__dom_skill(a,("knitting",(1..10)),100).
+__dom_skill(b,t("cooking",(1..10)),10).
+__dom_skill(b,t("knitting",(1..10)),1).
+__dom_person(a,0).
+__dom_person(b,1).
+__dom___max_0_11(V) :- __dom_skill(P,ID,V); __dom_person(P,Y).
+__min_0_0__dom___max_0_11(X) :- X = #min { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__max_0_0__dom___max_0_11(X) :- X = #max { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__next_0_0__dom___max_0_11(P,N) :- __min_0_0__dom___max_0_11(P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__next_0_0__dom___max_0_11(P,N) :- __next_0_0__dom___max_0_11(_,P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__chain_0_0__max___dom___max_0_11(P,Y,V) :- skill(P,ID,V); person(P,Y).
+__chain_0_0__max___dom___max_0_11(P,Y,__PREV) :- __chain_0_0__max___dom___max_0_11(P,Y,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,Y,__PREV) :- __chain_0_0__max___dom___max_0_11(P,Y,__PREV); not __chain_0_0__max___dom___max_0_11(P,Y,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,Y,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,Y,X); person(P,Y).
+max(P,X) :- __max_0_11(P,Y,X).""",
+        ),
+        (
+            """
 {person(a);person(b)}.
 {
 skill(a, ("some",1), 3);
@@ -1032,6 +1067,112 @@ a :- b, not 14 < #min {X : foo(X); X,bar : bar(X), X*X=24}.
 { bar(X): dom(X) }.
 a :- b; foo(X0); not 14 < X0.
 a :- b; bar(X1); (X1*X1) = 24; not 14 < X1.""",
+        ),
+        (  # test translation inside weak constraints
+            """
+{person(a);person(b)}.
+{
+skill(a, ("some",1), 3);
+skill(a, ("thing",1), 5);
+skill(a, ("programming",1..10), 10);
+skill(a, ("knitting",1..10), 100);
+skill(b, t("cooking",1..10), 10);
+skill(b, t("knitting",1..10), 1)
+}.
+:~ X = #max {V, ID : skill(P, ID, V)}, person(P), random(Y). [Y@Y]
+""",
+            """#program base.
+{ person(a); person(b) }.
+{ skill(a,("some",1),3); skill(a,("thing",1),5); skill(a,("programming",(1..10)),10); skill(a,("knitting",(1..10)),100); skill(b,t("cooking",(1..10)),10); skill(b,t("knitting",(1..10)),1) }.
+__dom_skill(a,("some",1),3).
+__dom_skill(a,("thing",1),5).
+__dom_skill(a,("programming",(1..10)),10).
+__dom_skill(a,("knitting",(1..10)),100).
+__dom_skill(b,t("cooking",(1..10)),10).
+__dom_skill(b,t("knitting",(1..10)),1).
+__dom_person(a).
+__dom_person(b).
+__dom___max_0_11(V) :- __dom_skill(P,ID,V); __dom_person(P).
+__min_0_0__dom___max_0_11(X) :- X = #min { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__max_0_0__dom___max_0_11(X) :- X = #max { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__next_0_0__dom___max_0_11(P,N) :- __min_0_0__dom___max_0_11(P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__next_0_0__dom___max_0_11(P,N) :- __next_0_0__dom___max_0_11(_,P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
+__chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
+:~ __max_0_11(P,X); random(Y). [Y@Y]""",
+        ),
+        (  # test translation inside weak constraints
+            """
+{person(a);person(b)}.
+{
+skill(a, ("some",1), 3);
+skill(a, ("thing",1), 5);
+skill(a, ("programming",1..10), 10);
+skill(a, ("knitting",1..10), 100);
+skill(b, t("cooking",1..10), 10);
+skill(b, t("knitting",1..10), 1)
+}.
+:~ X = #max {V, ID : skill(P, ID, V)}, person(P), random(Y). [X@Y]
+""",
+            """#program base.
+{ person(a); person(b) }.
+{ skill(a,("some",1),3); skill(a,("thing",1),5); skill(a,("programming",(1..10)),10); skill(a,("knitting",(1..10)),100); skill(b,t("cooking",(1..10)),10); skill(b,t("knitting",(1..10)),1) }.
+__dom_skill(a,("some",1),3).
+__dom_skill(a,("thing",1),5).
+__dom_skill(a,("programming",(1..10)),10).
+__dom_skill(a,("knitting",(1..10)),100).
+__dom_skill(b,t("cooking",(1..10)),10).
+__dom_skill(b,t("knitting",(1..10)),1).
+__dom_person(a).
+__dom_person(b).
+__dom___max_0_11(V) :- __dom_skill(P,ID,V); __dom_person(P).
+__min_0_0__dom___max_0_11(X) :- X = #min { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__max_0_0__dom___max_0_11(X) :- X = #max { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__next_0_0__dom___max_0_11(P,N) :- __min_0_0__dom___max_0_11(P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__next_0_0__dom___max_0_11(P,N) :- __next_0_0__dom___max_0_11(_,P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
+__chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
+:~ __max_0_11(P,X); random(Y). [X@Y]""",
+        ),
+        (  # test translation inside weak constraints
+            """
+{person(a);person(b)}.
+{
+skill(a, ("some",1), 3);
+skill(a, ("thing",1), 5);
+skill(a, ("programming",1..10), 10);
+skill(a, ("knitting",1..10), 100);
+skill(b, t("cooking",1..10), 10);
+skill(b, t("knitting",1..10), 1)
+}.
+:~ X = #max {V, ID : skill(P, ID, V)}, person(P), random(Y). [X@Y,P]
+""",
+            """#program base.
+{ person(a); person(b) }.
+{ skill(a,("some",1),3); skill(a,("thing",1),5); skill(a,("programming",(1..10)),10); skill(a,("knitting",(1..10)),100); skill(b,t("cooking",(1..10)),10); skill(b,t("knitting",(1..10)),1) }.
+__dom_skill(a,("some",1),3).
+__dom_skill(a,("thing",1),5).
+__dom_skill(a,("programming",(1..10)),10).
+__dom_skill(a,("knitting",(1..10)),100).
+__dom_skill(b,t("cooking",(1..10)),10).
+__dom_skill(b,t("knitting",(1..10)),1).
+__dom_person(a).
+__dom_person(b).
+__dom___max_0_11(V) :- __dom_skill(P,ID,V); __dom_person(P).
+__min_0_0__dom___max_0_11(X) :- X = #min { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__max_0_0__dom___max_0_11(X) :- X = #max { L: __dom___max_0_11(L) }; __dom___max_0_11(_).
+__next_0_0__dom___max_0_11(P,N) :- __min_0_0__dom___max_0_11(P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__next_0_0__dom___max_0_11(P,N) :- __next_0_0__dom___max_0_11(_,P); __dom___max_0_11(N); N > P; not __dom___max_0_11(B): __dom___max_0_11(B), P < B < N.
+__chain_0_0__max___dom___max_0_11(P,V) :- skill(P,ID,V); person(P).
+__chain_0_0__max___dom___max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,__PREV) :- __chain_0_0__max___dom___max_0_11(P,__PREV); not __chain_0_0__max___dom___max_0_11(P,__NEXT): __next_0_0__dom___max_0_11(__PREV,__NEXT).
+__max_0_11(P,#inf) :- __min_0_0__dom___max_0_11(X); not __chain_0_0__max___dom___max_0_11(P,X); person(P).
+:~ __chain_0_0__max___dom___max_0_11(P,__NEXT); __next_0_0__dom___max_0_11(__PREV,__NEXT); random(Y). [(__NEXT-__PREV)@Y,__chain_0_0__max___dom___max_0_11(__PREV,__NEXT),P]
+:~ __chain_0_0__max___dom___max_0_11(P,__NEXT); __min_0_0__dom___max_0_11(__NEXT); random(Y). [__NEXT@Y,__chain_0_0__max___dom___max_0_11(#sup,__NEXT),P]""",
         ),
     ],
 )
