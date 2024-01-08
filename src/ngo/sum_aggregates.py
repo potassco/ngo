@@ -377,7 +377,7 @@ class SumAggregator:
         """
         ret: list[AST] = []
         for stm in prg:
-            if stm.ast_type == ASTType.Rule:
+            if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
                 newbody = []
                 for blit in stm.body:
                     if blit.ast_type == ASTType.Literal:
@@ -392,8 +392,8 @@ class SumAggregator:
                             newbody.append(blit)
                     else:
                         newbody.append(blit)
-                ret.append(stm.update(body=newbody))
-            elif stm.ast_type == ASTType.Minimize:
+                stm = stm.update(body=newbody)
+            if stm.ast_type == ASTType.Minimize:
                 ret.extend(self._replace_optimize(stm))
             else:
                 ret.append(stm)

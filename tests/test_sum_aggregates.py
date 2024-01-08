@@ -379,6 +379,27 @@ a(X) :- X = #sum {L,D : shift(D,L); 1,a : #true}.
 1 >= { shift(D,L): pshift(D,L) } :- day(D).
 a(X) :- X = #sum { L,D: shift(D,L); 1,a: #true }.""",
         ),
+        (
+            """
+{ shift(D,L) : pshift(D,L) } 1 :- day(D).
+:~ X = #sum {L,D : shift(D,L)}, p(X,Y). [Y@1]
+         """,
+            """#program base.
+1 >= { shift(D,L): pshift(D,L) } :- day(D).
+__dom_shift(D,L) :- pshift(D,L); day(D).
+__min_1_1__dom_shift(G0,X) :- X = #min { L: __dom_shift(G0,L) }; __dom_shift(G0,_).
+__max_1_1__dom_shift(G0,X) :- X = #max { L: __dom_shift(G0,L) }; __dom_shift(G0,_).
+__next_1_1__dom_shift(G0,P,N) :- __min_1_1__dom_shift(G0,P); __dom_shift(G0,N); N > P;\
+ not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
+__next_1_1__dom_shift(G0,P,N) :- __next_1_1__dom_shift(G0,_,P); __dom_shift(G0,N); N > P;\
+ not __dom_shift(G0,B): __dom_shift(G0,B), P < B < N.
+__chain_1_1__max___dom_shift(G0,P) :- shift(G0,P).
+__chain_1_1__max___dom_shift(G0,P) :- __chain_1_1__max___dom_shift(G0,N); __next_1_1__dom_shift(G0,P,N).
+:~ X = #sum { (L-__PREV),D,__next_1_1__dom_shift(D,__PREV,L):\
+ __chain_1_1__max___dom_shift(D,L), __next_1_1__dom_shift(D,__PREV,L);\
+ L,D,__next_1_1__dom_shift(D,L): __chain_1_1__max___dom_shift(D,L), not __next_1_1__dom_shift(D,_,L) };\
+ p(X,Y). [Y@1]""",
+        ),
     ],
 )
 def test_sum_aggregates_output(prg: str, converted_prg: str) -> None:
