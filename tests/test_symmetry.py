@@ -103,6 +103,20 @@ false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B
             """#program base.
 { before(T1,T2,M) } :- sequence(T1,M,_); sequence(T2,M,_); T1 < T2.""",
         ),
+        (
+            ":~ node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2. [X@1]",
+            "#program base.\n:~ node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }. [X@1]",
+        ),
+        (
+            ":~ node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2. [P1@1]",
+            "#program base.\n:~ node(X); player(P1,X,Y); player(P2,X,Y); P1 != P2. [P1@1]",
+        ),
+        (
+            ":~ #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2. [3@1]",
+            """#program base.
+__aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
+:~ 2 <= #sum+ { 1,W: __aux_1(W) }. [3@1]""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
