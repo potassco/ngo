@@ -18,7 +18,7 @@ def main() -> None:
     # pylint: disable=too-many-branches # will be refactored
     parser = get_parser()
     args = parser.parse_args()
-    logging.basicConfig(stream=sys.stdout, level=args.log)
+    logging.basicConfig(stream=sys.stderr, level=args.log)
 
     prg: list[AST] = []
     parse_files(["-"], prg.append, logger=logging.warning)

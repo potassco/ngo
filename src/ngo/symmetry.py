@@ -194,7 +194,7 @@ class SymmetryTranslator:
         potential_strict_inequalities: list[dict[int, list[AST]]],
         potential_nstrict_inequalities: list[dict[int, list[AST]]],
         lits: list[AST],
-        head: AST,
+        global_vars: set[AST],
         in_aggregate: bool,
     ) -> Iterator[SymmetryBundle]:
         for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
@@ -210,7 +210,7 @@ class SymmetryTranslator:
                     for pred in potential_equalities[index]:
                         used_variables.update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
                         used_uneq_variables[index].update(collect_ast(pred.atom.symbol.arguments[pos], "Variable"))
-            if len((global_vars_inside_body(lits) | global_vars_inside_head(head)) & used_variables) == 0:
+            if len((global_vars_inside_body(lits) | global_vars) & used_variables) == 0:
                 # built ccs, in a cc, only one comparison can be improved
                 g = nx.Graph()
                 for index1 in index_subset:
@@ -237,7 +237,7 @@ class SymmetryTranslator:
                 return
 
     def largest_symmetric_group(
-        self, body: list[AST], head: AST, rest: list[AST], in_aggregate: bool
+        self, body: list[AST], global_vars: set[AST], rest: list[AST], in_aggregate: bool
     ) -> Iterator[SymmetryBundle]:
         """
         Given a list A of literals (a body or a condition)
@@ -300,7 +300,7 @@ class SymmetryTranslator:
             potential_strict_inequalities,
             potential_nstrict_inequalities,
             body + rest,
-            head,
+            global_vars,
             in_aggregate,
         )
 
@@ -364,22 +364,28 @@ class SymmetryTranslator:
             reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1))))
         )
 
-    def _process_aggregates(self, rule: AST) -> list[AST]:
-        """given a rule, process all aggregates for symmetries
+    def _process_aggregates(self, stm: AST) -> list[AST]:
+        """given a stm, process all aggregates for symmetries
         and either break them or create aux rules using counting
         """
         # pylint: disable=too-many-nested-blocks
         ret: list[AST] = []
         newbody: list[AST] = []
-        for blit in rule.body:
+        for blit in stm.body:
             if not (blit.ast_type == ASTType.Literal and blit.atom.ast_type == ASTType.BodyAggregate):
                 newbody.append(blit)
                 continue
             new_elements: list[AST] = []
             for elem in blit.atom.elements:
                 condition = list(elem.condition)
+                global_vars: set[AST] = set()
+                if stm.ast_type == ASTType.Rule:
+                    global_vars = global_vars_inside_head(stm.head)
+                else:
+                    for t in [stm.weight, stm.priority, *stm.terms]:
+                        global_vars.update(collect_ast(t, "Variable"))
                 for symmetry_bundle in list(
-                    self.largest_symmetric_group(condition, rule.head, list(elem.terms) + list(rule.body), True)
+                    self.largest_symmetric_group(condition, global_vars, list(elem.terms) + list(stm.body), True)
                 ):
                     log.info(f"Replace atleast2 in aggregate {str(blit)}.")
                     for lit in symmetry_bundle.remove_lits():
@@ -392,42 +398,46 @@ class SymmetryTranslator:
             atom = blit.atom.update(elements=new_elements)
             newbody.append(blit.update(atom=atom))
 
-        ret.append(rule.update(body=newbody))
+        ret.append(stm.update(body=newbody))
         return ret
 
-    def _process_rule(self, rule: AST) -> list[AST]:
+    def _process_stm(self, stm: AST) -> list[AST]:
         """This modtrait replaces bodys with symmetry breaking rules that
         count different occurences of the same predicate.
         This can reduce the number of grounded rules.
         Might also return additional aux rules."""
-        assert rule.ast_type == ASTType.Rule
         ret: list[AST] = []
-        head: AST = rule.head
-        body: list[AST] = list(rule.body)
+        global_vars: set[AST] = set()
+        if stm.ast_type == ASTType.Rule:
+            global_vars = global_vars_inside_head(stm.head)
+        else:
+            for t in [stm.weight, stm.priority, *stm.terms]:
+                global_vars.update(collect_ast(t, "Variable"))
+        body: list[AST] = list(stm.body)
 
-        for symmetry_bundle in list(self.largest_symmetric_group(body, head, [], False)):
+        for symmetry_bundle in list(self.largest_symmetric_group(body, global_vars, [], False)):
             ### Translate to aggregate
             if not symmetry_bundle.empty():
-                log.info(f"Replace atleast2 in {str(rule)}")
+                log.info(f"Replace atleast2 in {str(stm)}")
                 for lit in symmetry_bundle.remove_lits():
                     body.remove(lit)
                 for lit in symmetry_bundle.add_lits():
                     body.append(lit)
                 ret.extend(symmetry_bundle.aux_rules())
 
-        ret.append(rule.update(body=body))
+        ret.append(stm.update(body=body))
         return ret
 
-    def _process(self, rule: AST) -> list[AST]:
+    def _process(self, stm: AST) -> list[AST]:
         """This modtrait replaces bodys with symmetry breaking rules that
         count different occurences of the same predicate with a counting aggregate
         if this preserves semantics. This can reduce the number of grounded
         rules.
         Might also return additional aux rules."""
         ret: list[AST] = []
-        rules = self._process_aggregates(rule)
-        for r in rules:
-            ret.extend(self._process_rule(r))
+        stms = self._process_aggregates(stm)
+        for r in stms:
+            ret.extend(self._process_stm(r))
         return ret
 
     def execute(self, orig: list[AST]) -> list[AST]:
@@ -438,12 +448,12 @@ class SymmetryTranslator:
         ret: list[AST] = []
         prg: list[AST] = []
         for rule in orig:
-            if rule.ast_type == ASTType.Rule:
+            if rule.ast_type in (ASTType.Rule, ASTType.Minimize):
                 prg.append(replace_simple_assignments(rule))
                 continue
             prg.append(rule)
         for rule in prg:
-            if rule.ast_type == ASTType.Rule:
+            if rule.ast_type in (ASTType.Rule, ASTType.Minimize):
                 ret.extend(self._process(rule))
                 continue
             ret.append(rule)

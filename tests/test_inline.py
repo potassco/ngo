@@ -400,7 +400,7 @@ inline(B) :- B = #sum { Y: person(A,Y) }.
             [],
             """#program base.
 { a((1..3)) }.
-:~ a(A); person(A,Y). [1@0,A,unique]""",
+:~ a(A); person(A,Y). [1@0,Y,A]""",
         ),
         (  # replacement in combined aggregates
             """

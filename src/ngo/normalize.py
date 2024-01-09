@@ -147,7 +147,7 @@ def replace_old_aggregates(prg: Iterable[AST]) -> list[AST]:
     Also replace body count aggregates with sum aggregates with weight of 1"""
     newprg: list[AST] = []
     for stm in prg:
-        if stm.ast_type != ASTType.Rule:
+        if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
             newprg.append(stm)
             continue
         if not stm.body:
@@ -197,12 +197,31 @@ def exline_literal(lit: AST, unique_vars: UniqueVariables) -> tuple[AST, list[AS
     return new_lit, ret
 
 
+def exline_minimize_terms(stm: AST) -> AST:
+    """move complex arithmetic from the minimize objective and terms to the body"""
+    uv = UniqueVariables(stm)
+    new_term, conditions = exline_term(stm.weight, uv)
+    stm = stm.update(weight=new_term, body=list(stm.body) + conditions)
+    new_term, conditions = exline_term(stm.priority, uv)
+    stm = stm.update(priority=new_term, body=list(stm.body) + conditions)
+    new_terms = []
+    new_conditions = []
+    for t in stm.terms:
+        new_term, conditions = exline_term(t, uv)
+        new_terms.append(new_term)
+        new_conditions.extend(conditions)
+
+    return stm.update(terms=new_terms, body=list(stm.body) + new_conditions)
+
+
 def exline_arithmetic_rule(stm: AST) -> AST:
     """try to replace arithmetic functions inside Functionsymbols with AUX Variables"""
     unique_vars = UniqueVariables(stm)
     if stm.ast_type == ASTType.Rule:
         new_head, body = exline_literal(stm.head, unique_vars)
         stm = stm.update(head=new_head, body=list(stm.body) + body)
+    if stm.ast_type == ASTType.Minimize:
+        stm = exline_minimize_terms(stm)
     if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
         new_body: list[AST] = []
         for blit in stm.body:
@@ -300,9 +319,17 @@ def inline_rule(stm: AST) -> AST:
     else:
         return stm
     new_body = inline_replace_stms([x for x in stm.body if x != blit], var, rest)
+    stm = stm.update(body=new_body)
     if stm.ast_type == ASTType.Rule:
-        return inline_rule(stm.update(head=inline_replace_stm(stm.head, var, rest), body=new_body))
-    return inline_rule(stm.update(body=new_body))
+        return inline_rule(stm.update(head=inline_replace_stm(stm.head, var, rest)))
+    assert stm.ast_type == ASTType.Minimize
+    stm = stm.update(weight=inline_replace_stm(stm.weight, var, rest))
+    stm = stm.update(priority=inline_replace_stm(stm.priority, var, rest))
+    new_terms: list[AST] = []
+    for t in stm.terms:
+        new_terms.append(inline_replace_stm(t, var, rest))
+    stm = stm.update(terms=new_terms)
+    return inline_rule(stm)
 
 
 def inline_aggregate(stm: AST, globals_: set[AST]) -> AST:

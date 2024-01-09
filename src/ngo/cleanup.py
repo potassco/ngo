@@ -193,7 +193,7 @@ class CleanupTranslator:
         return updated
 
     def _apply_superseeding(self, stm: AST) -> AST:
-        if stm.ast_type == ASTType.Rule:
+        if stm.ast_type in (ASTType.Rule, ASTType.Minimize):
             body: list[AST] = list(stm.body)
             updated = self._remove_superseed_from_list(body)
             for idx, blit in enumerate(body):

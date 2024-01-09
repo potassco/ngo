@@ -249,7 +249,7 @@ class InlineTranslator:
             # replace old weight with tuple from aggregate
             new_weight: AST
             if agg.function == AggregateFunction.Count:
-                new_weight = SymbolicTerm(LOC, Number(1))
+                new_weight = SymbolicTerm(LOC, Number(1))  # nocoverage
             else:
                 new_weight = elem.terms[0]
             # create new minimize with this elem replaced by its content

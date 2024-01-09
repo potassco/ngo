@@ -335,6 +335,20 @@ a :- 0 = #sum { 1,b,__agg(0): b; 1,a,__agg(1): a; -2,__agg(2) }.""",
         ),
         (
             """
+:~ f(Z); X=#count{a : a}, Y=#count{b: b}, X+Y=2. [Z@1]
+            """,
+            """#program base.
+:~ f(Z); 0 = #sum { 1,a,__agg(0): a; 1,b,__agg(1): b; -2,__agg(2) }. [Z@1]""",
+        ),
+        (
+            """
+:~ f(Z); X=#count{a : a}, Y=#count{b: b}. [Z+X+Y@1]
+            """,
+            """#program base.
+:~ f(Z); AUX = #sum { 1,a,__agg(0): a; 1,b,__agg(1): b; Z,__agg(2) }. [AUX@1]""",
+        ),
+        (
+            """
 a :- X=#max{1,a : a}, Y=#count{b: b}, X+Y=2.
             """,
             """#program base.

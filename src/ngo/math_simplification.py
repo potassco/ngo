@@ -101,7 +101,7 @@ class MathSimplification:
         prg = exline_arithmetic(prg)
         newprg = list(prg)
         for oldstm, stm in zip(prg, newprg):
-            if stm.ast_type != ASTType.Rule:
+            if stm.ast_type not in (ASTType.Rule, ASTType.Minimize):
                 ret.append(oldstm)
                 continue
             gb = Goebner()
@@ -115,7 +115,15 @@ class MathSimplification:
                 if blit.ast_type == ASTType.Literal:
                     agg_conditions[blit.sign].update(conditions_of_body_agg(blit.atom))
                 gb.equalities[blit] = expr_list
-            need_bound, no_bound_needed = collect_binding_information_head(stm.head, newbody)
+            need_bound: set[AST] = set()
+            no_bound_needed: set[AST] = set()
+            if stm.ast_type == ASTType.Rule:
+                need_bound, no_bound_needed = collect_binding_information_head(stm.head, newbody)
+            elif stm.ast_type == ASTType.Minimize:
+                need_bound.update(collect_ast(stm.weight, "Variable"))
+                need_bound.update(collect_ast(stm.priority, "Variable"))
+                for t in stm.terms:
+                    need_bound.update(collect_ast(t, "Variable"))
             bound_body, unbound_body = collect_binding_information_body(newbody)
             needed = set.union(bound_body, unbound_body, need_bound, no_bound_needed)
             unbound = set.union(need_bound, unbound_body) - bound_body
@@ -129,7 +137,8 @@ class MathSimplification:
                 for cond in new_conditions:
                     conditions = set(conditions_of_body_agg(cond.atom))
                     if (
-                        stm.head == Literal(LOC, Sign.NoSign, BooleanConstant(False))
+                        stm.ast_type != ASTType.Rule
+                        or stm.head == Literal(LOC, Sign.NoSign, BooleanConstant(False))
                         or not conditions
                         or conditions.issubset(agg_conditions[Sign.NoSign])
                     ):

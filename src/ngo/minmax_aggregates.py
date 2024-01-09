@@ -114,6 +114,28 @@ class MinMaxAggregator:
             if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
                 self._minmax_preds.append((function, translation, i))
 
+    def _store_aggregate_for_minimize(self, function: int, rest_vars: list[AST], max_var: AST, new_name: str) -> None:
+        """
+        store it in self._minmax_preds for other simplifications
+        """
+        args = rest_vars + [max_var]
+
+        for arg in args:
+            if arg.ast_type not in {ASTType.Variable, ASTType.SymbolicTerm}:
+                return  # nocoverage
+        symbol = Function(LOC, new_name, args, False)
+
+        mapping = [(args).index(arg) if arg in args else None for arg in args]
+
+        translation = TranslationMap(
+            Predicate(symbol.name, len(symbol.arguments)),
+            Predicate(new_name, len(rest_vars) + 1),
+            mapping,
+        )
+        for i, arg in enumerate(symbol.arguments):
+            if arg.ast_type == ASTType.Variable and arg.name == max_var.name:
+                self._minmax_preds.append((function, translation, i))
+
     def _translatable_element(self, elem: AST) -> bool:
         """check if this element of a minmax aggregate is currently worth translating
         return false if the element is static
@@ -147,7 +169,12 @@ class MinMaxAggregator:
         return None
 
     def _create_aggregate_replacement(
-        self, agg: AST, elem: AST, rest_vars: list[AST], new_predicate: Predicate, lits_with_vars: list[AST]
+        self,
+        agg: AST,
+        elem: AST,
+        rest_vars: list[AST],
+        new_predicate: Predicate,
+        lits_with_vars: list[AST],
     ) -> list[AST]:
         """return a list of rules as a replacement of this aggregate element"""
         # 2. create dom and next_ predicates for it, and then use it to
@@ -297,61 +324,12 @@ class MinMaxAggregator:
             ret.append(rule)
         return ret
 
-    def _chain_translation(self, rule: AST, agg: AST) -> list[AST]:
-        """translate a single elemented min/max aggregate to chaining rules"""
-        if len(agg.atom.elements) > 1:
-            log.info(
-                f"Cannot translate {loc2str(agg.location)} as multiple elements "
-                "inside min/max aggregate are not yet supported. See #9."
-            )
-            return [rule]
-        number_of_aggregate = 0
-        assert len(agg.atom.elements) == 1
-        elem = agg.atom.elements[0]
-        weight = elem.terms[0]
-        direction = "min"
-        if agg.atom.function == AggregateFunction.Max:
-            direction = "max"
-
-        # 1. create a new domain for the complete elem.condition + lits_with_vars
-        new_name = f"__{direction}_{number_of_aggregate}_{str(rule.location.begin.line)}"
-        new_predicate = Predicate(new_name, 1)
-
-        head = SymbolicAtom(Function(LOC, new_name, [weight], False))
-        lits_with_vars = []
-        lits_without_vars = []
-        rest_var_names: set[str] = set()  # variable names that are used in- but also outside of the aggregate
-        inside_variables = set(
-            map(
-                lambda x: x.name,
-                chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)),
-            )
-        )
-        for blit in rule.body:
-            if blit == agg:
-                continue
-            blit_vars = set(map(lambda x: x.name, collect_ast(blit, "Variable")))
-            if len(blit_vars) > 0 and blit_vars <= inside_variables:
-                rest_var_names.update(inside_variables.intersection(blit_vars))
-                lits_with_vars.append(blit)
-            else:
-                lits_without_vars.append(blit)
-        # variables that are used inside but also outside of the aggregate
-        rest_vars: list[AST] = sorted([Variable(LOC, name) for name in rest_var_names])
-
-        self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
-        if not self.domain_predicates.has_domain(new_predicate):
-            log.info(
-                f"Cannot translate {loc2str(agg.location)} as I cannot infer "
-                f"a domain for {[str(x) for x in list(chain(elem.condition, lits_with_vars))]}."
-            )
-            return [rule]
-
-        ret = self._create_aggregate_replacement(agg, elem, rest_vars, new_predicate, lits_with_vars)
-
-        # 3. replace original rule
-        head = rule.head
-        body = []
+    def replace_orig(
+        self, rule: AST, agg: AST, new_name: str, rest_vars: list[AST], lits_without_vars: list[AST]
+    ) -> list[AST]:
+        """replace the original aggregate inside the rule with the new named predicate"""
+        body: list[AST] = []
+        ret: list[AST] = []
 
         analytics = AggAnalytics(agg.atom)
         max_var = Variable(LOC, f"__VAR{new_name}")
@@ -384,10 +362,67 @@ class MinMaxAggregator:
         for bound in analytics.bounds:
             body.append(Literal(LOC, Sign.NoSign, Comparison(max_var, [bound])))
         body.extend(lits_without_vars)
-        ret.append(Rule(LOC, head, body))
-
-        self._store_aggregate_head(agg.atom.function, rule.head, rest_vars, max_var, new_name)
+        ret.append(rule.update(body=body))
+        if rule.ast_type == ASTType.Rule:
+            self._store_aggregate_head(agg.atom.function, rule.head, rest_vars, max_var, new_name)
+        else:
+            self._store_aggregate_for_minimize(agg.atom.function, rest_vars, max_var, new_name)
         return ret
+
+    def _chain_translation(self, rule: AST, agg: AST) -> list[AST]:
+        """translate a single elemented min/max aggregate to chaining rules"""
+        if len(agg.atom.elements) > 1:
+            log.info(
+                f"Cannot translate {loc2str(agg.location)} as multiple elements "
+                "inside min/max aggregate are not yet supported. See #9."
+            )
+            return [rule]
+        number_of_aggregate = 0
+        assert len(agg.atom.elements) == 1
+        elem = agg.atom.elements[0]
+        weight = elem.terms[0]
+        direction = "min"
+        if agg.atom.function == AggregateFunction.Max:
+            direction = "max"
+
+        # 1. create a new domain for the complete elem.condition + lits_with_vars
+        new_name = f"__{direction}_{number_of_aggregate}_{str(rule.location.begin.line)}"
+        new_predicate = Predicate(new_name, 1)
+
+        head = SymbolicAtom(Function(LOC, new_name, [weight], False))
+        lits_with_vars = []
+        lits_without_vars = []
+        rest_vars: set[AST] = set()  # variable names that are used in- but also outside of the aggregate
+        inside_variables = set(chain(*map(lambda x: collect_ast(x, "Variable"), agg.atom.elements)))
+        for blit in rule.body:
+            if blit == agg:
+                continue
+            blit_vars = set(collect_ast(blit, "Variable"))
+            if len(blit_vars.intersection(inside_variables)) != 0:
+                rest_vars.update(blit_vars)
+                lits_with_vars.append(blit)
+            else:
+                lits_without_vars.append(blit)
+        if rule.ast_type == ASTType.Minimize:
+            rest_vars.update(inside_variables.intersection(collect_ast(rule.weight, "Variable")))
+            rest_vars.update(inside_variables.intersection(collect_ast(rule.priority, "Variable")))
+            for t in rule.terms:
+                rest_vars.update(inside_variables.intersection(collect_ast(t, "Variable")))
+        # variables that are used inside but also outside of the aggregate
+        rest_vars_sorted: list[AST] = sorted(rest_vars)
+
+        self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
+        if not self.domain_predicates.has_domain(new_predicate):
+            log.info(
+                f"Cannot translate {loc2str(agg.location)} as I cannot infer "
+                f"a domain for {[str(x) for x in list(chain(elem.condition, lits_with_vars))]}."
+            )
+            return [rule]
+
+        ret = self._create_aggregate_replacement(agg, elem, rest_vars_sorted, new_predicate, lits_with_vars)
+
+        # 3. replace original rule or minimize
+        return ret + self.replace_orig(rule, agg, new_name, rest_vars_sorted, lits_without_vars)
 
     def _process_rule(self, rule: AST) -> list[AST]:
         """returns a list of rules to replace this rule"""
@@ -580,8 +615,8 @@ class MinMaxAggregator:
         term_vars = {x.name for x in chain.from_iterable(map(_characteristic_variables, term_tuple[2:]))}
         if not old_vars <= term_vars:
             log.info(
-                f"Cannot optimize {loc2str(stm.location)} as not all variables {old_vars} are used in the tuple."
-                "This might be a bug, see issue #8."
+                f"Cannot use chaining in {loc2str(stm.location)} as not all variables {old_vars} are used in the tuple."
+                " (#8)"
             )
             return [stm]
 
@@ -742,19 +777,20 @@ class MinMaxAggregator:
         ret: list[AST] = []
         minimizes: dict[tuple[AST, ...], list[AST]] = defaultdict(list)
         for rule in prg:
-            if rule.ast_type == ASTType.Minimize:
-                minimizes[
-                    (
-                        rule.weight,
-                        rule.priority,
-                        *rule.terms,
-                    )
-                ].append(rule)
-
-            if rule.ast_type != ASTType.Rule:
+            if rule.ast_type not in (ASTType.Rule, ASTType.Minimize):
                 ret.append(rule)
                 continue
 
-            ret.extend(self._process_rule(rule))
+            for new_rule in self._process_rule(rule):
+                if new_rule.ast_type == ASTType.Minimize:
+                    minimizes[
+                        (
+                            new_rule.weight,
+                            new_rule.priority,
+                            *new_rule.terms,
+                        )
+                    ].append(new_rule)
+                ret.append(new_rule)
+
         ret = self._replace_results_in_x(ret, minimizes)
         return ret

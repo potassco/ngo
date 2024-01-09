@@ -31,6 +31,16 @@ a(X,Y) :- b(X,Y).""",
         (
             """
 b(X,Y) :- dom(X), dom(Y), X+Y > 42.
+:~ b(X,Y), dom(X), dom(Y). [X@1]
+            """,
+            [Predicate("dom", 1)],
+            """#program base.
+b(X,Y) :- dom(X); dom(Y); (X+Y) > 42.
+:~ b(X,Y). [X@1]""",
+        ),
+        (
+            """
+b(X,Y) :- dom(X), dom(Y), X+Y > 42.
 a(X,Y) :- b(X,Y), dom(X), not dom(Y).
             """,
             [Predicate("dom", 1)],

@@ -79,7 +79,7 @@ def auto_detect_output(prg: Iterable[AST]) -> list[Predicate]:
 
 
 class UniqueVariables:
-    """class to provide unique names for variables in a rule"""
+    """class to provide unique names for variables in a rule/minimize"""
 
     def __init__(self, rule: AST) -> None:
         self._allvars: list[AST] = collect_ast(rule, "Variable")
