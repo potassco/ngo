@@ -1,4 +1,4 @@
-name: Run tests
+name: tests
 
 on:
   # Creates a reusable workflow
@@ -10,7 +10,7 @@ env:
   FORCE_COLOR: "3"
 
 jobs:
-  build:
+  test:
     name: test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
