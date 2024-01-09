@@ -109,7 +109,7 @@ if `dom/1` is an [input predicates](#input-predicates).
 
 ## unused
 
-This module removes unecessary variables from predicates. It might shrink predicates down and reduce their arity.
+This module removes unnecessary variables from predicates. It might shrink predicates down and reduce their arity.
 If a predicate is not used in a constraint not in the `--output-predicates` it might be removed completely.
 So, this program:
 ```Prolog
