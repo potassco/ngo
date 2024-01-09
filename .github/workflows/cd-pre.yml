@@ -1,0 +1,16 @@
+name: Release
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: "3"
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+  docs:
+    uses: ./.github/workflows/publish-docs.yml
+  publish:
+    uses: ./.github/workflows/publish-to-test-pypi.yml
