@@ -1,5 +1,4 @@
-name: Run tests
-
+name: build_wheel
 on:
   # Creates a reusable workflow
   workflow_call:
@@ -7,6 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
   build-and-upload:
     name: Build and upload
     runs-on: ubuntu-latest
