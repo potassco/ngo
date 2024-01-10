@@ -41,7 +41,3 @@ jobs:
         with:
           name: wheel
           path: dist/
-
-      - name: debug
-        run:  >-
-          ls *
