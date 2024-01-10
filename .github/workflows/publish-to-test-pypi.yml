@@ -20,6 +20,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: wheel
+      - name: debug
+        run:  >-
+          ls *
       - name: Publish package distributions to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
