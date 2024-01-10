@@ -1,4 +1,4 @@
-name: Publish to TestPypi
+name: Publish to Pypi
 
 on:
   # Creates a reusable workflow
@@ -6,14 +6,19 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-
 jobs:
+  build:
+    uses: ./.github/workflows/buildwheel.yml
   pypi-publish:
-    name: upload release to PyPI
-    runs-on: ubuntu-latest
-    environment: release
+    name: Publish to PyPI
+    needs: [build]
     permissions:
       id-token: write
+    environment: release
+    runs-on: ubuntu-latest
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

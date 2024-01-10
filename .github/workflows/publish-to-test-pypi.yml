@@ -9,17 +9,18 @@ on:
 jobs:
   build:
     uses: ./.github/workflows/buildwheel.yml
-  build-n-publish:
+  test-publish:
+    name: Publish to TestPyPI
     needs: [build]
     permissions:
       id-token: write
-    name: Build and publish for TestPyPI
+    environment: test-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: wheel
-      - name: Publish package distributions to Test PyPI
+      - name: Publish package distributions to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
