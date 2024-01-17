@@ -211,7 +211,22 @@ foo(X) :- X = #sum { A: test(A,B); Y,V: a(V), person(V,Y) }.
 ```
 This is only possible if it is safe to change set semantics using the tuples in the aggregates.
 This trait also works for minimize statements and weak constraints.
+
+## projection
+
+This trait splits rules in a way that the grounding complexity is reduced.
+```Prolog
+p(A,D) :- q(A,B,C), r(A D), t(E), not s(B,E).
+```
+becomes
+```Prolog
+aux(A) :- q(A,B,C), t(E), not s(B,E).
+p(A,D) :- aux(A), r(A D).
+```
+
+This can reduce grounding drastically but introduces additional solving variables.
 """
+
 
 from ngo.api import optimize
 from ngo.utils.ast import Predicate

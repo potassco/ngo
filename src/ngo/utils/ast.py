@@ -1,8 +1,8 @@
 """ general ast util functions and classes """
 from dataclasses import dataclass
 from functools import partial
-from itertools import product
-from typing import Any, Callable, Iterable, Iterator, NamedTuple, Sequence
+from itertools import chain, combinations, product
+from typing import Any, Callable, Collection, Iterable, Iterator, NamedTuple, Sequence, TypeVar
 
 import networkx as nx
 from clingo import SymbolType
@@ -627,12 +627,14 @@ def collect_binding_information_head(head: AST, body: list[AST]) -> tuple[set[AS
     return need_bound_variables, no_bound_needed
 
 
-def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], set[AST]]:
+def collect_binding_information_body(stmlist: Iterable[AST], prebound: set[AST] = None) -> tuple[set[AST], set[AST]]:
     """given a list of body literal
     returns a set of Variables that it binds
     returns a set of Variables that it needs to be bounded"""
     # pylint: disable=too-many-nested-blocks, too-many-branches
     bound_variables: set[AST] = set()
+    if prebound is not None:
+        bound_variables.update(prebound)
     unbound_variables: set[AST] = set()
     ### need to do a fixpoint computation
     size_before = -1
@@ -884,3 +886,11 @@ def is_body_aggregate(lit: AST) -> bool:
 def is_conditional(lit: AST) -> bool:
     """true if lit is a literal with a named predicate"""
     return lit.ast_type == ASTType.ConditionalLiteral
+
+
+T = TypeVar("T")
+
+
+def largest_subset(input_list: Collection[T]) -> list[Collection[T]]:
+    """return all subsets of the input list in decreasing size"""
+    return list(reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1)))))

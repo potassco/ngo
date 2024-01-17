@@ -19,8 +19,18 @@ else:
 VERSION = metadata.version("ngo")
 
 
-ALL_OPTIONS = ["minmax_chains", "symmetry", "duplication", "cleanup", "unused", "sum_chains", "math", "inline"]
-DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math", "inline"]
+ALL_OPTIONS = [
+    "minmax_chains",
+    "symmetry",
+    "duplication",
+    "cleanup",
+    "unused",
+    "sum_chains",
+    "math",
+    "inline",
+    "projection",
+]
+DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math", "inline", "projection"]
 
 LEVELS = ["ERROR", "WARNING", "INFO", "DEBUG"]
 
