@@ -481,7 +481,7 @@ def _collect_binding_information_simple_literal(
         else:
             unbound_variables.update(collect_ast(lit, "Variable"))
     elif lit.atom.ast_type == ASTType.Comparison:
-        bound, unbound = _collect_binding_information_from_comparison(lit.atom, bound_variables)
+        bound, unbound = _collect_binding_information_from_comparison(lit, bound_variables)
         bound_variables.update(bound)
         unbound_variables.update(unbound)
     return bound_variables, unbound_variables
@@ -500,14 +500,7 @@ def _collect_binding_information_conditions(
     while len(bound_variables) != size:
         size = len(bound_variables)
         for condition in conditions:
-            if condition.ast_type == ASTType.Comparison:
-                bound, unbound = _collect_binding_information_from_comparison(condition, bound_variables)  # nocoverage
-            elif condition.ast_type == ASTType.Literal and condition.atom.ast_type == ASTType.Comparison:
-                bound, unbound = _collect_binding_information_from_comparison(condition.atom, bound_variables)
-            else:
-                bound, unbound = _collect_binding_information_simple_literal(
-                    condition, bound_variables, unbound_variables
-                )
+            bound, unbound = _collect_binding_information_simple_literal(condition, bound_variables, unbound_variables)
             bound_variables.update(bound)
             unbound_variables.update(unbound)
     unbound_variables -= bound_variables
@@ -552,10 +545,13 @@ def comparison2comparisonlist(comparison: AST) -> list[tuple[AST, ComparisonOper
 def _collect_binding_information_from_comparison(
     comparison: AST, input_bound_variables: set[AST]
 ) -> tuple[set[AST], set[AST]]:
-    assert comparison.ast_type == ASTType.Comparison
+    assert comparison.ast_type == ASTType.Literal
+    assert comparison.atom.ast_type == ASTType.Comparison
+    if comparison.sign != Sign.NoSign:
+        return (set(), set(collect_ast(comparison.atom, "Variable")))
     bound_variables: set[AST] = set(input_bound_variables)
     unbound_variables: set[AST] = set(collect_ast(comparison, "Variable"))
-    for lhs, operator, rhs in comparison2comparisonlist(comparison):
+    for lhs, operator, rhs in comparison2comparisonlist(comparison.atom):
         if operator == ComparisonOperator.Equal:
             bound, unbound = _collect_binding_information_from_equal(lhs, rhs, bound_variables)
             bound_variables.update(bound)
@@ -576,10 +572,7 @@ def _collect_binding_information_from_comparisons(
         orig = bound_variables.copy()
         for stm in stmlist:
             if stm.ast_type == ASTType.Literal and stm.atom.ast_type == ASTType.Comparison:
-                if stm.sign != Sign.NoSign:
-                    unbound_variables.update(collect_ast(stm.atom, "Variable"))
-                    continue
-                bound, unbound = _collect_binding_information_from_comparison(stm.atom, bound_variables)
+                bound, unbound = _collect_binding_information_from_comparison(stm, bound_variables)
                 bound_variables.update(bound)
                 unbound_variables.update(unbound)
 
@@ -672,10 +665,6 @@ def collect_binding_information_body(stmlist: Iterable[AST]) -> tuple[set[AST], 
                         unbound_variables.update(term_vars)
                         unbound -= bound_variables
                         unbound_variables.update(unbound)
-                elif stm.atom.ast_type == ASTType.Comparison:
-                    bound, unbound = _collect_binding_information_from_comparison(stm.atom, bound_variables)
-                    bound_variables.update(bound)
-                    unbound_variables.update(unbound)
             elif stm.ast_type == ASTType.ConditionalLiteral:
                 term_vars = set(collect_ast(stm.literal, ast_name="Variable"))
                 bound, unbound = _collect_binding_information_conditions(stm.condition, bound_variables)

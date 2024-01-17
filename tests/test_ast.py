@@ -184,6 +184,13 @@ def test_headderivable_predicates(prg: str, head_preds: list[SignedPredicate]) -
             ["X", "Y", "Z", "W"],
             [],
         ),
+        (
+            """
+:- foo(Y), not Z = Y.
+""",
+            ["Y"],
+            ["Z"],
+        ),
     ],
 )
 def test_binding_variables_body(prg: str, bound_vars: list[str], unbound_vars: list[str]) -> None:
