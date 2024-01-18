@@ -106,6 +106,20 @@ def _replace_anon(symbol: AST) -> AST:
     )
 
 
+def _exline_interval(elem: AST, unique_vars: UniqueVariables) -> AST:
+    """get a conditional literal, remove intervals from the literal part by shifting it to a variable"""
+    assigns: list[AST] = []
+
+    def replace_interval(interval: AST) -> AST:
+        """replace interval with fresh variable and store it away"""
+        aux = unique_vars.make_unique(AUX_VAR)
+        assigns.append(Literal(LOC, Sign.NoSign, Comparison(aux, [Guard(ComparisonOperator.Equal, interval)])))
+        return aux
+
+    elem = transform_ast(elem, "Interval", replace_interval)
+    return elem.update(condition=list(elem.condition) + assigns)
+
+
 def _convert_old_agg(agg: AST, unqiue_vars: UniqueVariables) -> AST:
     """transforms old style body aggregate to new sum aggregate with weights 1"""
     assert agg.ast_type == ASTType.Aggregate
@@ -122,6 +136,7 @@ def _convert_old_agg(agg: AST, unqiue_vars: UniqueVariables) -> AST:
     for old_elem in agg.elements:
         terms: list[AST] = []
         atom = old_elem.literal.atom
+        old_elem = _exline_interval(old_elem, unqiue_vars)
         new_literal = old_elem.literal
         terms.append(SymbolicTerm(LOC, Number(1)))
         terms.append(SymbolicTerm(LOC, Number(nm[old_elem.literal.sign])))

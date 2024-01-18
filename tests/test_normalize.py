@@ -29,6 +29,13 @@ a :- b(X); X = #sum { Y: Y = (1..X) }.""",
             """#program base.
 #false :- sudoku(X,_,N); 1 != #sum { 1,1,sudoku(X,anon__ngo,N): not sudoku(X,_,N) }.""",
         ),
+        (
+            """
+#false :- N != { bend(((T+1)..(T1-1))) }; bends(T,T1,N).
+""",
+            """#program base.
+#false :- N != #sum { 1,0,bend(AUX): bend(AUX), AUX = ((T+1)..(T1-1)) }; bends(T,T1,N).""",
+        ),
     ],
 )
 def test_preprocess(input_: str, output: str) -> None:
