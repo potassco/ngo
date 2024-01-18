@@ -48,7 +48,7 @@ class ProjectionTranslator:
         vars_in_rest.discard(Variable(LOC, "_"))
         t = global_vars_inside_body(new).intersection(vars_in_rest | global_vars_inside_head(stm.head))
         if collect_binding_information_body(rest, t)[1]:
-            return None # nocoverage
+            return None  # nocoverage
 
         ## global vars can not become unglobal
         # if variable in new is there but not global in new but has been global before, this is bad
@@ -79,6 +79,12 @@ class ProjectionTranslator:
             return is_predicate(lit) and lit.sign == Sign.NoSign
 
         if not any(map(aux, rest)):
+            return None
+
+        # dont split up aggregates
+        new_aggs = any(map(lambda x: len(collect_ast(x, "BodyAggregate")) > 0, new))
+        rest_aggs = any(map(lambda x: len(collect_ast(x, "BodyAggregate")) > 0, rest))
+        if new_aggs and rest_aggs:
             return None
         return sorted(t)
 

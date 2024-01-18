@@ -64,6 +64,14 @@ p(A,D) :- q(A,B,C); r(A,D); t(B,D).
             """#program base.
 p(A,D) :- q(A,B,C); r(A,D); t(B,D).""",
         ),
+        (
+            """
+p(A,D) :- q(A,B,C), r(A,D), E = #sum { 1 }, not s(B,E), D = #sum { 2 }.
+            """,
+            [],
+            """#program base.
+p(A,D) :- q(A,B,C); r(A,D); E = #sum { 1 }; not s(B,E); D = #sum { 2 }.""",
+        ),
     ),
 )
 def test_projection_translation(lhs: str, input_predicates: list[Predicate], rhs: str) -> None:
