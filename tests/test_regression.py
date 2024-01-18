@@ -35,8 +35,7 @@ __aux_1(__AUX_1) :- duration(_,__AUX_1,_); machine(__AUX_1).
 __dom_slot(M,T) :- time(T); __aux_1(M).
 #false :- __dom_slot(M,T); 2 <= #count { J1: slot(J1,M,T) }.
 #false :- duration(J,M,_); not slot(J,M,_).
-__aux_1(J,M,MM) :- slot(J,M,T); slot(J,MM,TT); TT >= T.
-#false :- sequence(J,M,S); sequence(J,MM,(S-1)); __aux_1(J,M,MM).
+#false :- sequence(J,M,S); sequence(J,MM,(S-1)); slot(J,M,T); slot(J,MM,TT); TT >= T.
 __dom_slot1(T) :- time(T); __aux_1(_).
 __min_0_0__dom___max_0_13(X) :- X = #min { L: __dom_slot1(L) }; __dom_slot1(_).
 __next_0_0__dom___max_0_13(P,N) :- __min_0_0__dom___max_0_13(P); __dom_slot1(N); N > P;\

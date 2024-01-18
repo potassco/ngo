@@ -30,7 +30,7 @@ ALL_OPTIONS = [
     "inline",
     "projection",
 ]
-DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math", "inline", "projection"]
+DEFAULT_OPTIONS = ["minmax_chains", "symmetry", "cleanup", "unused", "sum_chains", "math", "inline"]
 
 LEVELS = ["ERROR", "WARNING", "INFO", "DEBUG"]
 

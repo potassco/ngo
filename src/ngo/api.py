@@ -31,7 +31,7 @@ def optimize(
     sum_chains: bool = True,
     math: bool = True,
     inline: bool = True,
-    projection: bool = True,
+    projection: bool = False,
 ) -> list[AST]:
     """convert a logic program in form of clingo.AST's into an optimized encoding
 
