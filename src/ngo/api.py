@@ -11,6 +11,7 @@ from ngo.literal_duplication import LiteralDuplicationTranslator
 from ngo.math_simplification import MathSimplification
 from ngo.minmax_aggregates import MinMaxAggregator
 from ngo.normalize import exline_arithmetic, postprocess, preprocess
+from ngo.projection import ProjectionTranslator
 from ngo.sum_aggregates import SumAggregator
 from ngo.symmetry import SymmetryTranslator
 from ngo.unused import UnusedTranslator
@@ -30,6 +31,7 @@ def optimize(
     sum_chains: bool = True,
     math: bool = True,
     inline: bool = True,
+    projection: bool = False,
 ) -> list[AST]:
     """convert a logic program in form of clingo.AST's into an optimized encoding
 
@@ -88,6 +90,10 @@ def optimize(
         if inline:
             inl = InlineTranslator(input_, input_predicates, output_predicates)
             input_ = inl.execute(input_)
+
+        if projection:
+            pro = ProjectionTranslator(input_, input_predicates)
+            input_ = pro.execute(input_)
 
         input_ = exline_arithmetic(input_)
 

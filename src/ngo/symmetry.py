@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain, combinations, pairwise
-from typing import Any, Collection, Iterable, Iterator, Optional, TypeVar
+from typing import Any, Iterable, Iterator, Optional
 
 import networkx as nx
 from clingo.ast import (
@@ -37,6 +37,7 @@ from ngo.utils.ast import (
     collect_ast,
     global_vars_inside_body,
     global_vars_inside_head,
+    largest_subset,
     replace_simple_assignments,
 )
 from ngo.utils.globals import UniqueNames
@@ -197,7 +198,7 @@ class SymmetryTranslator:
         global_vars: set[AST],
         in_aggregate: bool,
     ) -> Iterator[SymmetryBundle]:
-        for index_subset in SymmetryTranslator.largest_subset(range(0, len(potential_equalities))):
+        for index_subset in largest_subset(range(0, len(potential_equalities))):
             used_variables: set[AST] = set()
             used_uneq_variables: dict[int, set[AST]] = defaultdict(set)
             for index in index_subset:
@@ -345,7 +346,7 @@ class SymmetryTranslator:
                 and lit.atom.symbol.ast_type == ASTType.Function
             ):
                 symbols.append(lit)
-        for subset in SymmetryTranslator.largest_subset(symbols):
+        for subset in largest_subset(symbols):
             if len(subset) <= 1:
                 continue
             preds: set[Predicate] = set()
@@ -354,15 +355,6 @@ class SymmetryTranslator:
                 preds.add(Predicate(symbol.name, len(symbol.arguments)))
             if len(preds) == 1:
                 yield tuple(sorted(subset))
-
-    T = TypeVar("T")
-
-    @staticmethod
-    def largest_subset(input_list: Collection[T]) -> list[Collection[T]]:
-        """return all subsets of the input list in decreasing size"""
-        return list(
-            reversed(list(chain.from_iterable(combinations(input_list, r) for r in range(len(input_list) + 1))))
-        )
 
     def _process_aggregates(self, stm: AST) -> list[AST]:
         """given a stm, process all aggregates for symmetries
