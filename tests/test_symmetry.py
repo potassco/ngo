@@ -4,6 +4,7 @@ from clingo.ast import AST, parse_string
 
 from ngo.normalize import postprocess, preprocess
 from ngo.symmetry import SymmetryTranslator
+from ngo.utils.ast import largest_subset
 
 
 @pytest.mark.parametrize(
@@ -159,4 +160,4 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
 )
 def test_largest_subset(input_: tuple[int, ...], output: list[tuple[int, ...]]) -> None:
     """ "test largest subset order"""
-    assert list(SymmetryTranslator.largest_subset(input_)) == output
+    assert list(largest_subset(input_)) == output

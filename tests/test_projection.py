@@ -48,6 +48,22 @@ blockedy(Z,W,T) :- at(X,Y,T); blockedx(Z,W,T); minom(Z,W,T); wallside(Z,W,(0,((Y
             """#program base.
 blockedy(Z,W,T) :- at(X,Y,T); blockedx(Z,W,T); minom(Z,W,T); wallside(Z,W,(0,((Y-W)/|(Y-W)|))); not Y = W.""",
         ),
+        (
+            """
+p(A,D) :- q(A,B,_), r(A,B), not t(B).
+            """,
+            [],
+            """#program base.
+p(A,D) :- q(A,B,_); r(A,B); not t(B).""",
+        ),
+        (
+            """
+p(A,D) :- q(A,B,C); r(A,D); t(B,D).
+            """,
+            [],
+            """#program base.
+p(A,D) :- q(A,B,C); r(A,D); t(B,D).""",
+        ),
     ),
 )
 def test_projection_translation(lhs: str, input_predicates: list[Predicate], rhs: str) -> None:

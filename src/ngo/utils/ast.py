@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain, combinations, product
-from typing import Any, Callable, Collection, Iterable, Iterator, NamedTuple, Sequence, TypeVar
+from typing import Any, Callable, Collection, Iterable, Iterator, NamedTuple, Optional, Sequence, TypeVar
 
 import networkx as nx
 from clingo import SymbolType
@@ -627,7 +627,9 @@ def collect_binding_information_head(head: AST, body: list[AST]) -> tuple[set[AS
     return need_bound_variables, no_bound_needed
 
 
-def collect_binding_information_body(stmlist: Iterable[AST], prebound: set[AST] = None) -> tuple[set[AST], set[AST]]:
+def collect_binding_information_body(
+    stmlist: Iterable[AST], prebound: Optional[set[AST]] = None
+) -> tuple[set[AST], set[AST]]:
     """given a list of body literal
     returns a set of Variables that it binds
     returns a set of Variables that it needs to be bounded"""
