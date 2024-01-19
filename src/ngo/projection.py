@@ -86,6 +86,10 @@ class ProjectionTranslator:
         rest_aggs = any(map(lambda x: len(collect_ast(x, "BodyAggregate")) > 0, rest))
         if new_aggs and rest_aggs:
             return None
+
+        # only split if new rule has less head variables than old rule
+        if len(t) >= len(global_vars_inside_head(stm.head)):
+            return None
         return sorted(t)
 
     def project_rule(self, stm: AST) -> list[AST]:

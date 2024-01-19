@@ -1,6 +1,6 @@
 1.0.0
  - release on Pypi
- - add projection trait (disabled by default)
+ - add projection trait
  - bugfixes
 0.0.9:
  - simplified logging, also usable via API of python logging class
