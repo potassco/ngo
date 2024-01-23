@@ -118,6 +118,11 @@ false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B
 __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
 :~ 2 <= #sum+ { 1,W: __aux_1(W) }. [3@1]""",
         ),
+        (
+            "#false :- not positive(C1); not positive(C2); edge(P,C1); edge(P,C2); C1 != C2; leaf(C1); leaf(C2).",
+            """#program base.
+#false :- not positive(C1); not positive(C2); edge(P,C1); edge(P,C2); leaf(C1); leaf(C2); C1 < C2.""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:

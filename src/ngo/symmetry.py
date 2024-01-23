@@ -37,6 +37,7 @@ from ngo.utils.ast import (
     collect_ast,
     global_vars_inside_body,
     global_vars_inside_head,
+    is_predicate,
     largest_subset,
     replace_simple_assignments,
 )
@@ -194,13 +195,14 @@ class SymmetryTranslator:
         potential_equalities: list[set[AST]],
         potential_strict_inequalities: list[dict[int, list[AST]]],
         potential_nstrict_inequalities: list[dict[int, list[AST]]],
-        lits: list[AST],
+        lits_param: list[AST],
         global_vars: set[AST],
         in_aggregate: bool,
     ) -> Iterator[SymmetryBundle]:
         for index_subset in largest_subset(range(0, len(potential_equalities))):
             used_variables: set[AST] = set()
             used_uneq_variables: dict[int, set[AST]] = defaultdict(set)
+            lits: list[AST] = list(lits_param)
             for index in index_subset:
                 for lit in potential_equalities[index]:
                     lits.remove(lit)
@@ -339,12 +341,7 @@ class SymmetryTranslator:
         can contain subsets, ordered by size"""
         symbols: list[AST] = []
         for lit in body:
-            if (
-                lit.ast_type == ASTType.Literal
-                and lit.sign == Sign.NoSign
-                and lit.atom.ast_type == ASTType.SymbolicAtom
-                and lit.atom.symbol.ast_type == ASTType.Function
-            ):
+            if is_predicate(lit):
                 symbols.append(lit)
         for subset in largest_subset(symbols):
             if len(subset) <= 1:
