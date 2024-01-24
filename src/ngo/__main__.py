@@ -3,12 +3,19 @@ The main entry point for the application.
 """
 import logging
 import sys
+from functools import partial
+from typing import Callable
 
+from clingo import MessageCode
 from clingo.ast import AST, parse_files
 
 from ngo.api import optimize
 from ngo.utils.globals import auto_detect_input, auto_detect_output
 from ngo.utils.parser import get_parser
+
+
+def _wrap_logger(logger: Callable[[str], None], _: MessageCode, message: str) -> None:
+    logger(message)
 
 
 def main() -> None:
@@ -21,7 +28,7 @@ def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=args.log)
 
     prg: list[AST] = []
-    parse_files(["-"], prg.append, logger=logging.warning)
+    parse_files(["-"], prg.append, logger=partial(_wrap_logger, logging.warning))
     ### create general tooling and analyzing classes
     if args.input_predicates == "auto":
         args.input_predicates = auto_detect_input(prg)

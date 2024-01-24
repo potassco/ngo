@@ -260,17 +260,17 @@ class SymmetryTranslator:
         inequalities = SymmetryTranslator._inequalities(body)
 
         # for each equality
-        #     check if it is not a subset of an already existing potential equality
+        #     check if it is not overlapping an already existing potential equality
         #     do all tests and collect a set of potential equalities
         #     Then do a crosscheck of the uneqal variables of all of them
         #     None of them may occur outside
         #     If they occur outside, only take a subset of the potential equalities
         # Group them together by shared variables
-        def issubset(sub: set[Any], dom: set[Any]) -> bool:
-            return sub.issubset(dom)
+        def intersects(sub: set[Any], dom: set[Any]) -> bool:
+            return len(sub.intersection(dom)) > 0
 
         for equality in SymmetryTranslator._all_equal_symbols(body):
-            if any(map(partial(issubset, set(equality)), potential_equalities)):
+            if any(map(partial(intersects, set(equality)), potential_equalities)):
                 continue
             used_inequalities = []
             fine = True

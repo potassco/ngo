@@ -123,6 +123,11 @@ __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
             """#program base.
 #false :- not positive(C1); not positive(C2); edge(P,C1); edge(P,C2); leaf(C1); leaf(C2); C1 < C2.""",
         ),
+        (
+            "#false :- edge(X,Y); edge(X,U); edge(A,B); edge(A,M); Y < U; B < M; X < A; not U < B.",
+            """#program base.
+#false :- edge(X,Y); edge(X,U); edge(A,B); edge(A,M); Y < U; B < M; X < A; not U < B.""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
