@@ -184,7 +184,9 @@ class MinMaxAggregator:
         weight = elem.terms[0]
 
         ret = list(self.domain_predicates.create_domain(new_predicate))
-        anon = AnnotatedPredicate(new_predicate, tuple(range(0, new_predicate.arity)))
+        anon = AnnotatedPredicate(
+            self.domain_predicates.domain_predicate(new_predicate), tuple(range(0, new_predicate.arity))
+        )
         ret.extend(self.domain_predicates.create_next_pred_for_annotated_pred(anon, 0))
         # create my own chaining rules
 
@@ -411,7 +413,9 @@ class MinMaxAggregator:
         # variables that are used inside but also outside of the aggregate
         rest_vars_sorted: list[AST] = sorted(rest_vars)
 
-        self.domain_predicates.add_domain_rule(head, [list(chain(elem.condition, lits_with_vars))])
+        self.domain_predicates.add_domain_rule(
+            Predicate(new_name, 1), [(head, list(chain(elem.condition, lits_with_vars)))]
+        )
         if not self.domain_predicates.has_domain(new_predicate):
             log.info(
                 f"Cannot translate {loc2str(agg.location)} as I cannot infer "

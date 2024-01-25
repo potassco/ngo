@@ -128,6 +128,35 @@ __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
             """#program base.
 #false :- edge(X,Y); edge(X,U); edge(A,B); edge(A,M); Y < U; B < M; X < A; not U < B.""",
         ),
+        (
+            """
+  node((1..n)).
+  root(1).
+  { edge(X,Y): node(Y) } :- node(X).
+  1 = { decision(X,A): attribute(A) } :- node(X); not leaf(X).
+  attribute(A) :- holds(_,A).
+  leaf(N) :- node(N); not edge(N,_).
+  { positive(N) } :- leaf(N).
+  path(X,E) :- example(E,_); root(X).
+  path(C1,E) :- path(X_P,E); decision(X_P,A); holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2. 
+  path(C2,E) :- path(X_P,E); decision(X_P,A); not holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2.
+  #false :- path(C1,E); path(C2,E); decision(X,A); decision(Y,A); X != Y; C1 != C2.""",
+            """#program base.
+node((1..n)).
+root(1).
+{ edge(X,Y): node(Y) } :- node(X).
+1 = { decision(X,A): attribute(A) } :- node(X); not leaf(X).
+attribute(A) :- holds(_,A).
+leaf(N) :- node(N); not edge(N,_).
+{ positive(N) } :- leaf(N).
+path(X,E) :- example(E,_); root(X).
+path(C1,E) :- path(X_P,E); decision(X_P,A); holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2.
+path(C2,E) :- path(X_P,E); decision(X_P,A); not holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2.
+__dom_edge(X,Y) :- node(Y); node(X).
+__dom_leaf(N) :- node(N); not __dom_edge(N,_).
+__dom_decision(X,A) :- attribute(A); node(X); not __dom_leaf(X).
+#false :- __dom_decision(_,A); 2 <= #count { X: decision(X,A) }; path(_,E); 2 <= #count { C1: path(C1,E) }.""",
+        ),
     ),
 )
 def test_symmetry(prg: str, converted_prg: str) -> None:
