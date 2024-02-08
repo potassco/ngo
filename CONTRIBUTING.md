@@ -28,7 +28,7 @@ Before you ask a question, it is best to search for existing [issues](https://gi
 
 If you then still feel the need to ask a question and need clarification, we recommend the following:
 
-- [Subscribe](https://sourceforge.net/projects/potassco/lists/potassco-users) to our mailing list on SourceForge or open an [issue](https://github.com/potassco/clingo/issues/new) on GitHub.
+- [Subscribe](https://sourceforge.net/projects/potassco/lists/potassco-users) to our mailing list on SourceForge or open an [issue](https://github.com/potassco/ngo/issues/new) on GitHub.
 - Provide as much context as you can about what you're running into.
 - We can best help you if you provide executable code showcasing your problem.
 
