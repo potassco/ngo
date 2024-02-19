@@ -8,7 +8,7 @@ ngo is a program and python library to optimize non ground logic ASP encodings f
 You can install the current development version using pip
 
 ```shell
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ngo
+pip install ngo
 ```
 
 # Quickstart - Command line version

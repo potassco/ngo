@@ -10,7 +10,7 @@ if "GITHUB_ACTIONS" in os.environ:
     PYTHON_VERSIONS = ["3.11"]
     EDITABLE_TESTS = False
 
-EXTRA_INSTALL = ["--extra-index-url", "https://test.pypi.org/simple/"]
+EXTRA_INSTALL = []
 
 @nox.session
 def format(session):
