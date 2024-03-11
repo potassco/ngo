@@ -22,7 +22,6 @@ def main() -> None:
     """
     Run the main function.
     """
-    # pylint: disable=too-many-branches # will be refactored
     parser = get_parser()
     args = parser.parse_args()
     logging.basicConfig(stream=sys.stderr, level=args.log)

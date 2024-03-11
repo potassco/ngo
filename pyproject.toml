@@ -5,6 +5,44 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "ngo"
+authors = [
+    { name = "Max Ostrowski", email = "max.ostrowski@potassco.com" }
+]
+description = "Optimizes non ground logic programs."
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dynamic = [ "version" ]
+readme = "README.md"
+
+dependencies = [
+    "clingo>=5.7.1,<6.0",
+    "networkx>=3.1",
+    "sympy>=1.12",
+]
+
+[project.urls]
+Hompage = "https://potassco.org/ngo"
+
+[project.optional-dependencies]
+format = [ "black", "isort"]
+lint = [ "pylint", "ngo[test]" ]
+typecheck = [ "types-setuptools", "mypy", "networkx-stubs", "ngo[test]" ]
+test = [ "pytest", "coverage" ]
+doc = [ "pdoc" ]
+dev = [ "ngo[test,typecheck,lint,format,doc]", "pre-commit" ]
+
+[project.scripts]
+ngo = "ngo.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+version_scheme = "python-simplified-semver"
+local_scheme = "no-local-version"
+
 [tool.isort]
 profile = "black"
 line_length = 120

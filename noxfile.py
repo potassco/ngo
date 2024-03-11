@@ -2,7 +2,7 @@ import os
 
 import nox
 
-nox.options.sessions = "lint_ruff", "lint_pylint", "doc", "typecheck", "test"
+nox.options.sessions = "lint", "doc", "typecheck", "test"
 
 EDITABLE_TESTS = True
 PYTHON_VERSIONS = None
@@ -37,14 +37,8 @@ def doc(session):
 
 
 @nox.session
-def lint_ruff(session):
-    session.install(*EXTRA_INSTALL, "-e", ".[lint_ruff]")
-    session.run("ruff", "check", "src", "tests")
-
-
-@nox.session
-def lint_pylint(session):
-    session.install(*EXTRA_INSTALL, "-e", ".[lint_pylint]")
+def lint(session):
+    session.install(*EXTRA_INSTALL, "-e", ".[lint]")
     session.run("pylint", "ngo", "tests")
 
 

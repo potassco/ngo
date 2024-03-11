@@ -1,3 +1,5 @@
+
+ - change setup to pyproject.toml only
 1.0.0
  - update to clingo release 5.7.1
 0.0.11
