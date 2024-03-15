@@ -192,9 +192,9 @@ This means that:
 a :- X = #sum { 1,a : a }, Y=#sum{ 1,b: b }, X+Y=2.
 ```
 gets replaces by something similar to
-```
-a :- 0 = #sum { 1,a: a; 1,b: b; -2 }.
 ```Prolog
+a :- 0 = #sum { 1,a: a; 1,b: b; -2 }.
+```
 This can reduce grounding drastically and might have an effect on solving.
 
 ## inline
