@@ -9,6 +9,7 @@ from clingo.ast import (
     ASTType,
     BodyAggregate,
     BodyAggregateElement,
+    BooleanConstant,
     Comparison,
     ComparisonOperator,
     Function,
@@ -18,7 +19,7 @@ from clingo.ast import (
     SymbolicTerm,
     Variable,
 )
-from clingo.symbol import Number
+from clingo.symbol import Infimum, Number, Supremum
 
 from ngo.utils.ast import (
     LOC,
@@ -30,6 +31,7 @@ from ngo.utils.ast import (
     is_conditional,
     is_predicate,
     replace_var_name,
+    rhs2lhs_comparison,
     transform_ast,
 )
 from ngo.utils.globals import AUX_VAR, UniqueVariables
@@ -157,6 +159,48 @@ def _convert_old_agg(agg: AST, unqiue_vars: UniqueVariables) -> AST:
     return BodyAggregate(agg.location, agg.left_guard, AggregateFunction.Sum, new_elements, agg.right_guard)
 
 
+def remove_unecessary_bounds(prg: Iterable[AST]) -> list[AST]:
+    """remove all #inf <= agg and agg =< #sup"""
+
+    newprg: list[AST] = []
+
+    def replace(bodyagg: AST) -> AST:
+        """remove all #inf <= agg and agg =< #sup"""
+        if bodyagg.left_guard and bodyagg.left_guard.term.ast_type == ASTType.SymbolicTerm:
+            if (
+            bodyagg.left_guard.comparison == ComparisonOperator.LessEqual
+            and bodyagg.left_guard.term.symbol == Infimum
+            ) or (
+                bodyagg.left_guard.comparison == ComparisonOperator.GreaterEqual
+                and bodyagg.left_guard.term.symbol == Supremum
+            ):
+                bodyagg = bodyagg.update(left_guard=None)
+        if bodyagg.right_guard and bodyagg.right_guard.term.ast_type == ASTType.SymbolicTerm:
+            if (
+                bodyagg.right_guard.comparison == ComparisonOperator.LessEqual
+                and bodyagg.right_guard.term.symbol == Supremum
+            ) or (
+                bodyagg.right_guard.comparison == ComparisonOperator.GreaterEqual
+                and bodyagg.right_guard.term.symbol == Infimum
+            ):
+                bodyagg = bodyagg.update(right_guard=None)
+
+        if bodyagg.right_guard and bodyagg.left_guard is None:
+            bodyagg = bodyagg.update(
+                left_guard=Guard(rhs2lhs_comparison(bodyagg.right_guard.comparison), bodyagg.right_guard.term),
+                right_guard=None,
+            )
+
+        if bodyagg.left_guard is None and bodyagg.right_guard is None:
+            return Literal(LOC, Sign.NoSign, BooleanConstant(True))
+
+        return bodyagg
+
+    for stm in prg:
+        newprg.append(transform_ast(stm, "BodyAggregate", replace))
+    return newprg
+
+
 def replace_old_aggregates(prg: Iterable[AST]) -> list[AST]:
     """replace all oldstyle Aggregate`s in the body by BodyAggregate Sum
     Also replace body count aggregates with sum aggregates with weight of 1"""
@@ -263,6 +307,7 @@ def exline_arithmetic(prg: list[AST]) -> list[AST]:
 def normalize(prg: Iterable[AST]) -> list[AST]:
     """
     normalize a logic program by
+     - remove unecessary #inf/#sup bounds
      - remove arithmetics from head literals into body assignments
      - replace old style aggregates with new ones
      - replace nary operators with binary operators
@@ -270,6 +315,7 @@ def normalize(prg: Iterable[AST]) -> list[AST]:
     """
     new_prg: list[AST] = []
     prg = replace_old_aggregates(prg)
+    prg = remove_unecessary_bounds(prg)
     for stm in prg:
         new_prg.append(expand_comparisons(stm))
     prg, new_prg = new_prg, []

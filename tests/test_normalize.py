@@ -1,4 +1,5 @@
 """ test ast utility functions """
+
 import pytest
 from clingo.ast import AST, parse_string
 
@@ -35,6 +36,13 @@ a :- b(X); X = #sum { Y: Y = (1..X) }.""",
 """,
             """#program base.
 #false :- N != #sum { 1,0,bend(AUX): bend(AUX), AUX = ((T+1)..(T1-1)) }; bends(T,T1,N).""",
+        ),
+        (
+            """
+#false :- #inf <= { bend(((T+1)..(T1-1))) } <= #sup; a.
+""",
+            """#program base.
+#false :- #true; a.""",
         ),
     ],
 )

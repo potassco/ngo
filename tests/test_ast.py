@@ -1,4 +1,5 @@
 """ test ast utility functions """
+
 import pytest
 from clingo.ast import AST, ASTType, ComparisonOperator, parse_string
 
@@ -379,21 +380,21 @@ a(Z,Y) :- b(X), c(Y), X = Y = Z > 2.
         ),
         (
             """
-a(X,Y) :- b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A}.
+a(X,Y) :- b(X), c(Y), X = Y, 1 <= #sum {A : dom(A,B), B = A}.
 """,
-            """a(X,X) :- b(X); c(X); #sum { A: dom(A,A) }.""",
+            """a(X,X) :- b(X); c(X); 1 <= #sum { A: dom(A,A) }.""",
         ),
         (
             """
-a(X,Y) :- b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
+a(X,Y) :- b(X), c(Y), X = Y, 1 <= #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
 """,
-            """a(X,X) :- b(X); c(X); #sum { A: dom(A,A); A,B: foo(A,B) }.""",
+            """a(X,X) :- b(X); c(X); 1 <= #sum { A: dom(A,A); A,B: foo(A,B) }.""",
         ),
         (
             """
-a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
+a(X,Y) :- bar(A,B), b(X), c(Y), X = Y, 1 <= #sum {A : dom(A,B), B = A; A,B : foo(A,B)}.
 """,
-            """a(X,X) :- bar(A,B); b(X); c(X); #sum { A: dom(A,A); A,B: foo(A,B) }.""",
+            """a(X,X) :- bar(A,B); b(X); c(X); 1 <= #sum { A: dom(A,A); A,B: foo(A,B) }.""",
         ),
         (
             """

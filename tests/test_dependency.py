@@ -1,4 +1,5 @@
 """ testing the dependency graph calculations """
+
 import pytest
 from clingo.ast import AST, Sign, Transformer, parse_string
 
@@ -128,7 +129,7 @@ def test_positive_head(rule: str, result: list[SignedPredicate]) -> None:
         ),
         (
             """
-            b :- #sum{1 : a}.
+            b :-  1 <= #sum{1 : a}.
             c :- b.
             {d} :- c, not d.
             a :- d, not e.

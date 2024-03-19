@@ -1,6 +1,7 @@
 """
 Test cases for main application functionality.
 """
+
 from argparse import ArgumentTypeError
 
 import pytest

@@ -1,4 +1,5 @@
 """ test ast utility functions """
+
 import pytest
 from clingo.ast import AST, Variable, parse_string
 

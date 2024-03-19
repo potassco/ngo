@@ -1,4 +1,5 @@
 """ does math simplification for FO formulas and aggregates"""
+
 import logging
 from collections import OrderedDict, defaultdict
 from itertools import chain
@@ -47,7 +48,6 @@ from sympy import (
     default_sort_key,
     floor,
     groebner,
-    oo,
     ordered,
     solve,
 )
@@ -212,10 +212,9 @@ class Goebner:
             if symbol.type == SymbolType.String:
                 log.info(f"Can't simplify string operation {t}")
                 return None
-            if symbol.type == SymbolType.Infimum:
-                return cast(Expr, -cast(Expr, oo))
-            if symbol.type == SymbolType.Supremum:
-                return cast(Expr, oo)
+            if symbol.type in (SymbolType.Infimum, SymbolType.Supremum):
+                log.info(f"Can't simplify operation including #inf/#sup {t}")
+                return None
             if symbol.type == SymbolType.Function:
                 if not symbol.arguments:
                     s = Symbol(str(t), integer=True)
@@ -273,6 +272,8 @@ class Goebner:
         assert agg.ast_type == ASTType.BodyAggregate
         assert agg.left_guard is not None
         ret = []
+        if neg and agg.right_guard:  # don't create a disjunction in case of 2 boundaries negated
+            return None
         nonnegative = None
         if agg.ast_type == ASTType.BodyAggregate and agg.function == AggregateFunction.SumPlus:
             nonnegative = True
@@ -601,7 +602,7 @@ class Goebner:
             free = cast(set[Symbol], set(list(expr.free_symbols)))
             neq_vars = set.intersection(free, self.help_neq_vars.keys())
             if len(neq_vars) > 1:
-                return nothing
+                return nothing  # nocoverage
             if len(neq_vars) == 1:
                 v = list(neq_vars)[0]
                 lexpr = solve(expr, v)

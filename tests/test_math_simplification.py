@@ -1,4 +1,5 @@
 """ test aggregate equality simplifications """
+
 from typing import Optional
 
 import pytest
@@ -31,8 +32,6 @@ to_str = {
         (":- f(X) < 2.", None, None),
         (":- f = 2.", ["2 - f"], None),
         (":- 2*f = 2.", ["2 - 2*f"], None),
-        (":- X < #sup.", ["-oo"], ["_temp < 0"]),
-        (":- X < #inf.", ["oo"], ["_temp < 0"]),
         (':- "X" < 2.', None, None),
         (":- X = 1..2.", None, None),
         (":- X < 2+Y.", ["-_temp + X - Y - 2"], ["_temp < 0"]),
@@ -265,10 +264,10 @@ ac :- a(X); not not X = #sum { 1,b,__agg(0): b; -2,__agg(1) }.""",
         ),
         (
             """
-a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
+a :- a(X); b(Z); Y = #sum{1,b : b} = Z, X = Y-2.
             """,
             """#program base.
-a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
+a :- a((-2+Z)); b(Z); Z = #sum { 1,b: b }.""",
         ),
         (  # sympy seems not to be able to handle abs
             """
@@ -495,6 +494,30 @@ f(X) :- b(X,Y,Z); 0 > (X+(-1*Y)); 0 > (Y+(-1*Z)).""",
             """#program base.
 f(X,Y,(X/Y)) :- b(X,Y).""",
         ),
+        (
+            """{foo(1..10)}.
+:- not #inf <= #sum {Y : foo(Y) } 15.""",
+            """#program base.
+{ foo((1..10)) }.
+#false :- 0 > #sum { (Y*-1),__agg(0): foo(Y); 15,__agg(1) }.""",
+        ),
+        (
+            """{foo(1..10)}.
+:- #inf <= #sum {Y : foo(Y) } 15.""",
+            """#program base.
+{ foo((1..10)) }.
+#false :- 0 <= #sum { (Y*-1),__agg(0): foo(Y); 15,__agg(1) }.""",
+        ),
+        (
+            ":- X < #sup.",
+            """#program base.
+#false :- X < #sup.""",
+        ),
+        (
+            ":- X < #inf.",
+            """#program base.
+#false :- X < #inf.""",
+        ),
     ],
 )
 def test_math_simplification_execute_noopt(rule: str, output: str) -> None:
@@ -661,10 +684,10 @@ a :- a(X); not not X = #sum { 1,b,__agg(0): b; -2,__agg(1) }.""",
         ),
         (
             """
-a :- a(X); b(Z); not Y = #sum{1,b : b} = Z, X = Y-2.
+a :- a(X); b(Z); Y = #sum{1,b : b} = Z, X = Y-2.
             """,
             """#program base.
-a :- a(X); b(Z); not Z = #sum { 1,b: b } = (2+X).""",
+a :- a((Y-2)); b(Z); Y = #sum { 1,b: b } = Z.""",
         ),
         (  # sympy seems not to be able to handle abs
             """

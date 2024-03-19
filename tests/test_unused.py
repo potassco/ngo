@@ -1,4 +1,5 @@
 """ test removal of superseeded literals """
+
 from typing import Optional
 
 import pytest

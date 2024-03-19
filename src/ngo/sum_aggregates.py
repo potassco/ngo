@@ -3,6 +3,7 @@
  with an order encoding, if part of the predicate that is used inside the aggregate
  as an at most one restriction somewhere else in the program.
 """
+
 import logging
 from collections import defaultdict
 from typing import Optional, cast

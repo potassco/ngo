@@ -1,4 +1,5 @@
 """ test translation of min/max aggregates using chaining """
+
 import pytest
 from clingo.ast import AST, parse_string
 

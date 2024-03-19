@@ -1,6 +1,7 @@
 """
 The main entry point for the application.
 """
+
 import logging
 import sys
 from functools import partial

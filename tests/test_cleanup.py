@@ -1,4 +1,5 @@
 """ test removal of superseeded literals """
+
 import pytest
 from clingo.ast import AST, parse_string
 

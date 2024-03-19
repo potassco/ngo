@@ -1,5 +1,7 @@
-
+1.0.1
  - change setup to pyproject.toml only
+ - bugfix #inf/#sup calculation as aggregate boundaries
+ - bugfix aggregates as disjunctions
 1.0.0
  - update to clingo release 5.7.1
 0.0.11

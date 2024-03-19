@@ -1,4 +1,5 @@
 """ test removal of duplicated literals """
+
 import pytest
 from clingo.ast import AST, parse_string
 
@@ -147,13 +148,13 @@ foobar :- __aux_2.""",
             """
 foo :-a, b, c.
 bar :- a, b, d.
-foobar :- {e : a, b}.
+foobar :- 1 {e : a, b}.
             """,
             """#program base.
 __aux_1 :- a; b.
 foo :- c; __aux_1.
 bar :- d; __aux_1.
-foobar :- #sum { 1,0,e: e, __aux_1 }.""",
+foobar :- 1 <= #sum { 1,0,e: e, __aux_1 }.""",
         ),
         (
             """
@@ -338,14 +339,14 @@ foo(E) :- edge(E,From,_,_,_,0); __aux_1(From).
             """
 foo :-a, b, c.
 bar :- a, b, d.
-foobar :- a, b, {e : a, b}.
+foobar :- a, b, 1 {e : a, b}.
             """,
             """#program base.
 __aux_2 :- a; b.
 __aux_1 :- __aux_2.
 foo :- c; __aux_1.
 bar :- d; __aux_1.
-foobar :- __aux_1; #sum { 1,0,e: e, __aux_2 }.""",
+foobar :- __aux_1; 1 <= #sum { 1,0,e: e, __aux_2 }.""",
         ),
         (
             """

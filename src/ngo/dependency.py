@@ -1,6 +1,7 @@
 """
 A module for all predicate dependencies in the AST
 """
+
 from collections import defaultdict
 from functools import cache
 from itertools import chain, product
@@ -111,9 +112,7 @@ class DomainPredicates:
         prg: list[AST] = list(prg)  # type: ignore
         self.domains: dict[Predicate, Predicate] = {}  # key = ("p",3) -> ("dom",3)
         self.domain_rules: dict[Predicate, list[tuple[AST, list[AST]]]] = defaultdict(list)  # atom -> [conditions, ...]
-        self._too_complex: set[
-            Predicate
-        ] = set()  # set of predicates that is too complex to provide a domain computation
+        self._too_complex: set[Predicate] = set()  # predicates that are too complex to provide a domain computation
         self.created_domain: set[Predicate] = set()  # set of predicates where I have already created the domain
         self.__compute_nonstatic_predicates(prg)
         self.__compute_domains(prg)
