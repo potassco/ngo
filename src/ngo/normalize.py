@@ -167,8 +167,8 @@ def remove_unecessary_bounds(prg: Iterable[AST]) -> list[AST]:
         """remove all #inf <= agg and agg =< #sup"""
         if bodyagg.left_guard and bodyagg.left_guard.term.ast_type == ASTType.SymbolicTerm:
             if (
-            bodyagg.left_guard.comparison == ComparisonOperator.LessEqual
-            and bodyagg.left_guard.term.symbol == Infimum
+                bodyagg.left_guard.comparison == ComparisonOperator.LessEqual
+                and bodyagg.left_guard.term.symbol == Infimum
             ) or (
                 bodyagg.left_guard.comparison == ComparisonOperator.GreaterEqual
                 and bodyagg.left_guard.term.symbol == Supremum
@@ -189,9 +189,6 @@ def remove_unecessary_bounds(prg: Iterable[AST]) -> list[AST]:
                 left_guard=Guard(rhs2lhs_comparison(bodyagg.right_guard.comparison), bodyagg.right_guard.term),
                 right_guard=None,
             )
-
-        #if bodyagg.left_guard is None and bodyagg.right_guard is None:
-        #    return Literal(LOC, Sign.NoSign, BooleanConstant(True)) # cant replace atom with literal
 
         return bodyagg
 

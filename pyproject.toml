@@ -24,6 +24,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://potassco.org/ngo"
+Documentation = "https://potassco.org/ngo"
+Repository = "http://github.com/potassco/ngo"
 
 [project.optional-dependencies]
 format = [ "black", "isort"]

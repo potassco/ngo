@@ -42,7 +42,7 @@ a :- b(X); X = #sum { Y: Y = (1..X) }.""",
 #false :- #inf <= { bend(((T+1)..(T1-1))) } <= #sup; a.
 """,
             """#program base.
-#false :- #sum { 1,0,bend(AUX): bend(AUX), AUX = ((T+1)..(T1-1)) }; a.""", # weird corner case, wait for preprocessor
+#false :- #sum { 1,0,bend(AUX): bend(AUX), AUX = ((T+1)..(T1-1)) }; a.""",  # weird corner case, wait for preprocessor
         ),
     ],
 )
