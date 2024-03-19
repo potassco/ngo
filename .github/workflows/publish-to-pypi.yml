@@ -11,6 +11,7 @@ jobs:
     uses: ./.github/workflows/buildwheel.yml
   pypi-publish:
     name: Publish to PyPI
+    needs: [build]
     permissions:
       id-token: write
     environment:
