@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.urls]
-Hompage = "https://potassco.org/ngo"
+Homepage = "https://potassco.org/ngo"
 
 [project.optional-dependencies]
 format = [ "black", "isort"]
