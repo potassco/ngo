@@ -32,7 +32,7 @@ machine(M) :- duration(_,M,_).
 time(T) :- T = (1..X); X = #sum { D,J,M: duration(J,M,D) }.
 { slot(J,M,T): duration(J,M,_) } :- machine(M); time(T).
 #false :- slot(J,M,T); not slot(J,M,(T-1)); duration(J,M,D); time((T+D)); X = (T..((T+D)-1)); not slot(J,M,X).
-__aux_1(__AUX_1) :- duration(_,__AUX_1,_); machine(__AUX_1).
+__aux_1(__AUX_0) :- duration(_,__AUX_0,_); machine(__AUX_0).
 __dom_slot(M,T) :- time(T); __aux_1(M).
 #false :- __dom_slot(M,T); 2 <= #count { J1: slot(J1,M,T) }.
 #false :- duration(J,M,_); not slot(J,M,_).

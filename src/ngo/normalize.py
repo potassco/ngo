@@ -9,7 +9,6 @@ from clingo.ast import (
     ASTType,
     BodyAggregate,
     BodyAggregateElement,
-    BooleanConstant,
     Comparison,
     ComparisonOperator,
     Function,
@@ -191,8 +190,8 @@ def remove_unecessary_bounds(prg: Iterable[AST]) -> list[AST]:
                 right_guard=None,
             )
 
-        if bodyagg.left_guard is None and bodyagg.right_guard is None:
-            return Literal(LOC, Sign.NoSign, BooleanConstant(True))
+        #if bodyagg.left_guard is None and bodyagg.right_guard is None:
+        #    return Literal(LOC, Sign.NoSign, BooleanConstant(True)) # cant replace atom with literal
 
         return bodyagg
 

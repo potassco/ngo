@@ -45,9 +45,9 @@ b(X) :- c(X).
 { a } :- b(X).
             """,
             [],
-            [],
+            [Predicate("a", 0), Predicate("c", 1)],
             """#program base.
-b :- c(X).
+b :- c(_).
 { a } :- b.""",
         ),
         (
@@ -88,10 +88,10 @@ b(X) :- c(X).
 b(X) :- c(X), x.
 { a } :- b(X).
             """,
-            [Predicate("b", 0), Predicate("x", 0)],
+            [Predicate("b", 0), Predicate("x", 0), Predicate("c", 1)],
             [],
             """#program base.
-b1 :- c(X); x.
+b1 :- c(_); x.
 { a } :- b1.""",
         ),
         (
@@ -104,8 +104,8 @@ b(X,X+1,23) :- c(X), x.
             [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X); x; AUX = (X+1).
-b2 :- c(X); x; AUX = (X+1).
+b1 :- c(X); x; _ = (X+1).
+b2 :- c(X); x; _ = (X+1).
 { a } :- b1.
 { a } :- b2.""",
         ),

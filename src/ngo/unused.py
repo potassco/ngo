@@ -71,6 +71,8 @@ class UnusedTranslator:
 
     def analyze_usage(self, prg: list[AST]) -> None:
         """analyze program which predicates positions are used"""
+        self.used = set()
+        self.used_positions = defaultdict(set)
         for stm in prg:
             if stm.ast_type in (
                 ASTType.Rule,
@@ -263,10 +265,16 @@ class UnusedTranslator:
         """
         new_prg: list[AST] = []
         new_prg = exline_arithmetic(prg)
-        prg = new_prg
-        prg = self._anonymize_variables(prg)
-        self.analyze_usage(prg)
-        prg = self.project_unused(prg)
-        prg = self.remove_unused(prg)
-        prg = self.remove_single_copies(prg)
+        while True:
+            prg = new_prg
+            prg = self._anonymize_variables(prg)
+            self.analyze_usage(prg)
+            prg = self.project_unused(prg)
+            prg = self.remove_unused(prg)
+            prg = self.remove_single_copies(prg)
+            if prg == new_prg:
+                break
+            new_prg = prg
+            for stm in prg:
+                print(stm)
         return prg
