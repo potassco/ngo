@@ -1,3 +1,5 @@
+1.0.2
+ - removed errornous print statement that gave different versions of the optimized encoding (BUGFIX)
 1.0.1
  - change setup to pyproject.toml only
  - bugfix #inf/#sup calculation as aggregate boundaries
