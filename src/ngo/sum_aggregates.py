@@ -168,6 +168,7 @@ class SumAggregator:
             if not is_predicate(lit):
                 continue
             symbol = lit.atom.symbol
+            trigger_index = None
             for next_anon_pred in self._atmost_preds:
                 if next_anon_pred.pred == Predicate(symbol.name, len(symbol.arguments)):
                     anon_are_anonymous = True
@@ -179,6 +180,7 @@ class SumAggregator:
                             continue
                         anon_are_anonymous = False
                     if anon_are_anonymous:
+                        assert trigger_index is not None
                         return (lit, trigger_index, next_anon_pred)
         return None
 
