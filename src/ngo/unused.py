@@ -275,6 +275,4 @@ class UnusedTranslator:
             if prg == new_prg:
                 break
             new_prg = prg
-            for stm in prg:
-                print(stm)
         return prg
