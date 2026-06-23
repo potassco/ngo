@@ -24,13 +24,13 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://potassco.org/ngo"
-Documentation = "https://potassco.org/ngo"
+Documentation = "https://potassco.org/ngo/docs"
 Repository = "http://github.com/potassco/ngo"
 
 [project.optional-dependencies]
 format = [ "black", "isort"]
-lint = [ "pylint", "ngo[test]" ]
-typecheck = [ "types-setuptools", "mypy", "networkx-stubs", "ngo[test]" ]
+lint = [ "pylint==3.2.7", "ngo[test]" ]
+typecheck = [ "types-setuptools", "mypy==1.10.1", "networkx-stubs", "sympy==1.12", "ngo[test]" ]
 test = [ "pytest", "coverage" ]
 doc = [ "pdoc" ]
 dev = [ "ngo[test,typecheck,lint,format,doc]", "pre-commit" ]
