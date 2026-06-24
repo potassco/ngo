@@ -37,12 +37,12 @@ jobs:
       - name: install nox
         run: python -m pip install nox
       - name: create docs
-        run: nox -s doc
+        run: nox -s doc && mkdir site && mv docs site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload docs folder
-          path: 'docs'
+          path: "site"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
