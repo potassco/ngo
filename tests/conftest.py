@@ -27,7 +27,7 @@ class DeferredTraitItem(pytest.Item):
 @pytest.hookimpl(tryfirst=True)
 def pytest_pycollect_makemodule(module_path: Path, parent: pytest.Collector):
     """Collect only cleanup tests normally until the other traits are rewritten."""
-    active = {"test_api.py", "test_cleanup.py", "test_detection.py", "test_unused.py"}
+    active = {"test_api.py", "test_cleanup.py", "test_detection.py", "test_symmetry.py", "test_unused.py"}
     if module_path.name.startswith("test_") and module_path.name not in active:
         return DeferredTraitFile.from_parent(parent, path=module_path)
     return None

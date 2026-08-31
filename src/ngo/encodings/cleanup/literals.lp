@@ -1,4 +1,4 @@
-#program cleanup.
+#program cleanup(dirty).
 
 % Remove redundant literals from bodies and element conditions.
 % Representative changes:
@@ -7,15 +7,6 @@
 %   p :- reachable(X), edge(X,_). -> p :- reachable(X).
 % The last case uses implications.lp: if every reachable(X) definition already
 % requires edge(X,_), repeating edge(X,_) at the use site is redundant.
-
-% Candidate literals are direct members of one body or condition list.
-list_item(P,L) :- type(P,"body"), child(P,L), type(L,"body_literal").
-list_item(P,L) :- type(P,"body"), child(P,L), type(L,"conditional_literal").
-list_item(P,L) :- type(P,"condition"), child(P,L), type(L,"literal").
-item_atom(L,A) :- list_item(_,L), type(L,"body_literal"), descendant(L,A), type(A,"symbolic_atom").
-item_atom(L,A) :- list_item(_,L), type(L,"literal"), descendant(L,A), type(A,"symbolic_atom").
-item_sign(L,neg) :- item_atom(L,_), descendant(L,N), leaf_text(N,"not").
-item_sign(L,pos) :- item_atom(L,_), #false : descendant(L,N), leaf_text(N,"not").
 
 % Equal predicates supersede exact copies; an underscore on the right is a wildcard.
 % Consequently q(X) supersedes both a duplicate q(X) and the weaker q(_).

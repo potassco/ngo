@@ -1,4 +1,4 @@
-#program cleanup.
+#program cleanup(dirty).
 
 % Infer implications that are true for every definition of a predicate.
 % This module only detects facts used by literals.lp; it performs no edits.

@@ -65,8 +65,9 @@ output_predicate(Name,Arity) :- detect_output, detected_signature_name(Signature
 output_predicate(Name,Arity) :- detect_output, type(Show,"show_term"), detected_body(Show,Body),
                                 descendant(Body,Atom), atom_signature(Atom,Name,Arity).
 
-#program detect.
+#program detect(dirty).
 
 % Detection is stable in one pass because it emits no Aspen edits.
 active_stage("detect").
+stage_dirty(dirty).
 stage_busy :- #false.

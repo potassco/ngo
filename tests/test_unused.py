@@ -381,3 +381,26 @@ def test_unused_translation_fixpoint(
     ast = optimize_unused(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, ast))
     assert rhs == output
+
+
+def test_translation_restarts_after_changed_final_stage() -> None:
+    """A later-stage edit starts a new pass through the complete pipeline."""
+    ast: list[AST] = []
+    parse_string("alias(X) :- target(X). result(X) :- alias(X), target(X).", ast.append)
+
+    ast = optimize(
+        ast,
+        [Predicate("target", 1)],
+        [Predicate("result", 1)],
+        cleanup=True,
+        unused=True,
+        symmetry=False,
+        duplication=False,
+        minmax_chains=False,
+        sum_chains=False,
+        math=False,
+        inline=False,
+        projection=False,
+    )
+
+    assert "\n".join(map(str, ast)) == "#program base.\nresult(X) :- target(X)."

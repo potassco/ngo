@@ -1,4 +1,4 @@
-#program cleanup.
+#program cleanup(dirty).
 
 % Simplify boolean constants in rules, conditions, and aggregate elements.
 % Representative changes:

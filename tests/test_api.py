@@ -12,8 +12,8 @@ def test_predicate_string() -> None:
 
 def test_unimplemented_trait() -> None:
     """Traits deferred by ngo2 fail explicitly when enabled."""
-    with pytest.raises(NotImplementedError, match="symmetry"):
-        optimize([], [], [], cleanup=False, unused=False)
+    with pytest.raises(NotImplementedError, match="minmax_chains"):
+        optimize([], [], [], cleanup=False, unused=False, symmetry=False)
 
 
 def test_no_enabled_stages() -> None:

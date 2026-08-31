@@ -6,7 +6,7 @@ from typing import Iterable, Sequence
 import tree_sitter_clingo
 from aspen.tree import AspenTree
 from clingo.ast import AST, ASTType, parse_string
-from clingo.symbol import String, Symbol
+from clingo.symbol import Number, String, Symbol
 from tree_sitter import Language
 
 from ngo.api import Predicate
@@ -18,6 +18,7 @@ COMMON_ENCODINGS = (
     ENCODING_DIR / "common" / "stages.lp",
     ENCODING_DIR / "common" / "tree.lp",
     ENCODING_DIR / "common" / "predicates.lp",
+    ENCODING_DIR / "common" / "literals.lp",
 )
 ENCODING_BUNDLES = {
     "cleanup": (
@@ -27,6 +28,7 @@ ENCODING_BUNDLES = {
         ENCODING_DIR / "cleanup" / "main.lp",
     ),
     "detect": (ENCODING_DIR / "detect" / "main.lp",),
+    "symmetry": (ENCODING_DIR / "symmetry" / "main.lp",),
     "unused": (
         ENCODING_DIR / "unused" / "analysis.lp",
         ENCODING_DIR / "unused" / "main.lp",
@@ -68,7 +70,8 @@ class Translator:
             f"stage_successor({String(current)},{String(next_stage)})."
             for current, next_stage in zip(self.stages, self.stages[1:])
         )
-        return "\n".join((*facts, *outputs, *detection, *successors))
+        boundaries = (f"first_stage({String(self.stages[0])}).", f"last_stage({String(self.stages[-1])}).")
+        return "\n".join((*facts, *outputs, *detection, *successors, *boundaries))
 
     def execute(self, program: Iterable[AST]) -> list[AST]:
         """Run configured stages and parse Aspen's transformed source back to ASTs."""
@@ -76,7 +79,7 @@ class Translator:
         tree = AspenTree(default_language=CLINGO_LANGUAGE)
         source_id = tree.parse(source)
         encodings = [*COMMON_ENCODINGS, *(path for stage in self.stages for path in ENCODING_BUNDLES[stage])]
-        initial_program: tuple[str, Sequence[Symbol]] = (self.stages[0], ())
+        initial_program: tuple[str, Sequence[Symbol]] = (self.stages[0], (Number(0),))
         tree.transform(meta_files=encodings, meta_string=self._metadata(), initial_program=initial_program)
 
         transformed: list[AST] = []

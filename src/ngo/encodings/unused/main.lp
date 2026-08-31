@@ -1,4 +1,4 @@
-#program unused.
+#program unused(dirty).
 
 % Schedule the unused transformations, one edit or substage at a time:
 %   1. anonymize variables used only once;
@@ -7,6 +7,7 @@
 %   4. project argument positions that callers always ignore.
 % Alias elimination runs before projection so its positional mapping is intact.
 active_stage("unused").
+stage_dirty(dirty).
 
 % Variables occurring once in a statement body carry no information.
 % Example: p(X) :- q(X,Y). -> p(X) :- q(X,_).
@@ -56,10 +57,10 @@ selected_name(Name,Arity,NewName) :- name_candidate(Name,Arity,NewName),
 earlier_alias(Rule) :- alias_rule(Rule,_,_,_,_), alias_rule(Earlier,_,_,_,_), Earlier < Rule.
 selected_alias(Name,Arity) :- alias_rule(Rule,Name,Arity,_,_), not earlier_alias(Rule).
 
-aspen(next_program("unused_inline",(Name,Arity))) :- selected_alias(Name,Arity),
+aspen(next_program("unused_inline",(Name,Arity,dirty))) :- selected_alias(Name,Arity),
                                                      not has_anonymize, not has_dead_rule.
 stage_busy :- selected_alias(Name,Arity), not has_anonymize, not has_dead_rule.
-aspen(next_program("unused_project",(Name,Arity,NewArity,NewName))) :-
+aspen(next_program("unused_project",(Name,Arity,NewArity,NewName,dirty))) :-
     selected_projection(Name,Arity,NewArity), selected_name(Name,NewArity,NewName),
     not has_anonymize, not has_dead_rule, not selected_alias(_,_).
 stage_busy :- selected_projection(Name,Arity,NewArity), selected_name(Name,NewArity,NewName),

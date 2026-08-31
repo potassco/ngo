@@ -26,3 +26,17 @@ child_repr_list(Parent,Child,(Representation,Tail)) :- child(Parent,Child), node
                                                       child_repr_list(Parent,Next,Tail).
 child_repr_list(Parent,Child,(Representation,())) :- child(Parent,Child), node_repr(Child,Representation),
                                                      last_child(Parent,Child).
+
+% Render a tree while replacing one descendant. This supports transformations
+% that must insert surrounding source and replace a nested node atomically.
+substituted_node(Target,Target,Replacement) :- tree_substitution(Target,Replacement).
+substituted_node(Target,Node,node(Node)) :- tree_substitution(Target,_), node(Node), Node != Target,
+                                           not descendant(Node,Target).
+substituted_node(Target,Node,format("{}",(join("",List),()))) :-
+    tree_substitution(Target,_), descendant(Node,Target), first_child(Node,Child),
+    substituted_children(Target,Node,Child,List).
+substituted_children(Target,Parent,Child,(Value,Tail)) :-
+    child(Parent,Child), substituted_node(Target,Child,Value), next_sibling(Child,Next),
+    substituted_children(Target,Parent,Next,Tail).
+substituted_children(Target,Parent,Child,(Value,())) :-
+    child(Parent,Child), substituted_node(Target,Child,Value), last_child(Parent,Child).

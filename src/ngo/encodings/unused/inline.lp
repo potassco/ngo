@@ -1,4 +1,4 @@
-#program unused_inline(name,arity).
+#program unused_inline(name,arity,dirty).
 
 % Inline one private forwarding predicate selected by unused/main.lp.
 % Arguments from each call are substituted into a fresh copy of the forwarding
@@ -77,6 +77,6 @@ aspen(edit(node(Atom),Text)) :- selected_alias_call(Atom), active_alias(Rule,_,B
                                 alias_replacement(Rule,Body,Text).
 % Reparse after each call replacement. Remove the forwarding rule only when no
 % calls remain, then return to the main unused stage.
-aspen(next_program("unused_inline",(name,arity))) :- selected_alias_call(_).
+aspen(next_program("unused_inline",(name,arity,dirty))) :- selected_alias_call(_).
 aspen(edit(node(Rule),"% ngo: removed")) :- active_alias(Rule,_,_), not alias_call(_).
-aspen(next_program("unused",(,))) :- active_alias(_,_,_), not alias_call(_).
+aspen(next_program("unused",(1,))) :- active_alias(_,_,_), not alias_call(_).

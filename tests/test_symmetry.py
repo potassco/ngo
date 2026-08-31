@@ -3,9 +3,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.normalize import postprocess, preprocess
-from ngo.symmetry import SymmetryTranslator
-from ngo.utils.ast import largest_subset
+from ngo import optimize
 
 
 @pytest.mark.parametrize(
@@ -68,12 +66,12 @@ from ngo.utils.ast import largest_subset
             ":- #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2.",
             """#program base.
 __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
-#false :- 2 <= #sum+ { 1,W: __aux_1(W) }.""",
+#false :- 2 <= #count { W: __aux_1(W) }.""",
         ),
         (
             ":- #count{X,Y : player(P1, X, Y, V1), player(P2, X, Y, V2), P1 != P2, V1 != V2} >= 2.",
             """#program base.
-#false :- 2 <= #sum+ { 1,X,Y: player(P1,X,Y,V1), player(P2,X,Y,V2), V1 != V2, P1 < P2 }.""",
+#false :- 2 <= #count { X,Y: player(P1,X,Y,V1), player(P2,X,Y,V2), V1 != V2, P1 < P2 }.""",
         ),
         (
             "#minimize {a}.",
@@ -87,8 +85,7 @@ f(X) :- node(X), player(P1, X, Y), player(P2, X, Y), P1 != P2.
             """,
             """#program base.
 { player(P,X,Y): name(P), pos(X), pos(Y) }.
-__dom_player(P,X,Y) :- name(P); pos(X); pos(Y).
-f(X) :- node(X); __dom_player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.""",
+f(X) :- node(X); player(_,X,Y); 2 <= #count { P1: player(P1,X,Y) }.""",
         ),
         (
             "false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y != B.",
@@ -117,7 +114,7 @@ false :- sudoku(X,Y,M); sudoku(A,B,M); c1(Y); c1(B); r1(X); r1(A); X != A; Y < B
             ":~ #count{W : match(M1,W), match(M2,W), match(M3,W), M1 != M2, M1 != M3, M2 != M3} >= 2. [3@1]",
             """#program base.
 __aux_1(W) :- match(_,W); 3 <= #count { M1: match(M1,W) }.
-:~ 2 <= #sum+ { 1,W: __aux_1(W) }. [3@1]""",
+:~ 2 <= #count { W: __aux_1(W) }. [3@1]""",
         ),
         (
             "#false :- not positive(C1); not positive(C2); edge(P,C1); edge(P,C2); C1 != C2; leaf(C1); leaf(C2).",
@@ -153,10 +150,7 @@ leaf(N) :- node(N); not edge(N,_).
 path(X,E) :- example(E,_); root(X).
 path(C1,E) :- path(X_P,E); decision(X_P,A); holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2.
 path(C2,E) :- path(X_P,E); decision(X_P,A); not holds(E,A); edge(X_P,C1); edge(X_P,C2); C1 > C2.
-__dom_edge(X,Y) :- node(Y); node(X).
-__dom_leaf(N) :- node(N); not __dom_edge(N,_).
-__dom_decision(X,A) :- attribute(A); node(X); not __dom_leaf(X).
-#false :- __dom_decision(_,A); 2 <= #count { X: decision(X,A) }; path(_,E); 2 <= #count { C1: path(C1,E) }.""",
+#false :- path(_,E); 2 <= #count { C1: path(C1,E) }; decision(_,A); 2 <= #count { X: decision(X,A) }.""",
         ),
     ),
 )
@@ -164,40 +158,18 @@ def test_symmetry(prg: str, converted_prg: str) -> None:
     """test symmetry breaking on whole programs"""
     ast: list[AST] = []
     parse_string(prg, ast.append)
-    ast = preprocess(ast)
-    st = SymmetryTranslator(ast, [])
-    ast = st.execute(ast)
-    ast = postprocess(ast)
+    ast = optimize(
+        ast,
+        [],
+        [],
+        cleanup=False,
+        unused=False,
+        duplication=False,
+        minmax_chains=False,
+        sum_chains=False,
+        math=False,
+        inline=False,
+        projection=False,
+    )
     output = "\n".join(map(str, ast))
     assert converted_prg == output
-
-
-@pytest.mark.parametrize(
-    "input_, output",
-    [
-        (
-            (1, 2, 3, 4),
-            [
-                (1, 2, 3, 4),
-                (2, 3, 4),
-                (1, 3, 4),
-                (1, 2, 4),
-                (1, 2, 3),
-                (3, 4),
-                (2, 4),
-                (2, 3),
-                (1, 4),
-                (1, 3),
-                (1, 2),
-                (4,),
-                (3,),
-                (2,),
-                (1,),
-                tuple(),
-            ],
-        )
-    ],
-)
-def test_largest_subset(input_: tuple[int, ...], output: list[tuple[int, ...]]) -> None:
-    """ "test largest subset order"""
-    assert list(largest_subset(input_)) == output

@@ -1,4 +1,4 @@
-#program unused_project(name,arity,new_arity,new_name).
+#program unused_project(name,arity,new_arity,new_name,dirty).
 
 % Rewrite one occurrence of a selected predicate at a time, retaining only the
 % positions recorded by used_position/3 and optionally assigning a collision-free
@@ -38,5 +38,5 @@ project_text(Atom,format("{}({})",(new_name,(join(",",List),())))) :- selected_p
 aspen(edit(node(Atom),Text)) :- project_text(Atom,Text).
 % Stay in this parameterized substage until every occurrence has been changed,
 % then return to unused analysis to discover the next possible transformation.
-aspen(next_program("unused_project",(name,arity,new_arity,new_name))) :- selected_project_atom(_).
-aspen(next_program("unused",(,))) :- not selected_project_atom(_).
+aspen(next_program("unused_project",(name,arity,new_arity,new_name,dirty))) :- selected_project_atom(_).
+aspen(next_program("unused",(1,))) :- not selected_project_atom(_).
