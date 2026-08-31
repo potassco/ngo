@@ -1,28 +1,26 @@
-""" ngo lets you optimize your unground ASP encoding """
+"""Public API for optimizing non-ground ASP programs."""
 
-from copy import deepcopy
+from dataclasses import dataclass
 from typing import Iterable
 
 from clingo.ast import AST
 
-from ngo.cleanup import CleanupTranslator
-from ngo.inline import InlineTranslator
-from ngo.literal_duplication import LiteralDuplicationTranslator
-from ngo.math_simplification import MathSimplification
-from ngo.minmax_aggregates import MinMaxAggregator
-from ngo.normalize import exline_arithmetic, postprocess, preprocess
-from ngo.projection import ProjectionTranslator
-from ngo.sum_aggregates import SumAggregator
-from ngo.symmetry import SymmetryTranslator
-from ngo.unused import UnusedTranslator
-from ngo.utils.ast import Predicate
+
+@dataclass(frozen=True, order=True)
+class Predicate:
+    """An immutable predicate signature."""
+
+    name: str
+    arity: int
+
+    def __str__(self) -> str:
+        return f"{self.name}/{self.arity}"
 
 
-# pylint: disable=too-many-arguments
 def optimize(
     prg: Iterable[AST],
-    input_predicates: list[Predicate],
-    output_predicates: list[Predicate],
+    input_predicates: list[Predicate] | None,
+    output_predicates: list[Predicate] | None,
     cleanup: bool = True,
     unused: bool = True,
     duplication: bool = False,
@@ -55,49 +53,23 @@ def optimize(
     There is a selection of different traits available that can be turned on or off.
     Please see [Traits](#traits) for a detailed description.
     """
-    input_: list[AST] = preprocess(prg)
-    while True:
-        old = deepcopy(input_)
-        ### call transformers
-        if cleanup:
-            clt = CleanupTranslator(input_predicates)
-            input_ = clt.execute(input_)
+    unfinished = {
+        "duplication": duplication,
+        "symmetry": symmetry,
+        "minmax_chains": minmax_chains,
+        "sum_chains": sum_chains,
+        "math": math,
+        "inline": inline,
+        "projection": projection,
+    }
+    enabled = [name for name, value in unfinished.items() if value]
+    if enabled:
+        raise NotImplementedError(f"Traits not implemented in ngo2: {', '.join(enabled)}")
 
-        if unused:
-            utr = UnusedTranslator(input_, input_predicates, output_predicates)
-            input_ = utr.execute(input_)
+    stages = [name for name, enabled in (("cleanup", cleanup), ("unused", unused)) if enabled]
+    if not stages:
+        return list(prg)
 
-        if duplication:
-            ldt = LiteralDuplicationTranslator(input_, input_predicates)
-            input_ = ldt.execute(input_)
+    from ngo.translate import Translator
 
-        if symmetry:
-            trans = SymmetryTranslator(input_, input_predicates)
-            input_ = trans.execute(input_)
-
-        if minmax_chains:
-            mma = MinMaxAggregator(input_, input_predicates)
-            input_ = mma.execute(input_)
-
-        if sum_chains:
-            sagg = SumAggregator(input_, input_predicates)
-            input_ = sagg.execute(input_)
-
-        if math:
-            mmath = MathSimplification(input_)
-            input_ = mmath.execute(input_)
-
-        if inline:
-            inl = InlineTranslator(input_, input_predicates, output_predicates)
-            input_ = inl.execute(input_)
-
-        if projection:
-            pro = ProjectionTranslator(input_, input_predicates)
-            input_ = pro.execute(input_)
-
-        input_ = exline_arithmetic(input_)
-
-        if input_ == old:
-            break
-    input_ = postprocess(input_)
-    return input_
+    return Translator(input_predicates, output_predicates, stages).execute(prg)

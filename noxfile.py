@@ -11,6 +11,13 @@ if "GITHUB_ACTIONS" in os.environ:
     EDITABLE_TESTS = False
 
 EXTRA_INSTALL = []
+ACTIVE_TESTS = (
+    "tests/test_api.py",
+    "tests/test_cleanup.py",
+    "tests/test_detection.py",
+    "tests/test_unused.py",
+)
+
 
 @nox.session
 def format(session):
@@ -39,15 +46,16 @@ def doc(session):
 @nox.session
 def lint(session):
     session.install(*EXTRA_INSTALL, "-e", ".[lint]")
-    session.run("pylint", "ngo", "tests")
+    session.run("pylint", "ngo")
+    session.run("pylint", "--disable=duplicate-code", *ACTIVE_TESTS)
 
 
 @nox.session
 def typecheck(session):
     session.install(*EXTRA_INSTALL, "-e", ".[typecheck]")
     session.run("mypy", "--version")
-    session.run("mypy", "--strict", "--untyped-calls-exclude=networkx", "--untyped-calls-exclude=sympy", "-p", "ngo", "-p", "tests")
-
+    session.run("mypy", "--strict", "-p", "ngo")
+    session.run("mypy", "--strict", *ACTIVE_TESTS)
 
 
 @nox.session(python=PYTHON_VERSIONS)
@@ -55,7 +63,7 @@ def test(session):
     args = [".[test]"]
     if EDITABLE_TESTS:
         args.insert(0, "-e")
-    
+
     session.install(*EXTRA_INSTALL, *args)
     session.run("coverage", "run", "-m", "pytest", *session.posargs)
     session.run("coverage", "report", "-m", "--fail-under=100")

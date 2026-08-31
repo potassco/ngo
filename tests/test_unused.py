@@ -1,13 +1,27 @@
-""" test removal of superseeded literals """
-
-from typing import Optional
+"""Test removal of unused predicates and arguments."""
 
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.normalize import postprocess, preprocess
-from ngo.unused import UnusedTranslator
-from ngo.utils.ast import Predicate
+from ngo import Predicate, optimize
+
+
+def optimize_unused(
+    program: list[AST], input_predicates: list[Predicate], output_predicates: list[Predicate]
+) -> list[AST]:
+    """Run only the staged unused trait."""
+    return optimize(
+        program,
+        input_predicates,
+        output_predicates,
+        cleanup=False,
+        symmetry=False,
+        minmax_chains=False,
+        sum_chains=False,
+        math=False,
+        inline=False,
+        projection=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -47,8 +61,7 @@ b(X) :- c(X).
             [],
             [Predicate("a", 0), Predicate("c", 1)],
             """#program base.
-b :- c(_).
-{ a } :- b.""",
+{ a } :- c(_).""",
         ),
         (
             """
@@ -104,10 +117,10 @@ b(X,X+1,23) :- c(X), x.
             [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X); x; _ = (X+1).
-b2 :- c(X); x; _ = (X+1).
-{ a } :- b1.
-{ a } :- b2.""",
+b2 :- c; x.
+b1 :- c; x.
+{ a } :- b2.
+{ a } :- b1.""",
         ),
         (
             """
@@ -116,7 +129,7 @@ b2 :- c(X); x; _ = (X+1).
             [],
             [],
             """#program base.
-#false :- not 1 <= #sum { 1,0,order(T,S): order(T,S) } <= 1; S = (1..N); task_nr(N).""",
+#false :- not 1 <= { order(S) } <= 1; S = (1..N); task_nr(N).""",
         ),
         (
             """
@@ -137,10 +150,7 @@ def test_unused_translation(
     """test removal of superseeded literals on whole programs"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = preprocess(ast)
-    utr = UnusedTranslator(ast, input_predicates, output_predicates)
-    ast = utr.execute(ast)
-    ast = postprocess(ast)
+    ast = optimize_unused(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, ast))
     assert rhs == output
 
@@ -238,10 +248,10 @@ b(X,X+1,23) :- c(X), x.
             [Predicate("b", 0), Predicate("x", 0)],
             [],
             """#program base.
-b1 :- c(X); x; _ = (X+1).
-b2 :- c(X); x; _ = (X+1).
-{ a } :- b1.
-{ a } :- b2.""",
+b2 :- c; x.
+b1 :- c; x.
+{ a } :- b2.
+{ a } :- b1.""",
         ),
         (
             """
@@ -263,8 +273,7 @@ foo :- a.
             [Predicate("c", 1)],
             [],
             """#program base.
-b :- c(_).
-{ a } :- b.""",
+{ a } :- c(_).""",
         ),
         (
             """
@@ -274,7 +283,7 @@ __aux_1(W) :- __dom_match(W); 3 <= #count { M1: match(M1,W) }.
             [Predicate("person", 1)],
             [Predicate("__aux_1", 1)],
             """#program base.
-__aux_1(W) :- person(W); 3 <= #sum+ { 1,M1: match(M1,W) }.""",
+__aux_1(W) :- person(W); 3 <= #count { M1: match(M1,W) }.""",
         ),
         (
             """
@@ -367,16 +376,8 @@ def test_unused_translation_fixpoint(
     lhs: str, input_predicates: list[Predicate], output_predicates: list[Predicate], rhs: str
 ) -> None:
     """test removal of superseeded literals on whole programs"""
-    new_ast: Optional[list[AST]] = []
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = preprocess(ast)
-    while True:
-        utr = UnusedTranslator(ast, input_predicates, output_predicates)
-        new_ast = utr.execute(ast)
-        if new_ast == ast:
-            break
-        ast = new_ast
-    ast = postprocess(ast)
+    ast = optimize_unused(ast, input_predicates, output_predicates)
     output = "\n".join(map(str, ast))
     assert rhs == output

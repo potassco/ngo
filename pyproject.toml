@@ -12,14 +12,16 @@ authors = [
 ]
 description = "Optimizes non ground logic programs."
 requires-python = ">=3.11"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 dynamic = [ "version" ]
 readme = "README.md"
 
 dependencies = [
-    "clingo>=5.7.1,<6.0",
-    "networkx>=3.1",
-    "sympy>=1.12",
+    "aspen-tree-5 @ git+https://github.com/potassco/aspen-tree.git@clingo-5",
+    "clingo>=5.8,<6",
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-clingo>=1.0.5,<2",
 ]
 
 [project.urls]
@@ -28,18 +30,18 @@ Documentation = "https://docs.potassco.org/ngo/"
 Repository = "http://github.com/potassco/ngo"
 
 [project.optional-dependencies]
-format = [ "black", "isort"]
+format = [ "black", "isort" ]
 lint = [ "pylint==3.2.7", "ngo[test]" ]
-typecheck = [ "types-setuptools", "mypy==1.10.1", "networkx-stubs", "sympy==1.12", "ngo[test]" ]
+typecheck = [ "types-setuptools", "mypy==1.10.1", "ngo[test]" ]
 test = [ "pytest", "coverage" ]
 doc = [ "pdoc" ]
 dev = [ "ngo[test,typecheck,lint,format,doc]", "pre-commit" ]
 
-[project.scripts]
-ngo = "ngo.__main__:main"
-
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ngo = ["encodings/**/*.lp", "py.typed"]
 
 [tool.setuptools_scm]
 version_scheme = "python-simplified-semver"
@@ -59,7 +61,7 @@ line-length = 120
 max-line-length = 120
 
 [tool.pylint.design]
-max-args = 10
+max-args = 12
 max-attributes = 7
 max-bool-expr = 5
 max-branches = 12
@@ -82,16 +84,13 @@ variable-rgx = "^[a-z][a-z0-9]*((_[a-z0-9]+)*_?)?$"
 good-names = ["_", "M", "N", "B", "A", "Nn", "Bn", "An"]
 
 [tool.pylint.miscellanous]
-
-# List of note tags to take in consideration, separated by a comma.
-notes = [] # "FIXME", "XXX", "TODO"
+notes = []
 
 [tool.pylint."messages control"]
-disable = ["logging-fstring-interpolation"]
+disable = ["import-outside-toplevel", "logging-fstring-interpolation"]
 
 [tool.coverage.run]
-source = ["ngo", "tests"]
-omit = ["*/ngo/__main__.py"]
+source = ["ngo"]
 
 [tool.coverage.report]
 exclude_lines = ["assert", "nocoverage"]

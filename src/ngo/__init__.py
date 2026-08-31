@@ -28,7 +28,7 @@ Now use any diff viewer on the two new files.
 ### Input Predicates
 For some traits you have to state which predicates in your logic
 program are considered input. This means they are provided outside of the encoding,
-for example in an instance file. You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0. 
+for example in an instance file. You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0.
 Example:
 ```shell
 ngo --input-predicates="edge/2, node/1"
@@ -39,7 +39,7 @@ You can also write `--input-predicates=auto` (its the default) to try to auto-de
 ### Output Predicates
 For some traits you have to state which predicates in your logic
 program are considered output. This means they are not allowed to be removed or changed by ngo.
-You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0. 
+You give a comma separated list of predicates of the form `name/n` where `n` is the arity of the predicate. For constants you can use arity 0.
 Example:
 ```shell
 ngo --output-predicates="path/2, cost/1"
@@ -76,9 +76,9 @@ parse_files(["encoding.lp"], prg.append)
 prg = optimize(prg, auto_detect_input(prg), auto_detect_output(prg))
 
 with ProgramBuilder(ctl) as bld:
-    for stm in prg:
-        # print(stm) # shows the optimized rules
-        bld.add(stm)
+        for stm in prg:
+                # print(stm) # shows the optimized rules
+                bld.add(stm)
 
 ctl.load("instance.lp")
 ctl.ground([('base', [])])
@@ -227,9 +227,6 @@ p(A,D) :- aux(A), r(A D).
 This can reduce grounding drastically but introduces additional solving variables.
 """
 
+from ngo.api import Predicate, optimize
 
-from ngo.api import optimize
-from ngo.utils.ast import Predicate
-from ngo.utils.globals import auto_detect_input, auto_detect_output
-
-__all__ = ["optimize", "auto_detect_input", "auto_detect_output", "Predicate"]
+__all__ = ["Predicate", "optimize"]
