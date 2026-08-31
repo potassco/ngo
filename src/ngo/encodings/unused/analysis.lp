@@ -14,23 +14,6 @@ def suffixed(name: Symbol, index: Symbol) -> String:
 % for the unused trait. These facts are recomputed after every Aspen edit.
 % This module does not itself change source text.
 
-% Include signatures found in source and signatures protected by the API.
-signature(Name,Arity) :- atom_signature(_,Name,Arity).
-signature(Name,Arity) :- input_predicate(Name,Arity).
-signature(Name,Arity) :- output_predicate(Name,Arity).
-
-statement(Statement) :- type(Statement,"rule").
-statement(Statement) :- type(Statement,"weak_constraint").
-statement(Statement) :- type(Statement,"external").
-statement_body(Statement,Body) :- statement(Statement), child(Statement,Body), field(Body,"body"),
-                                  type(Body,"body").
-body_atom(Atom) :- statement_body(_,Body), descendant(Body,Atom), type(Atom,"symbolic_atom").
-condition_atom(Atom) :- type(Condition,"condition"), descendant(Condition,Atom), type(Atom,"symbolic_atom").
-
-simple_head(Rule,Atom) :- type(Rule,"rule"), child(Rule,Head), field(Head,"head"), type(Head,"literal"),
-                          child(Head,Atom), field(Atom,"atom"), type(Atom,"symbolic_atom").
-head_signature(Rule,Name,Arity) :- simple_head(Rule,Atom), atom_signature(Atom,Name,Arity).
-
 % A predicate is used when read in a body/condition or declared public. An
 % argument position is used only when some call supplies a non-anonymous term.
 % Example: the call p(X,_) uses position 0 of p/2 but not position 1.
@@ -57,8 +40,6 @@ single_body_atom(Rule,Atom) :- positive_body_atom(Rule,Atom),
 all_head_args_variables(Rule) :- simple_head(Rule,Head), atom_arity(Head,Arity),
                                  Arity = #count { Argument : atom_argument(Head,Argument),
                                                             type(Argument,"variable") }.
-definition_count(Name,Arity,Count) :- signature(Name,Arity),
-                                      Count = #count { Rule : head_signature(Rule,Name,Arity) }.
 tuple_function_name(Function,Name) :- type(Function,"function"), child(Function,Identifier),
                                       field(Identifier,"name"), leaf_text(Identifier,Name).
 tuple_function_arity(Function,Arity) :- tuple_function_name(Function,_),

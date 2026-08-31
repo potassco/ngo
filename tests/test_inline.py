@@ -3,9 +3,7 @@
 import pytest
 from clingo.ast import AST, parse_string
 
-from ngo.inline import InlineTranslator
-from ngo.normalize import postprocess, preprocess
-from ngo.utils.ast import Predicate
+from ngo import Predicate, optimize
 
 
 @pytest.mark.parametrize(
@@ -504,9 +502,18 @@ def test_inline_translation(
     """test inlining literals"""
     ast: list[AST] = []
     parse_string(lhs, ast.append)
-    ast = preprocess(ast)
-    utr = InlineTranslator(ast, input_predicates, output_predicates)
-    ast = utr.execute(ast)
-    ast = postprocess(ast)
+    ast = optimize(
+        ast,
+        input_predicates,
+        output_predicates,
+        cleanup=False,
+        unused=False,
+        duplication=False,
+        symmetry=False,
+        minmax_chains=False,
+        sum_chains=False,
+        math=False,
+        projection=False,
+    )
     output = "\n".join(map(str, ast))
     assert output == rhs

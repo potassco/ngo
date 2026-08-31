@@ -19,6 +19,7 @@ COMMON_ENCODINGS = (
     ENCODING_DIR / "common" / "tree.lp",
     ENCODING_DIR / "common" / "predicates.lp",
     ENCODING_DIR / "common" / "literals.lp",
+    ENCODING_DIR / "common" / "analysis.lp",
 )
 ENCODING_BUNDLES = {
     "cleanup": (
@@ -28,6 +29,11 @@ ENCODING_BUNDLES = {
         ENCODING_DIR / "cleanup" / "main.lp",
     ),
     "detect": (ENCODING_DIR / "detect" / "main.lp",),
+    "inline": (
+        ENCODING_DIR / "inline" / "main.lp",
+        ENCODING_DIR / "inline" / "body.lp",
+        ENCODING_DIR / "inline" / "objective.lp",
+    ),
     "symmetry": (ENCODING_DIR / "symmetry" / "main.lp",),
     "unused": (
         ENCODING_DIR / "unused" / "analysis.lp",

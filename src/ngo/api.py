@@ -58,7 +58,6 @@ def optimize(
         "minmax_chains": minmax_chains,
         "sum_chains": sum_chains,
         "math": math,
-        "inline": inline,
         "projection": projection,
     }
     enabled = [name for name, value in unfinished.items() if value]
@@ -66,7 +65,9 @@ def optimize(
         raise NotImplementedError(f"Traits not implemented in ngo2: {', '.join(enabled)}")
 
     stages = [
-        name for name, enabled in (("cleanup", cleanup), ("unused", unused), ("symmetry", symmetry)) if enabled
+        name
+        for name, enabled in (("cleanup", cleanup), ("unused", unused), ("inline", inline), ("symmetry", symmetry))
+        if enabled
     ]
     if not stages:
         return list(prg)
