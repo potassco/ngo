@@ -341,7 +341,22 @@ This means that:</p>
 </div>
 
 <p>This is only possible if it is safe to change set semantics using the tuples in the aggregates.
-This trait also works for minimize statements and weak constraints.</p>
+This trait also works for minimize statements and weak constraints. For example:</p>
+
+<div class="pdoc-code codehilite">
+<pre><span></span><code><span class="s s-Atom">:~</span> <span class="nf">selected</span><span class="p">(</span><span class="nv">A</span><span class="p">);</span> <span class="nv">Cost</span> <span class="o">=</span> <span class="s s-Atom">#sum</span> <span class="p">{</span> <span class="nv">C</span><span class="s s-Atom">:</span> <span class="nf">price</span><span class="p">(</span><span class="nv">A</span><span class="p">,</span><span class="nv">C</span><span class="p">)</span> <span class="p">}.</span> <span class="p">[</span><span class="nv">Cost</span><span class="s s-Atom">@</span><span class="mi">1</span><span class="p">,</span><span class="nv">A</span><span class="p">]</span>
+</code></pre>
+</div>
+
+<p>becomes</p>
+
+<div class="pdoc-code codehilite">
+<pre><span></span><code><span class="s s-Atom">:~</span> <span class="nf">selected</span><span class="p">(</span><span class="nv">A</span><span class="p">);</span> <span class="nf">price</span><span class="p">(</span><span class="nv">A</span><span class="p">,</span><span class="nv">C</span><span class="p">).</span> <span class="p">[</span><span class="nv">C</span><span class="s s-Atom">@</span><span class="mi">1</span><span class="p">,</span><span class="nv">A</span><span class="p">,</span><span class="s s-Atom">unique</span><span class="p">]</span>
+</code></pre>
+</div>
+
+<p>Inline is repeated to a fixpoint. Symmetry runs afterwards, so literals exposed
+by inlining can still be replaced by the symmetry trait in the same optimization.</p>
 
 <h2 id="projection">projection</h2>
 

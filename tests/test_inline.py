@@ -517,3 +517,27 @@ def test_inline_translation(
     )
     output = "\n".join(map(str, ast))
     assert output == rhs
+
+
+def test_inline_then_symmetry_fixpoint() -> None:
+    """Run symmetry after inline exposes interchangeable body literals."""
+    source = """
+pair(A,N) :- edge(A,X); edge(A,Y); X != Y; N = #sum { V: value(A,V) }.
+#false :- pair(A,N); N = #sum { W: weight(W) }.
+    """
+    ast: list[AST] = []
+    parse_string(source, ast.append)
+    ast = optimize(
+        ast,
+        [],
+        [],
+        cleanup=False,
+        unused=False,
+        duplication=False,
+        minmax_chains=False,
+        sum_chains=False,
+        math=False,
+        projection=False,
+    )
+    assert "\n".join(map(str, ast)) == """#program base.
+#false :- N = #sum { V: value(A,V) }; N = #sum { W: weight(W) }; edge(A,_); 2 <= #sum+ { 1,X: edge(A,X) }."""

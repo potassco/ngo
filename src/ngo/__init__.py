@@ -210,7 +210,18 @@ becomes
 foo(X) :- X = #sum { A: test(A,B); Y,V: a(V), person(V,Y) }.
 ```
 This is only possible if it is safe to change set semantics using the tuples in the aggregates.
-This trait also works for minimize statements and weak constraints.
+This trait also works for minimize statements and weak constraints. For example:
+
+```Prolog
+:~ selected(A); Cost = #sum { C: price(A,C) }. [Cost@1,A]
+```
+becomes
+```Prolog
+:~ selected(A); price(A,C). [C@1,A,unique]
+```
+
+Inline is repeated to a fixpoint. Symmetry runs afterwards, so literals exposed
+by inlining can still be replaced by the symmetry trait in the same optimization.
 
 ## projection
 
